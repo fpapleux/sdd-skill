@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The two dials — SDD skill operator guide</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 15mm 14mm 15mm;
+    @bottom-left { content: "SDD skill · Operator guide · The two dials"; font: 7.5pt "Helvetica Neue", Helvetica, Arial, sans-serif; color: #8a8f98; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7.5pt "Helvetica Neue", Helvetica, Arial, sans-serif; color: #8a8f98; }
+  }
+  :root {
+    --ink: #1d2129;
+    --muted: #5b6270;
+    --line: #dfe3ea;
+    --size: #2457c5;
+    --size-bg: #eef3fd;
+    --assure: #0b7368;
+    --assure-bg: #e9f6f4;
+  }
+  * { box-sizing: border-box; }
+  html { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); font-size: 9.2pt; line-height: 1.38; }
+  body { margin: 0; }
+  h1 { font-size: 21pt; line-height: 1.1; margin: 0 0 1.5mm; letter-spacing: -0.3pt; }
+  h2 { font-size: 12.5pt; margin: 0 0 2mm; }
+  h3 { font-size: 10pt; margin: 0 0 1.2mm; }
+  p { margin: 0 0 2mm; }
+  .eyebrow { font-size: 8pt; text-transform: uppercase; letter-spacing: 1.2pt; color: var(--muted); margin-bottom: 2mm; }
+  .lead { font-size: 9.8pt; color: #333a45; margin-bottom: 3mm; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.4pt; background: #f2f4f7; padding: 0 1.2pt; border-radius: 2pt; }
+
+  .slogan { border-left: 3pt solid var(--ink); padding: 2.5mm 4mm; background: #f6f7f9; font-size: 12.5pt; font-weight: 600; margin: 0 0 4mm; }
+  .slogan .s { color: var(--size); }
+  .slogan .a { color: var(--assure); }
+
+  .dials { display: flex; gap: 5mm; margin-bottom: 4mm; }
+  .dial { flex: 1; border: 1pt solid var(--line); border-radius: 4pt; padding: 3mm 4mm 2.5mm; }
+  .dial.size { border-top: 3pt solid var(--size); background: linear-gradient(var(--size-bg), #fff 40%); }
+  .dial.assure { border-top: 3pt solid var(--assure); background: linear-gradient(var(--assure-bg), #fff 40%); }
+  .dial .tag { font-size: 7.6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1pt; }
+  .dial.size .tag { color: var(--size); }
+  .dial.assure .tag { color: var(--assure); }
+  .dial .q { font-size: 10.8pt; font-weight: 700; margin: 0.6mm 0 1.4mm; }
+  .dial dl { margin: 0 0 2mm; display: grid; grid-template-columns: 17mm 1fr; row-gap: 0.8mm; }
+  .dial dt { color: var(--muted); font-size: 8.2pt; }
+  .dial dd { margin: 0; }
+  .scale { display: flex; gap: 1.2mm; }
+  .scale span { flex: 1; text-align: center; font-size: 8pt; font-weight: 600; padding: 1.2mm 0; border-radius: 2pt; }
+  .size .scale span { background: #dbe6fb; color: #1b3f8f; }
+  .size .scale span:nth-child(2) { background: var(--size); color: #fff; }
+  .assure .scale span { background: #d3eeea; color: #0a5a52; }
+  .scale-note { font-size: 7.6pt; color: var(--muted); margin-top: 1mm; text-align: center; }
+
+  .pick { display: flex; gap: 5mm; margin-bottom: 4mm; }
+  .pick > div { flex: 1; }
+  .pick ol { list-style: none; margin: 0; padding: 0; }
+  .pick li { display: flex; align-items: baseline; gap: 2mm; padding: 0.9mm 0; font-size: 8.8pt; border-bottom: 0.6pt solid var(--line); }
+  .pick li .ask { flex: 1; }
+  .pick li .ans { font-weight: 700; white-space: nowrap; font-size: 8.6pt; padding: 0.3mm 1.6mm; border-radius: 2pt; }
+  .pick .size-pick .ans { background: var(--size-bg); color: var(--size); }
+  .pick .assure-pick .ans { background: var(--assure-bg); color: var(--assure); }
+  .hint { font-size: 7.8pt; color: var(--muted); margin-top: 1.2mm; }
+
+  /* grid figure */
+  .grid-wrap { margin-top: 1mm; }
+  .grid { display: grid; grid-template-columns: 22mm repeat(4, 1fr); grid-auto-rows: auto; gap: 1.2mm; }
+  .grid .h { font-size: 8pt; font-weight: 700; text-align: center; padding: 1mm 0; }
+  .grid .h.col { color: var(--size); }
+  .grid .h.row { color: var(--assure); text-align: right; padding-right: 2mm; display: flex; align-items: center; justify-content: flex-end; }
+  .grid .c { border: 0.8pt dashed #cfd5df; border-radius: 3pt; min-height: 12.5mm; padding: 1.2mm 1.8mm; font-size: 7.5pt; line-height: 1.3; color: var(--muted); }
+  .grid .c.ex { border: 0.8pt solid #b9c3d3; background: #fff; color: var(--ink); }
+  .grid .c.ex b { display: block; font-size: 7.9pt; margin-bottom: 0.6mm; }
+  .grid .c.ex.hi { border-color: var(--ink); box-shadow: inset 0 0 0 0.6pt var(--ink); }
+  .axis { display: flex; justify-content: space-between; font-size: 7.6pt; color: var(--muted); margin: 1mm 0 0 23mm; }
+  .axis .s { color: var(--size); font-weight: 600; }
+  .axis .a { color: var(--assure); font-weight: 600; }
+
+  /* page 2 */
+  .page-break { break-before: page; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 4.5mm; font-size: 8.4pt; }
+  th, td { text-align: left; vertical-align: top; padding: 1.5mm 1.8mm; border-bottom: 0.6pt solid var(--line); }
+  thead th { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.6pt; color: #fff; }
+  table.size-t thead th { background: var(--size); }
+  table.assure-t thead th { background: var(--assure); }
+  table.assure-t tbody th { width: 25mm; color: var(--assure); font-weight: 700; }
+  table.size-t td:first-child { font-weight: 700; color: var(--size); white-space: nowrap; }
+  td.def { background: var(--size-bg); }
+  .tbl-title { display: flex; align-items: baseline; gap: 3mm; margin-bottom: 1.6mm; }
+  .tbl-title h2 { margin: 0; }
+  .tbl-title .sub { color: var(--muted); font-size: 8.4pt; }
+  .size-h { color: var(--size); }
+  .assure-h { color: var(--assure); }
+
+  .boxes { display: flex; gap: 5mm; }
+  .box { flex: 1; border: 1pt solid var(--line); border-radius: 4pt; padding: 3mm 4mm; }
+  .box ul { margin: 0; padding-left: 4mm; }
+  .box li { margin-bottom: 0.9mm; }
+  .box.grow { background: #fbf8ef; border-color: #eadfbf; }
+  .flow { display: flex; align-items: center; gap: 1.5mm; margin: 1.5mm 0 2mm; font-size: 8pt; }
+  .flow span { padding: 0.8mm 2mm; border-radius: 2pt; background: #fff; border: 0.8pt solid #d9cfa9; font-weight: 600; }
+  .flow i { color: #9a8a55; font-style: normal; }
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 ============ -->
+<div class="eyebrow">SDD skill · Operator guide</div>
+<h1>The two dials</h1>
+<p class="lead">Every piece of work in SDD runs with two settings. They are
+<b>independent</b>: one describes the <b>change</b>, the other describes the
+<b>product</b>. Together they decide how much process you get. Small work
+stays light, and important work gets the proof it needs.</p>
+
+<div class="slogan"><span class="s">Size</span> decides the paperwork. <span class="a">Assurance</span> decides the proof.</div>
+
+<div class="dials">
+  <div class="dial size">
+    <div class="tag">Dial 1 · Size</div>
+    <div class="q">How big is this change?</div>
+    <dl>
+      <dt>Controls</dt><dd>Paperwork: which files exist, how many approvals, which roles run.</dd>
+      <dt>Set</dt><dd>Per change. The skill suggests one, you confirm or change it.</dd>
+      <dt>Default</dt><dd><code>mini</code>: one file, one approval.</dd>
+    </dl>
+    <div class="scale"><span>inline</span><span>mini</span><span>standard</span><span>full</span></div>
+    <div class="scale-note">less paperwork → more paperwork</div>
+  </div>
+  <div class="dial assure">
+    <div class="tag">Dial 2 · Assurance</div>
+    <div class="q">How much trust does the product need?</div>
+    <dl>
+      <dt>Controls</dt><dd>Proof: which tests, how many failure cases, how independent the review is.</dd>
+      <dt>Set</dt><dd>Once per project, at <code>sdd init</code>. A change may go <b>higher</b>; lower needs your recorded waiver.</dd>
+      <dt>Minimum</dt><dd><code>prototype</code>: happy-path tests first + a Known gaps list.</dd>
+    </dl>
+    <div class="scale"><span>prototype</span><span>internal</span><span>production</span><span>critical</span></div>
+    <div class="scale-note">less proof → more proof</div>
+  </div>
+</div>
+
+<div class="pick">
+  <div class="size-pick">
+    <h3 class="size-h">Picking the size: ask from the top</h3>
+    <ol>
+      <li><span class="ask">Migration, public API, security, irreversible?</span><span class="ans">full</span></li>
+      <li><span class="ask">Several areas, or a new component or interface?</span><span class="ans">standard</span></li>
+      <li><span class="ask">One area, up to ~5 requirements, nothing new?</span><span class="ans">mini</span></li>
+      <li><span class="ask">Typo, one-line fix, config tweak?</span><span class="ans">inline</span></li>
+    </ol>
+  </div>
+  <div class="assure-pick">
+    <h3 class="assure-h">Picking the assurance: ask from the top</h3>
+    <ol>
+      <li><span class="ask">Money, security, safety, regulated, irreversible?</span><span class="ans">critical</span></li>
+      <li><span class="ask">External users, or business data that persists?</span><span class="ans">production</span></li>
+      <li><span class="ask">Used by you or your team, with real data?</span><span class="ans">internal</span></li>
+      <li><span class="ask">Demo or experiment; may be thrown away?</span><span class="ans">prototype</span></li>
+    </ol>
+  </div>
+</div>
+<div class="hint" style="margin:-2.5mm 0 4mm">Both ladders: start at the top, and the first “yes” wins. Unsure between two? Take the higher one.</div>
+
+<h2>Same dials, different results</h2>
+<p style="color:var(--muted); font-size:8.2pt; margin-bottom:1.5mm">Each cell is one combination. The examples show how far apart the experience can be. Spec sizes are rough estimates.</p>
+<div class="grid-wrap">
+  <div class="grid">
+    <div></div>
+    <div class="h col">inline</div><div class="h col">mini</div><div class="h col">standard</div><div class="h col">full</div>
+
+    <div class="h row">critical</div>
+    <div class="c ex"><b>Fix a typo in a refund error message</b>No spec files, but the test still comes first.</div>
+    <div class="c"></div>
+    <div class="c"></div>
+    <div class="c ex hi"><b>New refund rules in the payment service</b>≈ 700 lines + contracts · 4 approvals · full proof</div>
+
+    <div class="h row">production</div>
+    <div class="c"></div>
+    <div class="c ex"><b>“Resend confirmation” on the live shop</b>≈ 150 lines · 1 approval + reviewer questions</div>
+    <div class="c ex"><b>Guest checkout on the live shop</b>≈ 300 lines · 3 approvals</div>
+    <div class="c"></div>
+
+    <div class="h row">internal</div>
+    <div class="c"></div>
+    <div class="c ex"><b>Team script that imports CSV invoices</b>≈ 100 lines · 1 approval</div>
+    <div class="c"></div>
+    <div class="c"></div>
+
+    <div class="h row">prototype</div>
+    <div class="c ex"><b>Change a label in the demo</b>Just ask.</div>
+    <div class="c ex hi"><b>Clickable checkout demo for a pitch</b>≈ 50 lines · 1 approval · happy-path tests + Known gaps</div>
+    <div class="c"></div>
+    <div class="c"></div>
+  </div>
+  <div class="axis"><span class="s">Size → more paperwork</span><span class="a">Assurance ↑ more proof</span></div>
+</div>
+
+<!-- ============ PAGE 2 ============ -->
+<div class="page-break"></div>
+
+<div class="tbl-title"><h2 class="size-h">Dial 1 · Size</h2><span class="sub">per change: the paperwork</span></div>
+<table class="size-t">
+  <thead><tr><th>Size</th><th>Typical change</th><th>What you get</th><th>Approvals</th><th>Normal flow</th></tr></thead>
+  <tbody>
+    <tr><td>inline</td><td>Typo, copy change, one-line fix, config tweak, dependency bump</td><td>No spec files. The commit message cites the requirement or bug.</td><td>None: your request is the approval</td><td>Just ask</td></tr>
+    <tr><td class="def">mini · default</td><td class="def">One area, up to ~5 requirements, no new component</td><td class="def">One <code>spec.md</code>: requirements, design notes, tasks, results</td><td class="def">1: spec + plan together</td><td class="def"><code>quick</code> → approve → <code>implement</code> → <code>verify</code> → <code>archive</code></td></tr>
+    <tr><td>standard</td><td>Several areas, or a new component, interface or data model</td><td>A change folder: proposal, spec changes, design, tasks, verification</td><td>3: spec · plan · results</td><td>propose → specify → clarify → <b>✓ spec</b> → design + tasks → <b>✓ plan</b> → implement → verify → <b>✓ results</b> → archive</td></tr>
+    <tr><td>full</td><td>Data migration, public API, security model, irreversible operations</td><td>Change folder + interface contracts + decision records</td><td>4: spec · design · tasks · results</td><td>Like standard, plus a separate design approval</td></tr>
+  </tbody>
+</table>
+
+<div class="tbl-title"><h2 class="assure-h">Dial 2 · Assurance</h2><span class="sub">per project: the proof</span></div>
+<table class="assure-t">
+  <thead><tr><th></th><th>prototype</th><th>internal</th><th>production</th><th>critical</th></tr></thead>
+  <tbody>
+    <tr><th>Means</th><td>Demo, experiment, learning; may be thrown away</td><td>Used by you or your team; real data, small blast radius</td><td>External users or business data that must persist</td><td>Money, security, safety, regulated, or irreversible</td></tr>
+    <tr><th>Tests first</th><td>Happy path</td><td>Every scenario</td><td>Every scenario</td><td>Every scenario</td></tr>
+    <tr><th>Failure cases</th><td><b>None required.</b> A <b>Known gaps</b> list, one line per thing not handled</td><td>Bad input · wrong state or duplicates · failure of anything it calls</td><td>The above + boundaries · access rights (6 core categories)</td><td>The 6 core + concurrency · rule combinations · invariants</td></tr>
+    <tr><th>A failure test checks</th><td>—</td><td>The error shown, and that nothing else happened</td><td>The error, no side effects, state unchanged</td><td>Same as production</td></tr>
+    <tr><th>Spec review</th><td>Only open questions are flagged</td><td>Self-check; a script rejects blank coverage</td><td>Independent reviewer, fresh context</td><td>Independent reviewer, every round</td></tr>
+    <tr><th>Verification</th><td>Tests pass</td><td>Tests pass, coverage reported</td><td>Independent verifier: coverage of changed code must pass, plus probing for unexpected inputs</td><td>Production checks + mutation testing + property-based tests</td></tr>
+  </tbody>
+</table>
+
+<div class="boxes">
+  <div class="box">
+    <h3>Always true, at every setting</h3>
+    <ul>
+      <li>Every requirement has an ID, e.g. <code>REQ-CHK-007</code>.</li>
+      <li>Tests are written <b>before</b> the code they test, and named after their scenario.</li>
+      <li>When a change is done, the living spec is updated to match.</li>
+      <li>All state lives in the <code>specs/</code> folder, so any session in Claude Code or Codex can pick up where the last one stopped.</li>
+      <li>If coding shows the spec is wrong, work stops and the spec change comes to you (<code>sdd amend</code>).</li>
+    </ul>
+  </div>
+  <div class="box grow">
+    <h3>When a prototype grows up</h3>
+    <p>The <b>Known gaps</b> list is not waste: it is the to-do list for hardening.</p>
+    <div class="flow"><span>prototype</span><i>→</i><span>production</span></div>
+    <p><code>sdd harden checkout --to production</code></p>
+    <p>The reviewer turns each known gap into failure-case scenarios and tests, delivered as one normal <code>standard</code> change. Prototypes cost nothing extra up front, and nothing is forgotten when they become real.</p>
+  </div>
+</div>
+
+</body>
+</html>

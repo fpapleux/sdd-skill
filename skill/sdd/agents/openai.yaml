@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDD"
+  short_description: "Spec-driven development: spec first, then test-first code"
+  default_prompt: "Use $sdd status to see where this repository's specs stand."
