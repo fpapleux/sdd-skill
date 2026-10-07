@@ -238,7 +238,7 @@ unsure between two, take the higher one.
 | `inline` | Typo, copy change, one-line fix, config tweak, dependency bump | No spec files. The commit message cites the requirement or bug. | None: your request is the approval | Just ask |
 | **`mini`** (default) | One area, up to ~5 requirements, no new component | One `spec.md`: requirements, design notes, tasks, results | 1: spec + plan together | `quick` → approve → `implement` → `verify` → `archive` |
 | `standard` *(v1)* | Several areas, or a new component, interface or data model | A change folder: proposal, spec changes, design, tasks, verification | 3: spec · plan · results | propose → specify → clarify → **✓ spec** → design + tasks → **✓ plan** → implement → verify → **✓ results** → archive |
-| `full` *(v1)* | Data migration, public API, security model, irreversible operations | Change folder + interface contracts + decision records | 4: spec · design · tasks · results | Like standard, plus a separate design approval |
+| `full` *(v3)* | Data migration, public API, security model, irreversible operations | Change folder + interface contracts + decision records | 4: spec · design · tasks · results | Like standard, plus a separate design approval |
 
 ### Dial 2 · Assurance: the proof (per project)
 
@@ -248,8 +248,8 @@ unsure between two, take the higher one.
 | **Tests first** | Happy path | Every scenario | Every scenario | Every scenario |
 | **Failure cases** | **None required.** A **Known gaps** list instead, one line per thing not handled | Bad input · wrong state or duplicates · failure of anything it calls | The above + boundaries · access rights (6 core categories) | The 6 core + concurrency · rule combinations · invariants |
 | **A failure test checks** | — | The error shown, and that nothing else happened | The error, no side effects, state unchanged | Same as production |
-| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage | Independent reviewer, fresh context *(v1)* | Independent reviewer, every round *(v1)* |
-| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier: blocking coverage of changed code, plus probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v1)* |
+| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage | Independent reviewer, fresh context *(v1)* | Independent reviewer, every round *(v3)* |
+| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier: blocking coverage of changed code, plus probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v3)* |
 
 ### Same dials, different results
 

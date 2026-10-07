@@ -739,6 +739,31 @@ Next:
   Codex (`$sdd …`) separately, and the findings feed back into this study.
 - A second Claude Code run to confirm the fixes.
 
+## 13. v1 plan (started 2026-10-07)
+
+Scope: the v1 line of §11, minus what v0 already shipped (archive, living
+capabilities, size caps).
+
+**Operator decisions:**
+
+| # | Decision | Outcome |
+| --- | --- | --- |
+| 11 | Independence at `production`+ | **Fresh-session protocol in v1.** The Critic and Verifier run in a new session and hand off only through files, in both tools. Claude subagents stay in v2. |
+| 12 | Blocking diff coverage | **Computed by `sdd.py`** from an lcov report plus the git diff. Each uncovered changed line or branch needs a scenario or a justification. |
+| 13 | How v1 is built | **Current discipline:** failing tests first for every script change, plus a dogfood run after increments 4 and 6. |
+| 14 | Publishing | **`v1` branch**, pushed as increments land, with one PR into `main` when v1 is done. |
+
+**Increments:**
+
+| # | Increment | Contents |
+| --- | --- | --- |
+| 1 | `amend` + `bug` | The spec is locked at approval (a hash of the spec sections). Edits after that need a logged, approved amendment. `bug` creates a defect change: symptom, reproduction, current vs expected behavior, the violated REQ or "spec gap", root cause, and regression scenarios (`R1`…). |
+| 2 | `standard` foundation | A change folder (`proposal`, `spec-delta`, `clarifications`, `design`, `tasks`, `verification`), the full status machine, 3 gates, and multi-file `check` and `archive`. |
+| 3 | `clarify` + Spec Critic | A coverage audit, at most 5 questions per round, a clarifications log, and the spec gate. |
+| 4 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 2**. |
+| 5 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
+| 6 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+
 ## Sources
 
 - Principles only: the author's role-based delivery process (internal
