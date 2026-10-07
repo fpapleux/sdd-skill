@@ -19,9 +19,9 @@ Deliver tasks test-first. Role: **Implementer**
      dependency or another module;
    - a test can't be made to fail for the right reason.
 
-   Explain the problem and propose the smallest fix. If the operator accepts a
-   spec change, update the spec following the Spec Author rules, run
-   `SDD approve amend --evidence "…"` and `SDD check`, then continue.
+   Explain the problem and propose the smallest fix. If the fix changes the
+   spec, run the `amend` phase (`method/phases/amend.md`). The spec is locked,
+   so a quiet edit makes `SDD check` fail.
 6. When every task is ticked, run the full test command. Report the tasks
    done (each with its red → green line) and the full-suite result. Next:
    `sdd verify`.

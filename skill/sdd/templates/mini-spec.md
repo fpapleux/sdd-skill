@@ -15,7 +15,7 @@ created: {{date}}
 <!-- Spec Author: why this change, for whom, and the outcome. Use the operator's
 words. No technology choices. 2–5 lines. -->
 
-## Scope
+{{defect}}## Scope
 - In:
 - Out:
 
@@ -59,6 +59,10 @@ Implementer: fill test/red/green while working, then tick the box. -->
 
 ## Open questions
 <!-- Mark unknowns where they occur as [NEEDS CLARIFICATION: question] and list them here. -->
+
+## Amendments
+<!-- Spec changes after approval, one line each, then `sdd.py approve amend`:
+- A1 2026-10-07: <reason> → <what changed> -->
 
 ## Approvals
 | Gate | Date | Evidence |

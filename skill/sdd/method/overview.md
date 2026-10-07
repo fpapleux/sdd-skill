@@ -84,6 +84,15 @@ any non-final status ──► blocked | abandoned
 The **gate** is the operator's approval of the plan. Before it, nobody touches
 production code for this change.
 
+**The approved spec is locked.** Approval stores a fingerprint of Intent,
+Defect, Scope, Requirements and Known gaps. Changing any of them later is an
+**amendment**: logged, shown to the operator and approved (`sdd amend`).
+Until then, `SDD check` fails. Tasks and Design notes stay editable.
+
+**Defects** are changes of type `defect` (`sdd bug`). They carry a `## Defect`
+record and at least one regression scenario (`R1`). That scenario lands in the
+living spec, so the bug can't return silently.
+
 ## Files
 
 ```text
@@ -109,7 +118,7 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD next-req <PREFIX>` | Next free requirement ID |
 | `SDD check [--stage spec\|plan\|implement\|verify]` | Validate the active change. Exit 1 = errors. |
 | `SDD status [--json]` | Summary + next step |
-| `SDD approve constitution\|plan\|amend --evidence "…"` | Record an operator approval |
+| `SDD approve constitution\|plan\|amend --evidence "…"` | Record an operator approval. `plan` locks the spec; `amend` needs a logged spec change and a clean check, then re-locks it. |
 | `SDD advance implementing\|verifying\|verified\|blocked\|abandoned` | Move the status. A blocked change returns only to the status it had (`SDD advance <that status>`). |
 | `SDD archive` | Merge a verified change into `specs/capabilities/` (requirements, known gaps, history line) and archive it |
 | `SDD use <change-id>` | Switch the active change |

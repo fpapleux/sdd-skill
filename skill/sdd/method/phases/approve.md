@@ -6,8 +6,8 @@ it against the right gate.
 1. Find the pending gate:
    - The constitution isn't approved (`SDD status` says so) → `constitution`.
    - Otherwise, the active change is `draft` → `plan`.
-   - Otherwise, you are waiting on a spec change you raised during
-     implementation or verification → `amend`.
+   - Otherwise, a spec amendment is pending (`SDD status` says so) →
+     `amend`. Check that it is logged under `## Amendments` first.
    - Otherwise there is nothing to approve. Say so and show `SDD status`.
 2. Write the evidence: the operator's words, where and when. For example:
    `Operator in Claude Code chat, 2026-10-07: "/sdd approve — go ahead"`.

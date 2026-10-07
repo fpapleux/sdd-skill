@@ -313,6 +313,10 @@ A blank is an error, and so is a lazy "not needed".
 - before verification passes, every scenario is named in a **test file**;
 - a change can't leave `draft` without a recorded approval, and a blocked
   change can only return to where it was;
+- **the approved spec is locked**: editing its intent, scope, requirements or
+  known gaps afterwards fails the check until you approve a logged amendment;
+- a defect names the requirement it violates (or "spec gap") and carries a
+  regression scenario, whose test must reproduce the bug;
 - spec size stays under the cap (200 lines for `mini`);
 - a `prototype` change keeps a Known gaps list.
 
@@ -346,6 +350,8 @@ Drafting specs for untouched existing code (`sdd baseline`) is planned for v2.
 | `sdd tasks` | Test-first plan, then the approval gate |
 | `sdd approve` | Record your approval of the pending gate (constitution, plan, or an amendment) |
 | `sdd implement [T3\|next\|all]` | Red → green → refactor, task by task |
+| `sdd amend "<reason>"` | Change the approved spec mid-work: logged, shown to you, approved |
+| `sdd bug "<symptom>"` | Defect change: reproduce, trace to the spec (violated requirement or spec gap), regression test first |
 | `sdd verify` | Check the work against the spec |
 | `sdd archive` | Merge into the living spec |
 | `sdd status` | Where things stand, and the next step |
@@ -384,8 +390,8 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   categories, but the independent reviewer, blocking coverage, mutation
   testing and property-based tests aren't built yet. For now, run `verify` in
   a fresh session.
-- No `clarify`, `design`, `analyze`, `amend`, `bug`, `baseline` or `harden`
-  phases. Small amendments work through `sdd approve` during implementation.
+- No `clarify`, `design`, `analyze`, `baseline` or `harden` phases yet. The
+  `amend` and `bug` phases have landed on the `v1` branch.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
