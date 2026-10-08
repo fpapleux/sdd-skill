@@ -764,6 +764,13 @@ capabilities, size caps).
 | 5 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
 | 6 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
 
+**Progress:**
+- Increment 1 merged in fpapleux/sdd-skill#1.
+- Increment 2 is in PR #2. It adds the `standard` size: a change folder read
+  as one spec, a status machine with clarifying, spec-approved and designed,
+  the spec, plan and results gates with integrity checks, a basic `design`
+  phase and the Architect role.
+
 ## Sources
 
 - Principles only: the author's role-based delivery process (internal

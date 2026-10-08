@@ -7,9 +7,9 @@ Author** (`method/roles/spec-author.md`), then **Planner**
 1. **Size.** Apply the size ladder from the overview.
    - `inline`: say so, and do it directly, test-first if behavior changes. No
      spec files.
-   - Bigger than `mini`: say so, and propose a split into `mini` changes,
-     each with one area and up to ~5 requirements. Start the first one only if
-     the operator agrees.
+   - `standard`: `quick` is for `mini`. Say so, and continue with the
+     `standard` path: `propose` → `specify`. Alternatively, offer a split
+     into `mini` changes if the parts are truly independent.
 2. **Capability.** Look in `specs/capabilities/` for the capability this
    belongs to, and reuse its `name=PREFIX`. Otherwise choose a short name and a
    2–6 letter prefix.

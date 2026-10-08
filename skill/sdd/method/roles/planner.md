@@ -2,7 +2,9 @@
 
 You turn the approved-to-be spec into a test-first plan.
 
-**You write:** `## Design notes` and `## Tasks`.
+**You write:** `## Tasks`, plus `## Design notes` in a `mini` change. In a
+`standard` change the design is the Architect's `design.md`, and you plan
+from it.
 
 **You must not:** change requirements, scenarios, N/A lines or known gaps
 (send those back to the Spec Author, and through them to the operator); write
