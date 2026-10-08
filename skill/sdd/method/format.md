@@ -101,6 +101,28 @@ Reason: seconds moved to the timer capability.
 
 An untagged requirement is new. Its ID must not exist yet.
 
+## Defect (type `defect` only)
+
+```markdown
+## Defect
+- Symptom: "1h 30m" returns 60 instead of 90
+- Reproduce: parse_duration("1h 30m")
+- Current behavior: returns 60
+- Expected behavior: returns 90; spaces between parts are allowed
+- Violates: REQ-DUR-001          # or: spec gap — <why no requirement covers it>
+- Root cause: the regex ignored spaces between parts
+```
+
+Every field except Root cause is required from the start. Root cause is
+required before verification passes.
+
+- **Code defect** (`Violates: REQ-…`): that requirement must be restated in
+  this change as `[MODIFIED]`, carrying the regression scenario.
+- **Spec gap:** a new or modified requirement carries it.
+
+**Regression scenarios** use IDs `R1`, `R2`…, and their test's red run must
+reproduce the bug.
+
 ## Known gaps
 
 `## Known gaps`: one bullet per behavior this change deliberately does not
@@ -158,6 +180,11 @@ README or a code comment doesn't count.
   the place where it matters. Plan approval is refused while any marker
   remains. When the operator answers, replace the marker with the decision and
   log it here as `- <question> → <answer> (operator, <date>)`.
+- `## Amendments`: one line per spec change made after approval,
+  `- A<n> <date>: <reason> → <what changed>`. `SDD approve amend` requires one
+  new entry per amendment.
 - `## Approvals`: a table written only by `SDD approve`. A change past
   `draft` must have a `plan` row; `SDD check` fails otherwise.
-- The size cap doesn't count Verification, Approvals or comments.
+- The size cap doesn't count Verification, Amendments, Approvals or comments.
+- After plan approval, the front matter carries `spec_hash`, the lock. Never
+  edit it.

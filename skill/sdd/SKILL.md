@@ -1,12 +1,12 @@
 ---
 name: sdd
-description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, tasks, approve, implement, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
+description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
   version: "0.1.0"
 ---
 
-# SDD — spec-driven development (v0)
+# SDD — spec-driven development
 
 The spec is the contract between the operator's intent and your work. You
 write it, the operator approves it, and everything else (tasks, tests, code,
@@ -38,16 +38,18 @@ prefix the operator used.
 | `tasks` | Plan test-first tasks, then ask for approval | `method/phases/tasks.md` |
 | `approve` | Record the operator's approval of the pending gate | `method/phases/approve.md` |
 | `implement [T-id\|next\|all]` | Red → green → refactor, task by task | `method/phases/implement.md` |
+| `amend "<reason>"` | Change the approved spec mid-work, with the operator's approval | `method/phases/amend.md` |
+| `bug "<symptom>"` | Defect change: reproduce, trace to the spec, regression test first | `method/phases/bug.md` |
 | `verify` | Check the work against the spec | `method/phases/verify.md` |
 | `archive` | Merge the change into the living spec | `method/phases/archive.md` |
 | `status` (or no phase) | Where things stand and the next step | `method/phases/status.md` |
 
 If the phase is unknown, show this table and stop.
 
-**Not in v0:** sizes `standard` and `full`, and the phases `clarify`,
-`design`, `analyze`, `amend`, `bug`, `baseline`, `harden` and `next`. If the
-operator asks for one, say it is not built yet and offer the closest v0 path.
-For example, a large feature can be split into several `mini` changes.
+**Not built yet:** sizes `standard` and `full`, and the phases `clarify`,
+`design`, `analyze`, `baseline`, `harden` and `next`. If the operator asks for
+one, say so and offer the closest available path. For example, a large
+feature can be split into several `mini` changes.
 
 ## 2. On every invocation
 
@@ -76,7 +78,8 @@ For example, a large feature can be split into several `mini` changes.
 - **Files are the memory.** All state lives under `specs/`. A fresh session,
   in either tool, must be able to continue from the files alone.
 - **When the spec and reality disagree, stop.** Explain the conflict to the
-  operator, and change the spec only after they decide.
+  operator, and change the approved spec only through `amend`. The script
+  locks it at approval.
 - **When something breaks: stop, analyze, think, plan, execute.** "Breaks"
   covers a test that won't go red or green as expected, a command error,
   `SDD` refusing, or an unrelated test failing.

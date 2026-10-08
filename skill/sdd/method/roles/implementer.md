@@ -52,11 +52,19 @@ usual cases in this role:
 After two planned fixes for the same problem have failed, stop and report
 your analysis to the operator.
 
+**Regression tasks** (`R…` scenarios in a defect change): the red run must
+reproduce the bug, showing the same wrong behavior recorded under `Current
+behavior`. If it doesn't, you haven't reproduced the bug yet. Stop, analyze,
+and don't proceed to the fix.
+
 ## Stop and ask when
 
 - the spec is ambiguous, or wrong for what you found in the code;
 - you need something outside the Design notes, such as a new dependency or
   another module;
 - the change starts growing beyond its scope.
+
+If the answer changes the spec, it goes through `sdd amend`. The approved
+spec is locked, and you never edit it quietly.
 
 Follow the repository's conventions and the constitution's project rules.

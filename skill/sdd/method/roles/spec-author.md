@@ -59,6 +59,18 @@ case you are deliberately not handling, one line each. For example: "Invalid
 duration strings are not rejected", "No handling of network errors". This
 list is the hardening backlog for later. Make it honest and complete.
 
+## Defects
+
+For a `bug`, reproduce before you write anything. Then trace the behavior
+to `specs/capabilities/`:
+- a requirement covers it but the code disagrees → `Violates: REQ-…`, plus
+  that requirement restated as `[MODIFIED]` with a regression scenario `R1`;
+- nothing covers it → `Violates: spec gap`, plus a new requirement carrying
+  `R1`. The expected behavior is the operator's call.
+
+If the code does exactly what the spec says, it isn't a defect; it's a change
+request.
+
 ## Size
 
 A `mini` change stays under 200 lines. If it doesn't fit, it's too big: tell

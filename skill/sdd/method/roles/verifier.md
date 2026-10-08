@@ -60,8 +60,8 @@ scenario is `yes`, and there are no open findings.
 the code has, or lacks, that the spec doesn't cover. You don't defer it
 yourself. Offer two options:
 - **A)** amend now: a new scenario and a task;
-- **B)** accept it as a known gap: the Spec Author adds it to `## Known
-  gaps`, and you record `SDD approve amend`.
+- **B)** accept it as a known gap: an amendment (`sdd amend`) that adds it
+  to `## Known gaps`.
 
 Once the operator has decided, the finding is closed.
 

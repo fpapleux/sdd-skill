@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -93,7 +94,12 @@ FAILURE_WORDS = re.compile(r"fail|error|assert|expected|exception|traceback|rais
                            r"not equal|!=|mismatch|undefined|cannot|missing|not found", re.I)
 SETUP_ERRORS = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|"
                           r"Cannot find module|command not found", re.I)
-UNCOUNTED_SECTIONS = ("Verification", "Approvals")
+UNCOUNTED_SECTIONS = ("Verification", "Amendments", "Approvals")
+LOCKED_SECTIONS = ("Intent", "Defect", "Scope", "Requirements", "Known gaps")
+DEFECT_FIELDS = ("Symptom", "Reproduce", "Current behavior", "Expected behavior", "Violates")
+DEFECT_FIELD = re.compile(r"^\s*[-*]\s*([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$")
+AMENDMENT_ENTRY = re.compile(r"^\s*[-*]\s*A\d+\b")
+LOCK_ERROR = "the spec changed since it was approved"
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build",
              ".tox", ".mypy_cache", ".pytest_cache", "target", ".next"}
 CHANGE_KEYS = ["id", "title", "type", "size", "assurance", "status", "capabilities", "created"]
@@ -120,6 +126,16 @@ def counted_lines(text: str) -> int:
     for name in UNCOUNTED_SECTIONS:
         clean = re.sub(rf"^## {name}\n.*?(?=^## |\Z)", "", clean, flags=re.S | re.M)
     return len(clean.splitlines())
+
+
+def spec_hash(text: str) -> str:
+    """Fingerprint of the approved contract: the locked sections, whitespace-normalized."""
+    secs = sections(strip_comments(text))
+    parts = []
+    for name in LOCKED_SECTIONS:
+        lines = [" ".join(line.split()) for line in secs.get(name, "").splitlines() if line.strip()]
+        parts.append(name + "\n" + "\n".join(lines))
+    return hashlib.sha256("\n\n".join(parts).encode()).hexdigest()[:12]
 
 
 def is_test_path(rel: str) -> bool:
@@ -505,6 +521,10 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if effective in APPROVED_STATUSES and "plan" not in approvals(text):
         err(f"status is '{status}' but no plan approval is recorded in ## Approvals "
             "(only `sdd.py approve plan` may move a change out of draft)")
+    locked = fm.get("spec_hash")
+    if locked and effective in APPROVED_STATUSES and spec_hash(text) != locked:
+        err(f"{LOCK_ERROR} (Intent, Defect, Scope, Requirements or Known gaps): log it under "
+            "## Amendments and get the operator's approval (sdd amend)")
 
     try:
         declared = parse_capabilities(fm.get("capabilities", ""))
@@ -564,6 +584,9 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
                 if ref not in known_ids:
                     err(f"{req.id}: N/A {cat} refers to {ref}, which doesn't exist")
 
+    if fm.get("type") == "defect":
+        check_defect(secs, reqs, registry, stage, err)
+
     # Known gaps: the prototype's honest substitute for failure cases.
     if level == "prototype" and not has_bullet(secs.get("Known gaps", "")):
         err("Known gaps list is required at prototype: one line per behavior not handled "
@@ -609,6 +632,48 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
         "cap": cap,
     }
     return report
+
+
+def check_defect(secs, reqs, registry, stage, err):
+    """A defect names what it breaks and carries a regression scenario into the living spec."""
+    if "Defect" not in secs:
+        err("a defect change needs a '## Defect' section (sdd.py new --type defect creates it)")
+        return
+    fields = {}
+    for line in secs["Defect"].splitlines():
+        match = DEFECT_FIELD.match(line)
+        if match:
+            fields[match.group(1).strip().lower()] = match.group(2).strip()
+    for name in DEFECT_FIELDS:
+        if not fields.get(name.lower()):
+            err(f"Defect: '{name}' is empty")
+    if stage == "verify" and not fields.get("root cause"):
+        err("Defect: 'Root cause' must be filled before verification passes")
+    regressions = [(r, s) for r in reqs if r.tag != "REMOVED" for s in r.scenarios
+                   if s["id"].startswith("R")]
+    if not regressions:
+        err("a defect needs a regression scenario (ID R1, R2…) that reproduces the bug")
+    violates = fields.get("violates", "")
+    if not violates:
+        return
+    if violates.lower().startswith("spec gap"):
+        return
+    match = re.match(r"(REQ-[A-Z][A-Z0-9]{1,5}-\d{3,})\b", violates)
+    if not match:
+        err("Defect: 'Violates' must be a requirement ID (REQ-ABC-001) or 'spec gap'")
+        return
+    rid = match.group(1)
+    living = {i for info in registry.values() for i in info["reqs"]}
+    if rid not in living:
+        err(f"Defect: violates {rid}, which isn't in the living spec; "
+            "if no requirement covers this behavior, write 'spec gap'")
+        return
+    restated = [r for r in reqs if r.id == rid and r.tag == "MODIFIED"]
+    if not restated:
+        err(f"Defect: {rid} must be restated here as '### {rid} [MODIFIED] …' "
+            "with the regression scenario")
+    elif not any(r.id == rid for r, _ in regressions):
+        err(f"Defect: the regression scenario must be in {rid}")
 
 
 def check_requirement(req, level, err, warn, report):
@@ -762,6 +827,8 @@ def next_step(project: Project, fm: dict, report: Report) -> str:
         if report.open_questions:
             return "answer the open questions, then ask for approval"
         return "awaiting operator approval: sdd approve"
+    if any(LOCK_ERROR in e for e in report.errors):
+        return "a spec amendment is pending: show the operator the change, then sdd approve"
     if status == "planned":
         return "sdd implement"
     if status == "implementing":
@@ -864,9 +931,10 @@ def cmd_new(project: Project, args) -> int:
     folder = project.changes / change_id
     folder.mkdir(parents=True)
     caps = ", ".join(f"{name}={prefix}" for prefix, name in declared.items())
+    defect = (TEMPLATES / "defect-section.md").read_text() if args.type == "defect" else ""
     (folder / "spec.md").write_text(render(
         "mini-spec.md", id=change_id, title=args.title, type=args.type,
-        assurance=level, capabilities=caps, date=today()))
+        assurance=level, capabilities=caps, date=today(), defect=defect))
     previous = project.active()
     project.set_active(change_id)
     print(f"created specs/changes/{change_id}/spec.md (size: {args.size}, assurance: {level})")
@@ -970,17 +1038,30 @@ def cmd_approve(project: Project, args) -> int:
             raise SddError(f"plan approval refused: {report.open_questions} open question(s) "
                            "must be answered first")
         append_approval(path, "plan", evidence)
-        path.write_text(set_front_matter(path.read_text(), "status", "planned"))
+        text = set_front_matter(path.read_text(), "status", "planned")
+        path.write_text(set_front_matter(text, "spec_hash", spec_hash(text)))
         print(f"{path.parent.name}: plan approved → planned")
         return 0
-    # amend: the operator accepted a spec change during delivery; status is unchanged.
+    # amend: the operator accepts a spec change made after approval; status is unchanged.
     if status not in ("planned", "implementing", "verifying"):
         raise SddError(f"change is '{status}': amendments apply to planned or in-progress changes")
-    append_approval(path, "amend", evidence)
+    text = path.read_text()
+    current = spec_hash(text)
+    if read_front_matter(text).get("spec_hash") == current:
+        raise SddError("nothing to amend: the spec hasn't changed since it was last approved")
+    logged = sum(1 for line in sections(strip_comments(text)).get("Amendments", "").splitlines()
+                 if AMENDMENT_ENTRY.match(line))
+    if logged < approvals(text).count("amend") + 1:
+        raise SddError("log the amendment first under ## Amendments: "
+                       "'- A<n> <date>: <reason> → <what changed>'")
+    path.write_text(set_front_matter(text, "spec_hash", current))
     report = analyze(project, path)
-    print(f"{path.parent.name}: amendment recorded (status stays '{status}')")
     if not report.ok:
+        path.write_text(text)
         print(report.render())
+        raise SddError("amendment refused: fix the check errors first (nothing was recorded)")
+    append_approval(path, "amend", evidence)
+    print(f"{path.parent.name}: amendment approved; the spec is locked again (status stays '{status}')")
     return 0
 
 

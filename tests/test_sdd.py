@@ -60,6 +60,21 @@ DONE_TASKS = """\
 """
 
 
+def amend(repo, cid, log=True):
+    """Simulate an amendment: a new scenario + its task, logged under ## Amendments."""
+    path = repo.spec(cid)
+    text = path.read_text()
+    text = text.replace(
+        "| N1 | validation | the string \"abc\" | parse is called | it raises ValueError · nothing is returned |",
+        "| N1 | validation | the string \"abc\" | parse is called | it raises ValueError · nothing is returned |\n"
+        "| N2 | validation | an empty string | parse is called | it raises ValueError · nothing is returned |", 1)
+    text = text.replace("## Verification", "- [ ] T9 REQ-DUR-001.N2 Reject empty\n  - test:\n  - red:\n  - green:\n\n"
+                        "## Verification", 1)
+    if log:
+        text = text.replace("## Amendments\n", "## Amendments\n- A1 2026-10-07: empty strings were not covered → added N2 and T9\n", 1)
+    path.write_text(text)
+
+
 class Repo:
     """A temporary repository driven through sdd.main()."""
 
@@ -510,6 +525,7 @@ class LifecycleTests(Base):
         self.repo.fill(self.cid)
         self.repo.ok("approve", "plan", "--evidence", "ok")
         self.repo.ok("advance", "implementing")
+        amend(self.repo, self.cid)
         self.repo.ok("approve", "amend", "--evidence", "Operator: accept new rule")
         self.assertEqual(self.status_of(), "implementing")
 
@@ -870,6 +886,193 @@ class ArchiveCarryOverTests(Base):
                         "### REQ-DUR-001 A\n### REQ-DUR-002 B\n")
         out = self.repo.ok("status")
         self.assertIn("duration (DUR, 2 requirements)", out)
+
+
+# ---------------------------------------------------------------- v1 increment 1: amend
+
+class AmendTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.cid = self.new()
+        self.repo.fill(self.cid)
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+
+    def test_approval_locks_the_spec(self):
+        self.assertRegex(self.repo.spec(self.cid).read_text(), r"(?m)^spec_hash: [0-9a-f]{12}$")
+        self.repo.ok("check")
+
+    def test_spec_edit_after_approval_fails_check(self):
+        amend(self.repo, self.cid)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("changed since it was approved", out)
+
+    def test_known_gaps_edit_is_also_locked(self):
+        self.repo.set_section(self.cid, "Known gaps", "- Huge numbers overflow\n")
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("changed since it was approved", out)
+
+    def test_task_and_design_edits_are_not_locked(self):
+        path = self.repo.spec(self.cid)
+        text = path.read_text().replace("- Test command:", "- Approach: regex\n- Test command:", 1)
+        text = text.replace("## Verification", "- [ ] T7 REQ-DUR-001.S1 Extra check\n\n## Verification", 1)
+        path.write_text(text)
+        self.repo.ok("check")
+
+    def test_approved_amendment_unlocks_and_relocks(self):
+        amend(self.repo, self.cid)
+        out = self.repo.ok("approve", "amend", "--evidence", "Operator: yes, cover empty strings")
+        self.assertIn("amendment", out)
+        self.repo.ok("check")
+        self.assertIn("Operator: yes, cover empty strings", self.repo.spec(self.cid).read_text())
+
+    def test_amend_requires_a_spec_change(self):
+        code, out = self.repo.run("approve", "amend", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("nothing to amend", out)
+
+    def test_amend_requires_a_log_entry(self):
+        amend(self.repo, self.cid, log=False)
+        code, out = self.repo.run("approve", "amend", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("## Amendments", out)
+
+    def test_second_amendment_needs_a_second_log_entry(self):
+        amend(self.repo, self.cid)
+        self.repo.ok("approve", "amend", "--evidence", "first")
+        self.repo.set_section(self.cid, "Known gaps", "- Huge numbers overflow\n")
+        code, out = self.repo.run("approve", "amend", "--evidence", "second")
+        self.assertEqual(code, 1)
+        self.assertIn("## Amendments", out)
+
+    def test_amend_refuses_an_amended_spec_that_fails_check(self):
+        amend(self.repo, self.cid)
+        path = self.repo.spec(self.cid)
+        path.write_text(path.read_text().replace("- [ ] T9 REQ-DUR-001.N2 Reject empty", "- [ ] T9 Reject empty", 1))
+        code, out = self.repo.run("approve", "amend", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("REQ-DUR-001.N2", out)
+        self.assertEqual(path.read_text().count("| amend |"), 0)
+        code, out = self.repo.run("check")  # still locked: nothing was accepted
+        self.assertIn("changed since it was approved", out)
+
+    def test_changes_approved_before_locking_are_not_flagged(self):
+        path = self.repo.spec(self.cid)
+        path.write_text(re.sub(r"(?m)^spec_hash: .*\n", "", path.read_text()))
+        amend(self.repo, self.cid)
+        self.repo.ok("check")
+
+
+# ---------------------------------------------------------------- v1 increment 1: bug
+
+DEFECT = """\
+- Symptom: "1h 30m" returns 60 instead of 90
+- Reproduce: parse_duration("1h 30m")
+- Current behavior: returns 60
+- Expected behavior: returns 90; spaces between parts are allowed
+- Violates: REQ-DUR-001
+- Root cause:
+"""
+
+MODIFIED_WITH_REGRESSION = VALID_REQS.replace(
+    "### REQ-DUR-001 Parse hours and minutes", "### REQ-DUR-001 [MODIFIED] Parse hours and minutes"
+).replace(
+    "| N1 | validation |",
+    "| R1 | happy | the string \"1h 30m\" | parse is called | it returns 90 |\n| N1 | validation |")
+
+REGRESSION_TASKS = VALID_TASKS + "- [ ] T3 REQ-DUR-001.R1 Spaces between parts\n  - test:\n  - red:\n  - green:\n"
+
+
+class BugTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.repo.write("specs/capabilities/duration/spec.md",
+                        "---\ncapability: duration\nprefix: DUR\n---\n\n## Requirements\n\n" + VALID_REQS)
+        self.repo.ok("new", "fix-spaces", "--title", "Spaces in durations", "--type", "defect",
+                     "--capability", "duration=DUR")
+        self.cid = "0001-fix-spaces"
+
+    def fill_defect(self, defect=DEFECT, reqs=MODIFIED_WITH_REGRESSION, tasks=REGRESSION_TASKS):
+        self.repo.set_section(self.cid, "Defect", defect)
+        self.repo.fill(self.cid, reqs=reqs, design_and_tasks=tasks)
+
+    def test_defect_change_has_a_defect_section(self):
+        text = self.repo.spec(self.cid).read_text()
+        self.assertIn("type: defect", text)
+        for field in ("Symptom", "Reproduce", "Current behavior", "Expected behavior", "Violates", "Root cause"):
+            self.assertIn(f"- {field}:", text)
+
+    def test_feature_change_has_no_defect_section(self):
+        self.repo.ok("new", "feature", "--title", "F", "--capability", "duration=DUR")
+        self.assertNotIn("## Defect", self.repo.spec("0002-feature").read_text())
+
+    def test_valid_code_defect_passes(self):
+        self.fill_defect()
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+
+    def test_defect_fields_are_required(self):
+        self.fill_defect(defect=DEFECT.replace("- Current behavior: returns 60", "- Current behavior:"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("Current behavior", out)
+
+    def test_defect_needs_a_regression_scenario(self):
+        self.fill_defect(reqs=MODIFIED_WITH_REGRESSION.replace("| R1 |", "| S2 |"),
+                         tasks=REGRESSION_TASKS.replace("REQ-DUR-001.R1", "REQ-DUR-001.S2"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("needs a regression scenario", out)
+
+    def test_violated_requirement_must_exist(self):
+        self.fill_defect(defect=DEFECT.replace("Violates: REQ-DUR-001", "Violates: REQ-DUR-042"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("REQ-DUR-042", out)
+
+    def test_violated_requirement_must_be_restated_with_the_regression(self):
+        second = (VALID_REQS.replace("REQ-DUR-001", "REQ-DUR-002")
+                  .replace("| N1 | validation |",
+                           "| R1 | happy | the string \"1h 30m\" | parse is called | it returns 90 |\n| N1 | validation |"))
+        tasks = VALID_TASKS.replace("REQ-DUR-001", "REQ-DUR-002") + \
+            "- [ ] T3 REQ-DUR-002.R1 Spaces\n  - test:\n  - red:\n  - green:\n"
+        self.fill_defect(reqs=second, tasks=tasks)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("[MODIFIED]", out)
+
+    def test_spec_gap_defect_with_new_requirement_passes(self):
+        gap = DEFECT.replace("Violates: REQ-DUR-001", "Violates: spec gap — nothing says what spaces do")
+        new_req = (VALID_REQS.replace("REQ-DUR-001", "REQ-DUR-002").replace("Parse hours and minutes", "Spaces")
+                   .replace("| N1 | validation |",
+                            "| R1 | happy | the string \"1h 30m\" | parse is called | it returns 90 |\n| N1 | validation |"))
+        tasks = VALID_TASKS.replace("REQ-DUR-001", "REQ-DUR-002") + \
+            "- [ ] T3 REQ-DUR-002.R1 Spaces\n  - test:\n  - red:\n  - green:\n"
+        self.fill_defect(defect=gap, reqs=new_req, tasks=tasks)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+
+    def test_violates_must_be_a_requirement_or_spec_gap(self):
+        self.fill_defect(defect=DEFECT.replace("Violates: REQ-DUR-001", "Violates: the parser"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("spec gap", out)
+
+    def test_root_cause_is_required_before_verified(self):
+        self.fill_defect(tasks=REGRESSION_TASKS.replace("- [ ]", "- [x]").replace(
+            "  - test:\n  - red:\n  - green:\n",
+            "  - test: tests/test_dur.py::t\n  - red: AssertionError: 60 != 90\n  - green: 1 passed\n"))
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1 REQ_DUR_001_R1")
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 1)
+        self.assertIn("Root cause", out)
+        self.repo.set_section(self.cid, "Defect", DEFECT.replace("- Root cause:", "- Root cause: the regex ignored spaces"))
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 0, out)
 
 
 if __name__ == "__main__":
