@@ -130,7 +130,8 @@ Bigger work (several areas, or a new component or interface) is a
 
 ```text
 /sdd propose "Guest checkout"     # the agent suggests size standard; you confirm
-/sdd specify                      # requirements → you approve the SPEC (now locked)
+/sdd specify                      # requirements
+/sdd clarify                      # Spec Critic audit + its questions → you approve the SPEC (now locked)
 /sdd design                       # design.md: approach, components, test strategy
 /sdd tasks                        # test-first plan → you approve the PLAN
 /sdd implement all
@@ -163,6 +164,7 @@ not through conversation.
 | --- | --- | --- |
 | **Spec Author** | Intent, scope, requirements, scenarios, known gaps | Choose technology, write code, invent product decisions |
 | **Architect** | `design.md` for `standard` changes: approach, components, test strategy | Change requirements, or design behavior the spec doesn't ask for |
+| **Spec Critic** | Review rounds: a verdict per requirement, findings, at most 5 questions | Edit the spec, or answer its own questions |
 | **Planner** | Test-first tasks (plus design notes in `mini`) | Change requirements |
 | **Implementer** | Code, tests, red/green evidence | Change the spec (it stops and asks instead) |
 | **Verifier** | Verification report, gap tasks | Fix code, or trust a ticked box without re-running |
@@ -265,7 +267,7 @@ unsure between two, take the higher one.
 | **Tests first** | Happy path | Every scenario | Every scenario | Every scenario |
 | **Failure cases** | **None required.** A **Known gaps** list instead, one line per thing not handled | Bad input · wrong state or duplicates · failure of anything it calls | The above + boundaries · access rights (6 core categories) | The 6 core + concurrency · rule combinations · invariants |
 | **A failure test checks** | — | The error shown, and that nothing else happened | The error, no side effects, state unchanged | Same as production |
-| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage | Independent reviewer, fresh context *(v1)* | Independent reviewer, every round *(v3)* |
+| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage. `standard` changes get a Critic round. | Critic round at any size, in a fresh session (fresh session enforced later in v1) | Independent reviewer, every round *(v3)* |
 | **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier: blocking coverage of changed code, plus probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v3)* |
 
 ### Same dials, different results
@@ -336,7 +338,11 @@ A blank is an error, and so is a lazy "not needed".
 - a defect names the requirement it violates (or "spec gap") and carries a
   regression scenario, whose test must reproduce the bug;
 - spec size stays under the cap (200 lines for `mini`);
-- a `prototype` change keeps a Known gaps list.
+- a `prototype` change keeps a Known gaps list;
+- when a Critic round is required (`standard` at `internal`+, any size at
+  `production`+), the latest round audits every requirement, every finding
+  has an outcome, every question has your answer, and no round asks more than
+  5 questions.
 
 The **Verifier** then does what a script can't. It re-runs everything, reads
 each test against its scenario ("does it assert every part of the Then,
@@ -365,6 +371,7 @@ Drafting specs for untouched existing code (`sdd baseline`) is planned for v2.
 | `sdd quick "<idea>"` | Whole `mini` change in one pass, ending at the approval gate |
 | `sdd propose "<idea>"` | Start a change: intent and scope only |
 | `sdd specify` | Requirements, scenarios, coverage |
+| `sdd clarify` | Spec Critic review round: audits every requirement, at most 5 questions for you |
 | `sdd design` | `standard` only: approach, components, test strategy |
 | `sdd tasks` | Test-first plan, then the plan gate |
 | `sdd approve` | Record your approval of the pending gate: constitution, spec, plan, results, or an amendment |
@@ -410,7 +417,7 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   categories, but the independent reviewer, blocking coverage, mutation
   testing and property-based tests aren't built yet. For now, run `verify` in
   a fresh session.
-- No `clarify`, `analyze`, `baseline` or `harden` phases yet.
+- No `analyze`, `baseline` or `harden` phases yet.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than

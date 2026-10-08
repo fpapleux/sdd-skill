@@ -134,6 +134,39 @@ required before verification passes.
 **Regression scenarios** use IDs `R1`, `R2`…, and their test's red run must
 reproduce the bug.
 
+## Clarifications (Spec Critic rounds)
+
+`## Clarifications` (in `clarifications.md` for a `standard` change) holds
+one block per review round. Start a round with `SDD round`, which lists
+every requirement:
+
+```markdown
+### Round 1 — 2026-10-08 · Critic: same session
+
+| REQ | Verdict | Notes |
+| --- | --- | --- |
+| REQ-DUR-001 | issues | F1, F2 |
+
+- F1 [coverage] REQ-DUR-001: no scenario for an empty string → fixed: N2 added
+- F2 [ambiguity] REQ-DUR-001: is "90" minutes? → Q1
+- Q1 Should "90" (no unit) count as minutes? A) yes B) no, reject — recommended: B
+  - Answer: B — reject (operator, 2026-10-08)
+```
+
+- **Verdict:** `ok` or `issues`. A `?` fails the check.
+- **Finding types:** `ambiguity`, `contradiction`, `untestable`,
+  `coverage`, `weak-negative`, `conflict` (with the living spec), `scope`.
+- **Finding outcomes:** `→ fixed: …`, `→ accepted: …`,
+  `→ rejected: <reason>`, or `→ Q<n>`. A finding without an outcome, or
+  waiting on an unanswered question, fails the check.
+- **Questions:** at most 5 per round. Each needs an `Answer:` line; an
+  unanswered question counts as an open question and blocks the gate.
+- **The gate:** when a Critic round is required, the **latest** round must
+  audit every current requirement.
+
+Clarifications are review history. They aren't locked and don't count toward
+the size cap.
+
 ## Known gaps
 
 `## Known gaps`: one bullet per behavior this change deliberately does not

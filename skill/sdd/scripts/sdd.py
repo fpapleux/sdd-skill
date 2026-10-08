@@ -64,7 +64,8 @@ REQUIRED = {
 
 SIZE_CAPS = {"mini": 200, "standard": 400, "full": 800}
 SIZES_AVAILABLE = ["mini", "standard"]
-STANDARD_FILES = ["proposal.md", "spec-delta.md", "design.md", "tasks.md", "verification.md"]
+STANDARD_FILES = ["proposal.md", "spec-delta.md", "clarifications.md", "design.md", "tasks.md",
+                  "verification.md"]
 TYPES = ["feature", "defect", "hardening"]
 STATUS_ORDER = ["draft", "clarifying", "spec-approved", "designed", "planned",
                 "implementing", "verifying", "verified", "archived"]
@@ -113,7 +114,14 @@ FAILURE_WORDS = re.compile(r"fail|error|assert|expected|exception|traceback|rais
                            r"not equal|!=|mismatch|undefined|cannot|missing|not found", re.I)
 SETUP_ERRORS = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|"
                           r"Cannot find module|command not found", re.I)
-UNCOUNTED_SECTIONS = ("Verification", "Amendments", "Approvals")
+UNCOUNTED_SECTIONS = ("Clarifications", "Verification", "Amendments", "Approvals")
+FINDING_TYPES = ["ambiguity", "contradiction", "untestable", "coverage", "weak-negative",
+                 "conflict", "scope"]
+ROUND_HEAD = re.compile(r"^### Round (\d+)\b(.*)$")
+FINDING_LINE = re.compile(r"^\s*[-*]\s*(F\d+)\s*\[([A-Za-z-]+)\]\s*(.*)$")
+QUESTION_LINE = re.compile(r"^\s*[-*]\s*(Q\d+)\b\s*(.*)$")
+ANSWER_LINE = re.compile(r"^\s+[-*]\s*Answer\s*:\s*(.*)$", re.I)
+UNANSWERED = {"", "pending", "?", "tbd", "todo"}
 LOCKED_SECTIONS = ("Intent", "Defect", "Scope", "Requirements", "Known gaps")
 DEFECT_FIELDS = ("Symptom", "Reproduce", "Current behavior", "Expected behavior", "Violates")
 DEFECT_FIELD = re.compile(r"^\s*[-*]\s*([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$")
@@ -385,6 +393,104 @@ def parse_tasks(section_text: str) -> tuple:
     return tasks, problems
 
 
+def parse_rounds(section_text: str) -> list:
+    """Spec Critic rounds: audit verdicts, findings with outcomes, and answered questions."""
+    rounds, current, in_table = [], None, False
+    for line in section_text.splitlines():
+        head = ROUND_HEAD.match(line)
+        if head:
+            mode = re.search(r"Critic:\s*(same session|fresh session)", head.group(2), re.I)
+            current = {"number": int(head.group(1)), "mode": mode.group(1).lower() if mode else "",
+                       "audit": {}, "findings": [], "questions": []}
+            rounds.append(current)
+            in_table = False
+            continue
+        if current is None:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            cells = table_cells(stripped)
+            if [c.lower() for c in cells[:2]] == ["req", "verdict"]:
+                in_table = True
+            elif in_table and cells and not is_separator(cells) and len(cells) >= 2:
+                current["audit"][cells[0]] = cells[1].lower()
+            continue
+        in_table = False
+        answer = ANSWER_LINE.match(line)
+        if answer and current["questions"]:
+            current["questions"][-1]["answer"] = answer.group(1).strip()
+            continue
+        finding = FINDING_LINE.match(line)
+        if finding:
+            body = finding.group(3)
+            text, _, outcome = body.rpartition("→") if "→" in body else (body, "", "")
+            current["findings"].append({"id": finding.group(1), "type": finding.group(2).lower(),
+                                        "text": text.strip(), "outcome": outcome.strip()})
+            continue
+        question = QUESTION_LINE.match(line)
+        if question:
+            current["questions"].append({"id": question.group(1), "text": question.group(2), "answer": ""})
+    return rounds
+
+
+def answered(question: dict) -> bool:
+    return question["answer"].strip().lower() not in UNANSWERED
+
+
+def critic_required(size: str, level: str) -> bool:
+    """Size decides whether the Critic runs; assurance can demand it at any size."""
+    if level not in LEVELS:
+        return False
+    return (size == "standard" and level != "prototype") or \
+        LEVELS.index(level) >= LEVELS.index("production")
+
+
+def critic_gate_errors(reqs: list, rounds: list, size: str, level: str) -> list:
+    if not critic_required(size, level):
+        return []
+    if not rounds:
+        return ["a Critic round is required before this gate at this size and assurance level: "
+                "run sdd clarify"]
+    last = rounds[-1]
+    return [f"{r.id}: not audited in the latest Critic round (round {last['number']}); "
+            "run another round: sdd clarify"
+            for r in reqs if r.tag != "REMOVED" and last["audit"].get(r.id) not in ("ok", "issues")]
+
+
+def check_rounds(rounds: list, level: str, req_ids: set, err, warn) -> int:
+    """Validate every round; return the number of unanswered questions."""
+    unanswered = 0
+    for rnd in rounds:
+        name = f"Round {rnd['number']}"
+        for rid, verdict in rnd["audit"].items():
+            if verdict not in ("ok", "issues"):
+                err(f"{name}: {rid} has no verdict (write ok or issues)")
+            elif rid not in req_ids:
+                warn(f"{name}: audits {rid}, which isn't a requirement of this change")
+        if len(rnd["questions"]) > 5:
+            err(f"{name} has {len(rnd['questions'])} questions: at most 5 per round "
+                "(ask the most important first, then start a new round)")
+        answers = {q["id"]: answered(q) for q in rnd["questions"]}
+        unanswered += sum(1 for ok in answers.values() if not ok)
+        for f in rnd["findings"]:
+            if f["type"] not in FINDING_TYPES:
+                err(f"{name}: {f['id']} has unknown type '{f['type']}' (use: {', '.join(FINDING_TYPES)})")
+            outcome = f["outcome"]
+            link = re.match(r"^(Q\d+)\b", outcome)
+            resolved = re.match(r"^(fixed|accepted|rejected)\s*:\s*(\S.*)$", outcome, re.I)
+            if link:
+                if not answers.get(link.group(1), False):
+                    err(f"{name}: {f['id']} is open: it waits on {link.group(1)}, which has no answer yet")
+            elif not resolved:
+                err(f"{name}: {f['id']} is open: end it with → fixed: … / accepted: … / "
+                    "rejected: <reason>, or → Q<n> for a question")
+    if rounds and LEVELS.index(level) >= LEVELS.index("production") \
+            and rounds[-1]["mode"] != "fresh session":
+        warn(f"Round {rounds[-1]['number']} ran in the same session; at production and above the "
+             "Critic should run in a fresh session (enforced in a later version)")
+    return unanswered
+
+
 # ---------------------------------------------------------------- project
 
 class Project:
@@ -508,6 +614,7 @@ class Report:
         self.change_id, self.stage, self.level = change_id, stage, level
         self.errors, self.warnings, self.coverage = [], [], []
         self.open_questions = 0
+        self.critic = []  # what a gate still needs from the Spec Critic
         self.counts = {}
 
     @property
@@ -672,7 +779,10 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if lines > cap:
         warn(f"size cap: {lines} lines > {cap} for {fm.get('size', 'mini')}; "
              "trim, or split into smaller changes")
-    report.open_questions = clean.count("[NEEDS CLARIFICATION")
+    rounds = parse_rounds(secs.get("Clarifications", ""))
+    unanswered = check_rounds(rounds, level, {r.id for r in reqs}, err, warn)
+    report.open_questions = clean.count("[NEEDS CLARIFICATION") + unanswered
+    report.critic = critic_gate_errors(reqs, rounds, fm.get("size", "mini"), level)
 
     happy = sum(1 for r in reqs for s in r.scenarios if s["category"] == "happy")
     boundary = sum(1 for r in reqs for s in r.scenarios if s["category"] == "boundary")
@@ -883,6 +993,8 @@ def next_step(project: Project, fm: dict, report: Report) -> str:
             return "fix the check errors (sdd.py check), then ask for approval"
         if report.open_questions:
             return "answer the open questions, then ask for approval"
+        if report.critic:
+            return "run a Critic round (required at this assurance level): sdd clarify"
         return "awaiting operator approval: sdd approve"
     if any(LOCK_ERROR in e for e in report.errors):
         return "a spec amendment is pending: show the operator the change, then sdd approve"
@@ -911,6 +1023,8 @@ def next_step_standard(status, counts, report):
             return "fix the check errors (sdd.py check), then ask for spec approval"
         if report.open_questions:
             return "answer the open questions, then ask for spec approval"
+        if report.critic:
+            return "run a Critic round: sdd clarify"
         return "awaiting operator approval of the spec: sdd approve"
     if any(LOCK_ERROR in e for e in report.errors):
         return "a spec amendment is pending: show the operator the change, then sdd approve"
@@ -1129,6 +1243,8 @@ def cmd_approve(project: Project, args) -> int:
         if report.open_questions:
             raise SddError(f"spec approval refused: {report.open_questions} open question(s) "
                            "must be answered first")
+        if report.critic:
+            raise SddError("spec approval refused: " + "; ".join(report.critic))
         append_approval(path, "spec", evidence)
         text = set_front_matter(path.read_text(), "status", "spec-approved")
         path.write_text(text)
@@ -1162,6 +1278,8 @@ def cmd_approve(project: Project, args) -> int:
         if report.open_questions:
             raise SddError(f"plan approval refused: {report.open_questions} open question(s) "
                            "must be answered first")
+        if size != "standard" and report.critic:  # standard met this at the spec gate
+            raise SddError("plan approval refused: " + "; ".join(report.critic))
         append_approval(path, "plan", evidence)
         text = set_front_matter(path.read_text(), "status", "planned")
         path.write_text(text)
@@ -1351,6 +1469,54 @@ def join_capability(head: str, blocks: dict) -> str:
     return head.rstrip() + "\n\n" + "\n\n".join(ordered) + "\n" if ordered else head.rstrip() + "\n"
 
 
+def append_to_section(text: str, name: str, new_lines: list, before=("Amendments", "Approvals")) -> str:
+    """Append lines at the end of '## name'; create the section (before `before`) if missing."""
+    lines = text.rstrip("\n").splitlines()
+    if f"## {name}" not in lines:
+        at = next((i for i, l in enumerate(lines) if l in [f"## {b}" for b in before]), len(lines))
+        lines[at:at] = [f"## {name}", ""]
+    start = lines.index(f"## {name}")
+    end = start + 1
+    while end < len(lines) and not lines[end].startswith("## "):
+        end += 1
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    lines[end:end] = [""] + new_lines
+    return "\n".join(lines) + "\n"
+
+
+def cmd_round(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    fm = read_front_matter(path.read_text())
+    if fm.get("status") not in ("draft", "clarifying"):
+        raise SddError(f"change is '{fm.get('status')}': Critic rounds happen before the gate; "
+                       "after approval, spec changes go through sdd amend")
+    secs = sections(strip_comments(change_text(path)))
+    reqs, _ = parse_requirements(secs.get("Requirements", ""))
+    current = [r.id for r in reqs if r.tag != "REMOVED"]
+    if not current:
+        raise SddError("no requirements to review yet: write them first (sdd specify)")
+    rounds = parse_rounds(secs.get("Clarifications", ""))
+    number = max([r["number"] for r in rounds] or [0]) + 1
+    mode = "fresh session" if args.fresh else "same session"
+    block = [f"### Round {number} — {today()} · Critic: {mode}", "",
+             "| REQ | Verdict | Notes |", "| --- | --- | --- |"]
+    block += [f"| {rid} | ? | |" for rid in current]
+    block += ["", "<!-- Findings: - F1 [type] REQ-…: <problem> → fixed: … | accepted: … | "
+              "rejected: <reason> | Q1", "Questions (at most 5): - Q1 <question> A) … B) … — "
+              "recommended: …", "  - Answer: pending -->"]
+    target = path.parent / "clarifications.md" if path.name == "proposal.md" else path
+    if not target.exists():
+        target.write_text(render("standard/clarifications.md"))
+    target.write_text(append_to_section(target.read_text(), "Clarifications", block))
+    if fm.get("size") == "standard" and fm.get("status") == "draft":
+        path.write_text(set_front_matter(path.read_text(), "status", "clarifying"))
+    print(f"added Round {number} ({mode}) to {target.relative_to(project.root)}: give each "
+          "requirement a verdict (ok or issues), then findings and at most 5 questions")
+    return 0
+
+
 def cmd_next_req(project: Project, args) -> int:
     project.require_init()
     if not PREFIX.match(args.prefix):
@@ -1419,6 +1585,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("archive", help="merge a verified change into the living spec")
     p.add_argument("--change")
     p.set_defaults(func=cmd_archive)
+
+    p = sub.add_parser("round", help="start a Spec Critic review round on the active change")
+    p.add_argument("--fresh", action="store_true", help="the Critic runs in a fresh session")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_round)
 
     p = sub.add_parser("next-req", help="next free requirement ID for a prefix")
     p.add_argument("prefix")

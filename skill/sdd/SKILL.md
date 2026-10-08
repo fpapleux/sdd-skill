@@ -1,6 +1,6 @@
 ---
 name: sdd
-description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, design, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
+description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
   version: "0.1.0"
@@ -35,6 +35,7 @@ prefix the operator used.
 | `quick "<idea>"` | Whole `mini` change in one pass: spec + tasks, then ask for approval | `method/phases/quick.md` |
 | `propose "<idea>"` | Start a change: intent and scope only | `method/phases/propose.md` |
 | `specify` | Write requirements, scenarios, coverage | `method/phases/specify.md` |
+| `clarify` | Spec Critic review round: coverage audit, at most 5 questions | `method/phases/clarify.md` |
 | `design` | `standard` only: how it will be built (`design.md`) | `method/phases/design.md` |
 | `tasks` | Plan test-first tasks, then ask for approval | `method/phases/tasks.md` |
 | `approve` | Record the operator's approval of the pending gate (constitution, spec, plan, results, amendment) | `method/phases/approve.md` |
@@ -47,8 +48,8 @@ prefix the operator used.
 
 If the phase is unknown, show this table and stop.
 
-**Not built yet:** the `full` size, and the phases `clarify`, `analyze`,
-`baseline`, `harden` and `next`. If the operator asks for
+**Not built yet:** the `full` size, and the phases `analyze`, `baseline`,
+`harden` and `next`. If the operator asks for
 one, say so and offer the closest available path. For example, a large
 feature can be split into several `mini` changes.
 

@@ -1112,9 +1112,11 @@ class StandardTests(Base):
     def status_of(self):
         return re.search(r"^status: (\S+)", self.f("proposal.md").read_text(), re.M).group(1)
 
-    def spec(self, reqs=VALID_REQS, gaps="- None\n"):
+    def spec(self, reqs=VALID_REQS, gaps="- None\n", critic=True):
         set_file_section(self.f("spec-delta.md"), "Requirements", reqs)
         set_file_section(self.f("spec-delta.md"), "Known gaps", gaps)
+        if critic:  # since increment 3, standard changes at internal+ need a Critic round
+            set_file_section(self.f("clarifications.md"), "Clarifications", ROUND_DONE)
 
     def design(self, command="`python3 -m unittest`"):
         set_file_section(self.f("design.md"), "Approach", "- A regex over the string\n")
@@ -1339,6 +1341,191 @@ class StandardTests(Base):
         self.design()
         self.repo.ok("advance", "designed")
         self.assertIn("tasks", json.loads(self.repo.ok("status", "--json"))["next"])
+
+
+# ---------------------------------------------------------------- v1 increment 3: clarify + Spec Critic
+
+ROUND_DONE = """\
+### Round 1 — 2026-10-08 · Critic: same session
+
+| REQ | Verdict | Notes |
+| --- | --- | --- |
+| REQ-DUR-001 | issues | F1, F2 |
+
+- F1 [coverage] REQ-DUR-001: no scenario for an empty string → fixed: N2 added
+- F2 [ambiguity] REQ-DUR-001: is "90" minutes? → Q1
+- Q1 Should "90" (no unit) count as minutes? A) yes B) no, reject — recommended: B
+  - Answer: B — reject (operator, 2026-10-08)
+"""
+
+
+class ClarifyMiniTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.cid = self.new()
+        self.repo.fill(self.cid)
+
+    def clar(self, body):
+        self.repo.set_section(self.cid, "Clarifications", body)
+
+    def test_mini_spec_has_a_clarifications_section(self):
+        self.assertIn("## Clarifications", self.repo.spec(self.cid).read_text())
+
+    def test_round_command_lists_every_requirement(self):
+        out = self.repo.ok("round")
+        self.assertIn("Round 1", out)
+        text = self.repo.spec(self.cid).read_text()
+        self.assertRegex(text, r"### Round 1 — \d{4}-\d\d-\d\d · Critic: same session")
+        self.assertIn("| REQ-DUR-001 | ? |", text)
+
+    def test_round_numbers_increment_and_fresh_is_recorded(self):
+        self.repo.ok("round")
+        self.repo.ok("round", "--fresh")
+        self.assertRegex(self.repo.spec(self.cid).read_text(), r"### Round 2 — .* · Critic: fresh session")
+
+    def test_round_needs_requirements(self):
+        self.repo.set_section(self.cid, "Requirements", "")
+        code, out = self.repo.run("round")
+        self.assertEqual(code, 1)
+        self.assertIn("requirements", out)
+
+    def test_round_only_before_the_gate(self):
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        code, out = self.repo.run("round")
+        self.assertEqual(code, 1)
+        self.assertIn("amend", out)
+
+    def test_complete_round_passes_check(self):
+        self.clar(ROUND_DONE)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+
+    def test_unaudited_requirement_fails_check(self):
+        self.repo.ok("round")
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("verdict", out)
+
+    def test_open_finding_fails_check(self):
+        self.clar(ROUND_DONE.replace(" → fixed: N2 added", ""))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("F1", out)
+
+    def test_rejected_finding_needs_a_reason(self):
+        self.clar(ROUND_DONE.replace("→ fixed: N2 added", "→ rejected:"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("F1", out)
+
+    def test_finding_waiting_on_an_unanswered_question_is_open(self):
+        self.clar(ROUND_DONE.replace("  - Answer: B — reject (operator, 2026-10-08)\n", "  - Answer: pending\n"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("F2", out)
+        self.assertIn("1 open question", out)
+
+    def test_unknown_finding_type_fails(self):
+        self.clar(ROUND_DONE.replace("[ambiguity]", "[vibes]"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("vibes", out)
+
+    def test_at_most_five_questions_per_round(self):
+        extra = "".join(f"- Q{i} Question {i}? A) x B) y — recommended: A\n  - Answer: A (operator)\n"
+                        for i in range(2, 7))
+        self.clar(ROUND_DONE + extra)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("at most 5", out)
+
+    def test_clarifications_are_not_locked_or_counted(self):
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.clar(ROUND_DONE + "\n" * 300)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("size cap", out)
+
+    def test_internal_mini_plan_gate_needs_no_round(self):
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+
+
+class ClarifyGateTests(Base):
+    def standard(self, level="internal"):
+        self.init(level)
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--size", "standard",
+                     "--capability", "duration=DUR")
+        self.dir = self.repo.root / "specs/changes/0001-durations"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+
+    def test_standard_folder_has_clarifications_file(self):
+        self.standard()
+        self.assertIn("## Clarifications", (self.dir / "clarifications.md").read_text())
+
+    def test_standard_spec_gate_requires_a_critic_round(self):
+        self.standard()
+        code, out = self.repo.run("approve", "spec", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("Critic round", out)
+        self.assertIn("sdd clarify", out)
+
+    def test_standard_spec_gate_passes_after_a_complete_round(self):
+        self.standard()
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+
+    def test_round_moves_a_standard_draft_to_clarifying(self):
+        self.standard()
+        self.repo.ok("round")
+        self.assertIn("status: clarifying", (self.dir / "proposal.md").read_text())
+        self.assertIn("| REQ-DUR-001 | ? |", (self.dir / "clarifications.md").read_text())
+
+    def test_requirement_added_after_the_round_needs_a_new_round(self):
+        self.standard()
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        second = VALID_REQS.replace("REQ-DUR-001", "REQ-DUR-002").replace("Parse hours and minutes", "Seconds")
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS + "\n" + second)
+        code, out = self.repo.run("approve", "spec", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("REQ-DUR-002", out)
+        self.assertIn("latest Critic round", out)
+
+    def test_prototype_standard_needs_no_round(self):
+        self.standard("prototype")
+        set_file_section(self.dir / "spec-delta.md", "Requirements",
+                         VALID_REQS.split("| N1 |")[0].rstrip() + "\n")
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- Invalid strings not rejected\n")
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+
+    def test_production_mini_plan_gate_requires_a_round(self):
+        self.init("production")
+        cid = self.new()
+        reqs = VALID_REQS.replace("- N/A state:", "- N/A boundary: the parser accepts any length of input\n"
+                                  "- N/A access: the parser is a local pure function\n- N/A state:")
+        self.repo.fill(cid, reqs=reqs)
+        code, out = self.repo.run("approve", "plan", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("Critic round", out)
+        self.repo.set_section(cid, "Clarifications", ROUND_DONE.replace("same session", "fresh session"))
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+
+    def test_same_session_round_at_production_warns(self):
+        self.init("production")
+        cid = self.new()
+        self.repo.fill(cid)
+        self.repo.set_section(cid, "Clarifications", ROUND_DONE)
+        code, out = self.repo.run("check")
+        self.assertIn("fresh session", out)
+
+    def test_status_suggests_clarify_before_the_spec_gate(self):
+        self.standard()
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertIn("sdd clarify", data["next"])
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertIn("approve", data["next"])
 
 
 if __name__ == "__main__":

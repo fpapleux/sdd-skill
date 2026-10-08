@@ -16,6 +16,8 @@ Write the requirements of the active change. Role: **Spec Author**
 5. Report: the requirements as one line each, scenario counts (happy /
    negative / boundary), the N/A reasons, known gaps, and open questions.
    - `mini`: next is `sdd tasks`.
-   - `standard`: **Gate: spec.** Once there are no open questions and the
-     check is OK, show the review digest and ask "Approve this spec?" Then
-     **stop**. Approval locks the spec, and next comes `sdd design`.
+   - `standard`: next is `sdd clarify`, which is required at `internal` and
+     above. Then comes **Gate: spec**: once the check is OK, the latest
+     Critic round is complete and no questions are open, show the review
+     digest and ask "Approve this spec?" Then **stop**. Approval locks the
+     spec, and next comes `sdd design`.
