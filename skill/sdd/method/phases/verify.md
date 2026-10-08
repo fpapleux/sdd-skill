@@ -7,10 +7,10 @@ Check the delivered work against the spec. Role: **Verifier**
    already `verifying`. If tasks remain, say which, and point to
    `sdd implement`.
 2. **Independence.** At `prototype` and `internal`, verifying in the same
-   session is fine. At `production` and `critical`, v0 has no independent
-   reviewer yet. Recommend that the operator run `verify` in a **fresh
-   session** (new chat), which works because all state is in files. Continue
-   here only if they say so.
+   session is fine. At `production` and `critical`, the independent reviewer isn't built yet.
+   Recommend that the operator run `verify` in a **fresh session** (new
+   chat), which works because all state is in files. Continue here only if
+   they say so.
 3. If the status is `implementing`, run `SDD advance verifying`.
 4. Follow the Verifier checklist and write `## Verification`.
 5. **Gaps found:**
@@ -21,4 +21,8 @@ Check the delivered work against the spec. Role: **Verifier**
      silently. Describe it to the operator and ask: **A)** amend now, or
      **B)** accept it as a known gap. The verdict stays GAPS until they
      answer. See the Verifier role.
-6. **No gaps:** run `SDD advance verified`. Next: `sdd archive`.
+6. **No gaps:**
+   - `mini`: run `SDD advance verified`. Next: `sdd archive`.
+   - `standard`: **Gate: results.** Show the verdict, the scenario matrix
+     summary and any accepted findings, then ask "Approve these results?"
+     Stop. The operator's approval is recorded with `SDD approve results`.

@@ -24,8 +24,9 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v0.** The `mini` change size works end to end at every assurance
-> level. Larger sizes, an independent reviewer, and extra verification for
+> **Status: v1 in progress.** The `mini` and `standard` sizes work end to end
+> at every assurance level, including spec locking, amendments and defect
+> changes. The `full` size, an independent reviewer, and extra verification for
 > high-assurance work are on the [roadmap](#roadmap).
 
 ---
@@ -40,7 +41,7 @@ the code, verifies the result against the spec, and merges the change into a
 - [Testing discipline](#testing-discipline)
 - [Working with existing code](#working-with-existing-code)
 - [Reference](#reference)
-- [Limitations in v0](#limitations-in-v0)
+- [Current limitations](#current-limitations)
 - [Roadmap](#roadmap)
 - [FAQ](#faq)
 - [Development](#development)
@@ -124,6 +125,19 @@ In Codex, type `$sdd` instead of `/sdd`.
 If you prefer to go step by step instead of using `quick`:
 `propose` → `specify` → `tasks` → `approve`.
 
+Bigger work (several areas, or a new component or interface) is a
+**`standard`** change: a folder of files and three approvals instead of one.
+
+```text
+/sdd propose "Guest checkout"     # the agent suggests size standard; you confirm
+/sdd specify                      # requirements → you approve the SPEC (now locked)
+/sdd design                       # design.md: approach, components, test strategy
+/sdd tasks                        # test-first plan → you approve the PLAN
+/sdd implement all
+/sdd verify                       # → you approve the RESULTS
+/sdd archive
+```
+
 ## How it works
 
 ### The loop
@@ -148,7 +162,8 @@ not through conversation.
 | Role | Writes | Must not |
 | --- | --- | --- |
 | **Spec Author** | Intent, scope, requirements, scenarios, known gaps | Choose technology, write code, invent product decisions |
-| **Planner** | Design notes, test-first tasks | Change requirements |
+| **Architect** | `design.md` for `standard` changes: approach, components, test strategy | Change requirements, or design behavior the spec doesn't ask for |
+| **Planner** | Test-first tasks (plus design notes in `mini`) | Change requirements |
 | **Implementer** | Code, tests, red/green evidence | Change the spec (it stops and asks instead) |
 | **Verifier** | Verification report, gap tasks | Fix code, or trust a ticked box without re-running |
 | **Spec Steward** | The living spec (via the script) | Accept behavior that was never approved |
@@ -160,7 +175,9 @@ not through conversation.
 specs/
   constitution.md                  # assurance level + project rules (you approve it)
   capabilities/<name>/spec.md      # LIVING spec: current approved behavior, known gaps, history
-  changes/0001-total-command/spec.md   # in-flight changes
+  changes/0001-total-command/spec.md   # in-flight mini change (one file)
+  changes/0002-guest-checkout/         # in-flight standard change: proposal.md, spec-delta.md,
+                                       #   design.md, tasks.md, verification.md
   archive/0001-total-command/spec.md   # finished changes
   .sdd/active                      # which change is active
 AGENTS.md                          # short SDD section (read by Codex and others)
@@ -237,7 +254,7 @@ unsure between two, take the higher one.
 | --- | --- | --- | --- | --- |
 | `inline` | Typo, copy change, one-line fix, config tweak, dependency bump | No spec files. The commit message cites the requirement or bug. | None: your request is the approval | Just ask |
 | **`mini`** (default) | One area, up to ~5 requirements, no new component | One `spec.md`: requirements, design notes, tasks, results | 1: spec + plan together | `quick` → approve → `implement` → `verify` → `archive` |
-| `standard` *(v1)* | Several areas, or a new component, interface or data model | A change folder: proposal, spec changes, design, tasks, verification | 3: spec · plan · results | propose → specify → clarify → **✓ spec** → design + tasks → **✓ plan** → implement → verify → **✓ results** → archive |
+| `standard` | Several areas, or a new component, interface or data model | A change folder: proposal, spec changes, design, tasks, verification | 3: spec · plan · results | propose → specify → clarify → **✓ spec** → design + tasks → **✓ plan** → implement → verify → **✓ results** → archive |
 | `full` *(v3)* | Data migration, public API, security model, irreversible operations | Change folder + interface contracts + decision records | 4: spec · design · tasks · results | Like standard, plus a separate design approval |
 
 ### Dial 2 · Assurance: the proof (per project)
@@ -311,7 +328,8 @@ A blank is an error, and so is a lazy "not needed".
 - every ticked task has red evidence that shows a failure, and green
   evidence;
 - before verification passes, every scenario is named in a **test file**;
-- a change can't leave `draft` without a recorded approval, and a blocked
+- a change can't leave `draft` without a recorded approval, a `standard`
+  change passes its spec, plan and results gates in order, and a blocked
   change can only return to where it was;
 - **the approved spec is locked**: editing its intent, scope, requirements or
   known gaps afterwards fails the check until you approve a logged amendment;
@@ -347,8 +365,9 @@ Drafting specs for untouched existing code (`sdd baseline`) is planned for v2.
 | `sdd quick "<idea>"` | Whole `mini` change in one pass, ending at the approval gate |
 | `sdd propose "<idea>"` | Start a change: intent and scope only |
 | `sdd specify` | Requirements, scenarios, coverage |
-| `sdd tasks` | Test-first plan, then the approval gate |
-| `sdd approve` | Record your approval of the pending gate (constitution, plan, or an amendment) |
+| `sdd design` | `standard` only: approach, components, test strategy |
+| `sdd tasks` | Test-first plan, then the plan gate |
+| `sdd approve` | Record your approval of the pending gate: constitution, spec, plan, results, or an amendment |
 | `sdd implement [T3\|next\|all]` | Red → green → refactor, task by task |
 | `sdd amend "<reason>"` | Change the approved spec mid-work: logged, shown to you, approved |
 | `sdd bug "<symptom>"` | Defect change: reproduce, trace to the spec (violated requirement or spec gap), regression test first |
@@ -382,16 +401,16 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   retries. After two failed fixes for the same problem, the agent reports to
   you.
 
-## Limitations in v0
+## Current limitations
 
-- Only the `inline` and `mini` sizes. Larger work should be split into several
-  `mini` changes.
+- No `full` size yet. Use `standard` for migrations, public APIs and security
+  models; the extra safeguards (a design gate, contracts, decision records)
+  come in v3.
 - The `production` and `critical` levels: the script enforces their failure
   categories, but the independent reviewer, blocking coverage, mutation
   testing and property-based tests aren't built yet. For now, run `verify` in
   a fresh session.
-- No `clarify`, `design`, `analyze`, `baseline` or `harden` phases yet. The
-  `amend` and `bug` phases have landed on the `v1` branch.
+- No `clarify`, `analyze`, `baseline` or `harden` phases yet.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than

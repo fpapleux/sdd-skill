@@ -214,11 +214,11 @@ class NewTests(Base):
         self.assertEqual(code, 1)
         self.assertIn("slug", out)
 
-    def test_new_rejects_sizes_not_in_v0(self):
+    def test_new_rejects_sizes_not_available_yet(self):
         self.init()
-        code, out = self.repo.run("new", "big", "--title", "Big", "--size", "standard")
+        code, out = self.repo.run("new", "big", "--title", "Big", "--size", "full")
         self.assertEqual(code, 1)
-        self.assertIn("v0", out)
+        self.assertIn("not available", out)
 
     def test_new_may_raise_but_not_lower_assurance(self):
         self.init("internal")
@@ -1073,6 +1073,272 @@ class BugTests(Base):
         self.repo.set_section(self.cid, "Defect", DEFECT.replace("- Root cause:", "- Root cause: the regex ignored spaces"))
         code, out = self.repo.run("check", "--stage", "verify")
         self.assertEqual(code, 0, out)
+
+
+# ---------------------------------------------------------------- v1 increment 2: standard size
+
+STD_TASKS = """\
+- [ ] T1 REQ-DUR-001.S1 Parse "1h30m"
+  - test:
+  - red:
+  - green:
+- [ ] T2 REQ-DUR-001.N1 Reject "abc"
+  - test:
+  - red:
+  - green:
+"""
+STD_DONE_TASKS = DONE_TASKS.split("## Tasks\n", 1)[1]
+
+
+def set_file_section(path, name, body):
+    text = path.read_text()
+    pattern = re.compile(rf"(^## {re.escape(name)}\n)(.*?)(?=^## |\Z)", re.S | re.M)
+    assert pattern.search(text), f"section {name} missing in {path.name}"
+    path.write_text(pattern.sub(lambda m: m.group(1) + body + "\n", text, count=1))
+
+
+class StandardTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--size", "standard",
+                     "--capability", "duration=DUR")
+        self.cid = "0001-durations"
+        self.dir = self.repo.root / "specs/changes" / self.cid
+
+    def f(self, name):
+        return self.dir / name
+
+    def status_of(self):
+        return re.search(r"^status: (\S+)", self.f("proposal.md").read_text(), re.M).group(1)
+
+    def spec(self, reqs=VALID_REQS, gaps="- None\n"):
+        set_file_section(self.f("spec-delta.md"), "Requirements", reqs)
+        set_file_section(self.f("spec-delta.md"), "Known gaps", gaps)
+
+    def design(self, command="`python3 -m unittest`"):
+        set_file_section(self.f("design.md"), "Approach", "- A regex over the string\n")
+        set_file_section(self.f("design.md"), "Test strategy", f"- Unit tests\n- Test command: {command}\n")
+
+    def tasks(self, body=STD_TASKS):
+        set_file_section(self.f("tasks.md"), "Tasks", body)
+
+    def to_designed(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        self.design()
+        self.repo.ok("advance", "designed")
+
+    def to_verifying(self, tests=True):
+        self.to_designed()
+        self.tasks(STD_DONE_TASKS)
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        if tests:
+            self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+
+    # layout
+    def test_new_standard_creates_a_change_folder(self):
+        for name in ("proposal.md", "spec-delta.md", "design.md", "tasks.md", "verification.md"):
+            self.assertTrue(self.f(name).exists(), name)
+        self.assertFalse(self.f("spec.md").exists())
+        text = self.f("proposal.md").read_text()
+        self.assertIn("size: standard", text)
+        self.assertIn("status: draft", text)
+        self.assertEqual((self.repo.root / "specs/.sdd/active").read_text().strip(), self.cid)
+
+    def test_full_size_is_still_not_available(self):
+        code, out = self.repo.run("new", "big", "--title", "Big", "--size", "full")
+        self.assertEqual(code, 1)
+        self.assertIn("not available", out)
+
+    def test_defect_section_goes_into_the_proposal(self):
+        self.repo.ok("new", "fix", "--title", "Fix", "--size", "standard", "--type", "defect")
+        self.assertIn("## Defect", (self.repo.root / "specs/changes/0002-fix/proposal.md").read_text())
+
+    # check across files
+    def test_check_reads_the_change_across_files(self):
+        self.spec()
+        self.design()
+        self.tasks()
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+        self.assertIn("REQ-DUR-001", out)
+
+    def test_check_finds_coverage_gaps_in_spec_delta(self):
+        self.spec(reqs=VALID_REQS.replace("- N/A dependency: the parser calls no other component or service\n", ""))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("dependency", out)
+
+    def test_standard_size_cap_is_400_lines(self):
+        self.spec()
+        filler = "".join(f"- note {i}\n" for i in range(330))
+        set_file_section(self.f("design.md"), "Approach", filler)
+        code, out = self.repo.run("check")
+        self.assertNotIn("size cap", out)
+        set_file_section(self.f("design.md"), "Approach", filler + "".join(f"- more {i}\n" for i in range(80)))
+        code, out = self.repo.run("check")
+        self.assertIn("size cap", out)
+        self.assertIn("400", out)
+
+    # gate 1: spec
+    def test_spec_gate_locks_the_spec(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        self.assertEqual(self.status_of(), "spec-approved")
+        self.assertRegex(self.f("proposal.md").read_text(), r"(?m)^spec_hash: [0-9a-f]{12}$")
+        set_file_section(self.f("spec-delta.md"), "Known gaps", "- Overflow\n")
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("changed since it was approved", out)
+
+    def test_spec_gate_does_not_need_tasks_or_design(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+
+    def test_spec_gate_refuses_check_errors(self):
+        code, out = self.repo.run("approve", "spec", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.status_of(), "draft")
+
+    def test_spec_gate_refuses_open_questions(self):
+        self.spec(reqs=VALID_REQS.replace("minutes.", "minutes. [NEEDS CLARIFICATION: seconds?]"))
+        code, out = self.repo.run("approve", "spec", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("open question", out)
+
+    def test_spec_gate_is_for_standard_only(self):
+        self.repo.ok("new", "small", "--title", "Small", "--capability", "duration=DUR")
+        self.repo.fill("0002-small")
+        code, out = self.repo.run("approve", "spec", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("approve plan", out)
+
+    def test_clarifying_is_a_draft_step_before_the_spec_gate(self):
+        self.spec()
+        self.repo.ok("advance", "clarifying")
+        self.assertEqual(self.status_of(), "clarifying")
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        self.assertEqual(self.status_of(), "spec-approved")
+
+    # design
+    def test_design_and_tasks_stay_editable_after_the_spec_gate(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        self.design()
+        self.tasks()
+        self.repo.ok("check")
+
+    def test_designed_requires_a_test_command(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        self.design(command="")
+        code, out = self.repo.run("advance", "designed")
+        self.assertEqual(code, 1)
+        self.assertIn("Test command", out)
+        self.assertEqual(self.status_of(), "spec-approved")
+
+    # gate 2: plan
+    def test_plan_gate_comes_after_design(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        self.design()
+        self.tasks()
+        code, out = self.repo.run("approve", "plan", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("designed", out)
+
+    def test_plan_gate_after_design(self):
+        self.to_designed()
+        self.tasks()
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(self.status_of(), "planned")
+
+    def test_plan_gate_refuses_a_spec_changed_since_its_gate(self):
+        self.to_designed()
+        self.tasks()
+        set_file_section(self.f("spec-delta.md"), "Known gaps", "- Overflow\n")
+        code, out = self.repo.run("approve", "plan", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("changed since it was approved", out)
+
+    def test_amend_works_while_designing(self):
+        self.to_designed()
+        set_file_section(self.f("spec-delta.md"), "Known gaps", "- Overflow\n")
+        set_file_section(self.f("proposal.md"), "Amendments", "- A1 2026-10-08: overflow found → known gap\n")
+        self.repo.ok("approve", "amend", "--evidence", "Operator: accept the gap")
+        self.assertEqual(self.status_of(), "designed")
+        self.repo.ok("check")
+
+    # gate 3: results
+    def test_verified_needs_the_results_gate(self):
+        self.to_verifying()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1)
+        self.assertIn("approve results", out)
+        self.repo.ok("approve", "results", "--evidence", "Operator: verification accepted")
+        self.assertEqual(self.status_of(), "verified")
+
+    def test_results_gate_refuses_a_failing_verify_check(self):
+        self.to_verifying(tests=False)
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("no test", out)
+        self.assertEqual(self.status_of(), "verifying")
+
+    def test_results_gate_is_for_standard_only(self):
+        self.repo.ok("new", "small", "--title", "Small", "--capability", "duration=DUR")
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1)
+        self.assertIn("advance verified", out)
+
+    # integrity
+    def test_each_passed_gate_needs_its_approval_record(self):
+        self.spec()
+        self.design()
+        self.tasks()
+        path = self.f("proposal.md")
+        path.write_text(path.read_text().replace("status: draft", "status: planned"))
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1)
+        self.assertIn("no spec approval", out)
+        self.assertIn("no plan approval", out)
+
+    def test_cannot_skip_the_spec_gate_by_advancing(self):
+        self.spec()
+        code, out = self.repo.run("advance", "designed")
+        self.assertEqual(code, 1)
+        self.assertIn("approve spec", out)
+
+    # archive and status
+    def test_archive_merges_and_moves_the_folder(self):
+        self.to_verifying()
+        self.repo.ok("approve", "results", "--evidence", "ok")
+        self.repo.ok("archive")
+        cap = (self.repo.root / "specs/capabilities/duration/spec.md").read_text()
+        self.assertIn("### REQ-DUR-001 Parse hours and minutes", cap)
+        archived = self.repo.root / "specs/archive" / self.cid
+        self.assertTrue((archived / "proposal.md").exists())
+        self.assertTrue((archived / "tasks.md").exists())
+        self.assertFalse(self.dir.exists())
+
+    def test_status_reports_standard_changes(self):
+        self.spec()
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertEqual(data["change"]["size"], "standard")
+        self.assertEqual(data["change"]["cap"], 400)
+        self.assertIn("approve", data["next"])
+        self.assertEqual(data["in_flight"][0]["id"], self.cid)
+
+    def test_next_step_after_each_gate(self):
+        self.spec()
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        self.assertIn("design", json.loads(self.repo.ok("status", "--json"))["next"])
+        self.design()
+        self.repo.ok("advance", "designed")
+        self.assertIn("tasks", json.loads(self.repo.ok("status", "--json"))["next"])
 
 
 if __name__ == "__main__":

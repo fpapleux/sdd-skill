@@ -63,17 +63,36 @@ REQUIRED = {
 }
 
 SIZE_CAPS = {"mini": 200, "standard": 400, "full": 800}
-SIZES_V0 = ["mini"]
+SIZES_AVAILABLE = ["mini", "standard"]
+STANDARD_FILES = ["proposal.md", "spec-delta.md", "design.md", "tasks.md", "verification.md"]
 TYPES = ["feature", "defect", "hardening"]
-STATUSES = ["draft", "planned", "implementing", "verifying", "verified",
-            "archived", "blocked", "abandoned"]
+STATUS_ORDER = ["draft", "clarifying", "spec-approved", "designed", "planned",
+                "implementing", "verifying", "verified", "archived"]
+STATUSES = STATUS_ORDER + ["blocked", "abandoned"]
+UNLOCKED_STATUSES = {"draft", "clarifying"}
 TERMINAL = {"archived", "abandoned"}
+# Moves `advance` may make; gates (approve spec/plan/results) are the only other way forward.
 TRANSITIONS = {
-    "planned": {"implementing"},
-    "implementing": {"verifying"},
-    "verifying": {"implementing", "verified"},
+    "mini": {
+        "planned": {"implementing"},
+        "implementing": {"verifying"},
+        "verifying": {"implementing", "verified"},
+    },
+    "standard": {
+        "draft": {"clarifying"},
+        "clarifying": {"draft"},
+        "spec-approved": {"designed"},
+        "planned": {"implementing"},
+        "implementing": {"verifying"},
+        "verifying": {"implementing"},
+    },
 }
-APPROVED_STATUSES = {"planned", "implementing", "verifying", "verified", "archived"}
+# Every status at or past the first one requires that gate's approval record.
+REQUIRED_APPROVALS = {
+    "mini": [("planned", "plan")],
+    "standard": [("spec-approved", "spec"), ("planned", "plan"), ("verified", "results")],
+}
+AMENDABLE = {"spec-approved", "designed", "planned", "implementing", "verifying"}
 STAGES = ["spec", "plan", "implement", "verify"]
 
 REQ_HEAD = re.compile(
@@ -173,6 +192,27 @@ def set_front_matter(text: str, key: str, value: str) -> str:
     else:
         block += "\n" + line
     return f"---\n{block}\n---\n" + text[match.end():]
+
+
+def change_text(path: Path) -> str:
+    """The whole change as one document. A standard change is proposal.md plus its
+    sibling files (content from their first '## ' heading on), in a fixed order."""
+    text = path.read_text()
+    if path.name != "proposal.md":
+        return text
+    parts = [text.rstrip("\n")]
+    for name in STANDARD_FILES[1:]:
+        extra = path.parent / name
+        if extra.exists():
+            body = extra.read_text()
+            start = re.search(r"^## ", body, re.M)
+            parts.append(body[start.start():].rstrip("\n") if start else "")
+    return "\n\n".join(parts) + "\n"
+
+
+def test_command(clean_text: str) -> str:
+    match = re.search(r"Test command\s*:[ \t]*(.*)", clean_text)
+    return match.group(1).strip().strip("`").strip() if match else ""
 
 
 def drop_front_matter(text: str, key: str) -> str:
@@ -386,9 +426,17 @@ class Project:
         self.active_file.parent.mkdir(parents=True, exist_ok=True)
         self.active_file.write_text((change_id or "") + "\n")
 
+    def main_file(self, change_id):
+        """spec.md for a mini change, proposal.md for a standard one, else None."""
+        for name in ("spec.md", "proposal.md"):
+            path = self.changes / change_id / name
+            if path.exists():
+                return path
+        return None
+
     def change_path(self, change_id) -> Path:
-        path = self.changes / change_id / "spec.md"
-        if not path.exists():
+        path = self.main_file(change_id)
+        if path is None:
             raise SddError(f"no change '{change_id}' in specs/changes/")
         return path
 
@@ -402,10 +450,13 @@ class Project:
         if not self.changes.exists():
             return []
         result = []
-        for path in sorted(self.changes.glob("*/spec.md")):
+        for folder in sorted(p for p in self.changes.iterdir() if p.is_dir()):
+            path = self.main_file(folder.name)
+            if path is None:
+                continue
             fm = read_front_matter(path.read_text())
-            result.append({"id": path.parent.name, "status": fm.get("status", "?"),
-                           "title": fm.get("title", "")})
+            result.append({"id": folder.name, "status": fm.get("status", "?"),
+                           "title": fm.get("title", ""), "size": fm.get("size", "mini")})
         return result
 
     def next_number(self) -> int:
@@ -482,8 +533,8 @@ class Report:
 
 
 def auto_stage(status: str, has_tasks: bool) -> str:
-    if status == "draft":
-        return "plan" if has_tasks else "spec"
+    if status in ("draft", "clarifying", "spec-approved", "designed"):
+        return "plan" if has_tasks else "spec"  # the plan gate always asks for "plan" itself
     if status in ("implementing",):
         return "implement"
     if status in ("verifying", "verified"):
@@ -492,7 +543,7 @@ def auto_stage(status: str, has_tasks: bool) -> str:
 
 
 def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
-    text = path.read_text()
+    text = change_text(path)
     fm = read_front_matter(text)
     clean = strip_comments(text)
     secs = sections(clean)
@@ -517,12 +568,16 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if level not in LEVELS:
         level = project.level()
     status = fm.get("status", "draft")
+    size = fm.get("size", "mini") if fm.get("size") in REQUIRED_APPROVALS else "mini"
     effective = fm.get("blocked_from", "draft") if status == "blocked" else status
-    if effective in APPROVED_STATUSES and "plan" not in approvals(text):
-        err(f"status is '{status}' but no plan approval is recorded in ## Approvals "
-            "(only `sdd.py approve plan` may move a change out of draft)")
+    recorded = approvals(text)
+    if effective in STATUS_ORDER:
+        for first, gate in REQUIRED_APPROVALS[size]:
+            if STATUS_ORDER.index(effective) >= STATUS_ORDER.index(first) and gate not in recorded:
+                err(f"status is '{status}' but no {gate} approval is recorded in ## Approvals "
+                    f"(only `sdd.py approve {gate}` may pass that gate)")
     locked = fm.get("spec_hash")
-    if locked and effective in APPROVED_STATUSES and spec_hash(text) != locked:
+    if locked and effective not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked:
         err(f"{LOCK_ERROR} (Intent, Defect, Scope, Requirements or Known gaps): log it under "
             "## Amendments and get the operator's approval (sdd amend)")
 
@@ -546,7 +601,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     for other in project.in_flight():
         if other["id"] == change_id or other["status"] in TERMINAL:
             continue
-        other_text = strip_comments((project.changes / other["id"] / "spec.md").read_text())
+        other_text = strip_comments(change_text(project.change_path(other["id"])))
         other_reqs, _ = parse_requirements(sections(other_text).get("Requirements", ""))
         for r in other_reqs:
             if r.tag is None:
@@ -597,7 +652,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
         err(problem)
     scenario_refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
     if STAGES.index(stage) >= STAGES.index("plan"):
-        check_plan(secs, tasks, scenario_refs, err, warn)
+        check_plan(clean, tasks, scenario_refs, err, warn)
     for task in tasks:
         if task["done"]:
             check_evidence(task, err, warn)
@@ -762,11 +817,9 @@ def check_evidence(task, err, warn):
         warn(f"{tid}: red looks like a setup error, not a failing assertion ('{red}')")
 
 
-def check_plan(secs, tasks, scenario_refs, err, warn):
-    design = secs.get("Design notes", "")
-    command = re.search(r"Test command\s*:\s*(.*)", design)
-    if not command or not command.group(1).strip():
-        warn("Design notes has no 'Test command:' line; the Implementer and Verifier need it")
+def check_plan(clean, tasks, scenario_refs, err, warn):
+    if not test_command(clean):
+        warn("no 'Test command:' line in the design; the Implementer and Verifier need it")
     if not tasks:
         err("no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario")
     ids = set()
@@ -817,6 +870,10 @@ def project_text_files(project: Project) -> dict:
 def next_step(project: Project, fm: dict, report: Report) -> str:
     status = fm.get("status", "draft")
     counts = report.counts
+    if fm.get("size") == "standard":
+        step = next_step_standard(status, counts, report)
+        if step:
+            return step
     if status == "draft":
         if counts["requirements"] == 0:
             return "sdd specify"
@@ -835,12 +892,37 @@ def next_step(project: Project, fm: dict, report: Report) -> str:
         done, total = counts["tasks"]["done"], counts["tasks"]["total"]
         return "sdd implement next" if done < total else "sdd verify"
     if status == "verifying":
+        if fm.get("size") == "standard":
+            return "sdd verify, then the operator approves the results (sdd approve)"
         return "sdd verify"
     if status == "verified":
         return "sdd archive"
     if status == "blocked":
         return "resolve the blocker, then sdd status"
     return "sdd quick \"<idea>\""
+
+
+def next_step_standard(status, counts, report):
+    """Steps before the plan gate; later statuses share the mini path."""
+    if status in ("draft", "clarifying"):
+        if counts["requirements"] == 0:
+            return "sdd specify"
+        if not report.ok:
+            return "fix the check errors (sdd.py check), then ask for spec approval"
+        if report.open_questions:
+            return "answer the open questions, then ask for spec approval"
+        return "awaiting operator approval of the spec: sdd approve"
+    if any(LOCK_ERROR in e for e in report.errors):
+        return "a spec amendment is pending: show the operator the change, then sdd approve"
+    if status == "spec-approved":
+        return "sdd design"
+    if status == "designed":
+        if counts["tasks"]["total"] == 0:
+            return "sdd tasks"
+        if not report.ok:
+            return "fix the check errors (sdd.py check), then ask for plan approval"
+        return "awaiting operator approval of the plan: sdd approve"
+    return None
 
 
 # ---------------------------------------------------------------- commands
@@ -912,13 +994,13 @@ def cmd_new(project: Project, args) -> int:
     project.require_init()
     if not SLUG.match(args.slug):
         raise SddError(f"invalid slug '{args.slug}': use lowercase letters, digits and hyphens")
-    if args.size not in SIZES_V0:
-        raise SddError(f"size '{args.size}' is not available in v0 (available: {', '.join(SIZES_V0)})")
+    if args.size not in SIZES_AVAILABLE:
+        raise SddError(f"size '{args.size}' is not available yet (available: {', '.join(SIZES_AVAILABLE)})")
     base = project.level()
     level = args.assurance or base
     if LEVELS.index(level) < LEVELS.index(base):
         raise SddError(f"assurance '{level}' is lower than the project level '{base}': "
-                       "lowering needs a recorded operator waiver (not available in v0)")
+                       "lowering needs a recorded operator waiver (not available yet)")
     declared = parse_capabilities(", ".join(args.capability or []))
     registry = project.registry()
     for prefix, name in declared.items():
@@ -932,15 +1014,21 @@ def cmd_new(project: Project, args) -> int:
     folder.mkdir(parents=True)
     caps = ", ".join(f"{name}={prefix}" for prefix, name in declared.items())
     defect = (TEMPLATES / "defect-section.md").read_text() if args.type == "defect" else ""
-    (folder / "spec.md").write_text(render(
-        "mini-spec.md", id=change_id, title=args.title, type=args.type,
-        assurance=level, capabilities=caps, date=today(), defect=defect))
+    values = dict(id=change_id, title=args.title, type=args.type, assurance=level,
+                  capabilities=caps, date=today(), defect=defect)
+    if args.size == "standard":
+        for name in STANDARD_FILES:
+            (folder / name).write_text(render(f"standard/{name}", **values))
+        created = f"specs/changes/{change_id}/ ({', '.join(STANDARD_FILES)})"
+    else:
+        (folder / "spec.md").write_text(render("mini-spec.md", **values))
+        created = f"specs/changes/{change_id}/spec.md"
     previous = project.active()
     project.set_active(change_id)
-    print(f"created specs/changes/{change_id}/spec.md (size: {args.size}, assurance: {level})")
+    print(f"created {created} (size: {args.size}, assurance: {level})")
     print(f"active change: {change_id}")
-    if previous and (project.changes / previous / "spec.md").exists():
-        status = read_front_matter((project.changes / previous / "spec.md").read_text()).get("status")
+    if previous and project.main_file(previous):
+        status = read_front_matter(project.main_file(previous).read_text()).get("status")
         if status not in TERMINAL:
             print(f"note: {previous} is still '{status}'; switch back with `sdd.py use {previous}`")
     return 0
@@ -958,8 +1046,8 @@ def cmd_status(project: Project, args) -> int:
     if not data["constitution_approved"]:
         data["notes"].append("constitution not approved yet (sdd approve)")
     active = project.active()
-    if active and (project.changes / active / "spec.md").exists():
-        path = project.changes / active / "spec.md"
+    if active and project.main_file(active):
+        path = project.main_file(active)
         fm = read_front_matter(path.read_text())
         report = analyze(project, path)
         data["change"] = {"id": active, "title": fm.get("title"), "type": fm.get("type"),
@@ -991,8 +1079,9 @@ def cmd_status(project: Project, args) -> int:
     else:
         print("active change: none")
     if data["capabilities"]:
-        print("living spec: " + ", ".join(f"{c['name']} ({c['prefix']}, {c['requirements']} requirements)"
-                                          for c in data["capabilities"]))
+        print("living spec: " + ", ".join(
+            f"{c['name']} ({c['prefix']}, {c['requirements']} requirement{'' if c['requirements'] == 1 else 's'})"
+            for c in data["capabilities"]))
     others = [c for c in data["in_flight"] if not change or c["id"] != change["id"]]
     if others:
         print("other changes: " + ", ".join(f"{c['id']} ({c['status']})" for c in others))
@@ -1026,9 +1115,45 @@ def cmd_approve(project: Project, args) -> int:
         print("constitution re-approval recorded" if again else "constitution approved")
         return 0
     path = project.current(args.change)
-    status = read_front_matter(path.read_text()).get("status")
+    fm = read_front_matter(path.read_text())
+    status, size = fm.get("status"), fm.get("size", "mini")
+    if args.gate == "spec":
+        if size != "standard":
+            raise SddError("mini changes have a single gate: sdd.py approve plan")
+        if status not in ("draft", "clarifying"):
+            raise SddError(f"change is '{status}': spec approval applies to a draft change")
+        report = analyze(project, path, "spec")
+        if not report.ok:
+            print(report.render())
+            raise SddError("spec approval refused: fix the check errors first")
+        if report.open_questions:
+            raise SddError(f"spec approval refused: {report.open_questions} open question(s) "
+                           "must be answered first")
+        append_approval(path, "spec", evidence)
+        text = set_front_matter(path.read_text(), "status", "spec-approved")
+        path.write_text(text)
+        path.write_text(set_front_matter(text, "spec_hash", spec_hash(change_text(path))))
+        print(f"{path.parent.name}: spec approved → spec-approved (the spec is now locked)")
+        return 0
+    if args.gate == "results":
+        if size != "standard":
+            raise SddError("mini changes have no results gate: use sdd.py advance verified")
+        if status != "verifying":
+            raise SddError(f"change is '{status}': results approval applies to a verifying change")
+        report = analyze(project, path, "verify")
+        if not report.ok:
+            print(report.render())
+            raise SddError("results approval refused: the verify check fails")
+        append_approval(path, "results", evidence)
+        path.write_text(set_front_matter(path.read_text(), "status", "verified"))
+        print(f"{path.parent.name}: results approved → verified")
+        return 0
     if args.gate == "plan":
-        if status != "draft":
+        expected = "designed" if size == "standard" else "draft"
+        if status != expected:
+            if size == "standard":
+                raise SddError(f"plan approval comes after design: the change is '{status}', "
+                               "not 'designed' (sdd.py advance designed)")
             raise SddError(f"change is '{status}': plan approval applies to a draft change")
         report = analyze(project, path, "plan")
         if not report.ok:
@@ -1039,19 +1164,22 @@ def cmd_approve(project: Project, args) -> int:
                            "must be answered first")
         append_approval(path, "plan", evidence)
         text = set_front_matter(path.read_text(), "status", "planned")
-        path.write_text(set_front_matter(text, "spec_hash", spec_hash(text)))
+        path.write_text(text)
+        if size != "standard":  # standard locked its spec at the spec gate
+            path.write_text(set_front_matter(text, "spec_hash", spec_hash(change_text(path))))
         print(f"{path.parent.name}: plan approved → planned")
         return 0
     # amend: the operator accepts a spec change made after approval; status is unchanged.
-    if status not in ("planned", "implementing", "verifying"):
-        raise SddError(f"change is '{status}': amendments apply to planned or in-progress changes")
+    if status not in AMENDABLE:
+        raise SddError(f"change is '{status}': amendments apply to an approved, unfinished change")
     text = path.read_text()
-    current = spec_hash(text)
+    whole = change_text(path)
+    current = spec_hash(whole)
     if read_front_matter(text).get("spec_hash") == current:
         raise SddError("nothing to amend: the spec hasn't changed since it was last approved")
-    logged = sum(1 for line in sections(strip_comments(text)).get("Amendments", "").splitlines()
+    logged = sum(1 for line in sections(strip_comments(whole)).get("Amendments", "").splitlines()
                  if AMENDMENT_ENTRY.match(line))
-    if logged < approvals(text).count("amend") + 1:
+    if logged < approvals(whole).count("amend") + 1:
         raise SddError("log the amendment first under ## Amendments: "
                        "'- A<n> <date>: <reason> → <what changed>'")
     path.write_text(set_front_matter(text, "spec_hash", current))
@@ -1068,9 +1196,10 @@ def cmd_approve(project: Project, args) -> int:
 def cmd_advance(project: Project, args) -> int:
     project.require_init()
     path = project.current(args.change)
-    status = read_front_matter(path.read_text()).get("status")
-    target = args.status
     text = path.read_text()
+    status, size = read_front_matter(text).get("status"), read_front_matter(text).get("size", "mini")
+    moves = TRANSITIONS.get(size, TRANSITIONS["mini"])
+    target = args.status
     if status in TERMINAL:
         raise SddError(f"change is '{status}' and cannot move")
     if target == "abandoned":
@@ -1084,11 +1213,17 @@ def cmd_advance(project: Project, args) -> int:
         if target != back:
             raise SddError(f"change is blocked (it was '{back}'): it can only return to '{back}'")
         text = drop_front_matter(text, "blocked_from")
-    elif status == "draft":
-        raise SddError("change is 'draft': it needs plan approval first (sdd approve)")
-    elif target not in TRANSITIONS.get(status, set()):
-        allowed = ", ".join(sorted(TRANSITIONS.get(status, set()) | {"blocked", "abandoned"}))
+    elif size == "standard" and target == "verified":
+        raise SddError("standard changes need the operator's results approval: sdd.py approve results")
+    elif status in ("draft", "clarifying") and target not in moves.get(status, set()):
+        gate = "spec approval first (sdd.py approve spec)" if size == "standard" \
+            else "plan approval first (sdd approve)"
+        raise SddError(f"change is '{status}': it needs {gate}")
+    elif target not in moves.get(status, set()):
+        allowed = ", ".join(sorted(moves.get(status, set()) | {"blocked", "abandoned"}))
         raise SddError(f"cannot go from '{status}' to '{target}' (allowed: {allowed})")
+    if target == "designed" and not test_command(strip_comments(change_text(path))):
+        raise SddError("design.md needs a 'Test command:' line before the change is designed")
     if target == "verified":
         report = analyze(project, path, "verify")
         if not report.ok:
@@ -1104,7 +1239,7 @@ def cmd_advance(project: Project, args) -> int:
 def cmd_archive(project: Project, args) -> int:
     project.require_init()
     path = project.current(args.change)
-    text = path.read_text()
+    text = change_text(path)
     fm = read_front_matter(text)
     change_id = path.parent.name
     if fm.get("status") != "verified":
@@ -1269,13 +1404,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("approve", help="record an operator approval")
-    p.add_argument("gate", choices=["constitution", "plan", "amend"])
+    p.add_argument("gate", choices=["constitution", "spec", "plan", "results", "amend"])
     p.add_argument("--evidence", required=True)
     p.add_argument("--change")
     p.set_defaults(func=cmd_approve)
 
     p = sub.add_parser("advance", help="move the active change to its next status")
-    p.add_argument("status", choices=["draft", "planned", "implementing", "verifying", "verified",
+    p.add_argument("status", choices=["draft", "clarifying", "spec-approved", "designed", "planned",
+                                      "implementing", "verifying", "verified",
                                       "blocked", "abandoned"])
     p.add_argument("--change")
     p.set_defaults(func=cmd_advance)

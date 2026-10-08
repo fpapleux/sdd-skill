@@ -2,6 +2,17 @@
 
 `SDD check` parses this grammar. Anything inside `<!-- … -->` is ignored.
 
+A `mini` change is one file, `spec.md`. A `standard` change uses the **same
+sections**, spread over a folder and read as one document:
+
+| File | Sections |
+| --- | --- |
+| `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
+| `spec-delta.md` | Requirements, Known gaps |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`) |
+| `tasks.md` | Tasks |
+| `verification.md` | Verification |
+
 ## Front matter (written by the script)
 
 ```yaml
