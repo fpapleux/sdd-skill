@@ -27,7 +27,9 @@ Author** (`method/roles/spec-author.md`), then **Planner**
    `## Open questions`. Re-run `SDD check --stage spec`.
 7. **As Planner:** write Design notes (including the real test command) and
    Tasks.
-8. Run `SDD check` until it reports `result: OK`.
+8. Run `SDD check` until it reports `result: OK`. At `production` and above,
+   a Critic round is required before the gate: run `sdd clarify` now, in a
+   fresh session.
 9. **Gate: plan.** Show the review digest (overview, "Reporting") and ask:
    "Approve this spec and plan?" Then **stop**. Don't write tests or code in
    this turn.

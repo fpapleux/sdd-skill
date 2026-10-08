@@ -45,6 +45,13 @@ table), ask the question. Then either write scenario(s), or write
 A failure scenario's **Then** states the visible error **and** that nothing
 else happened (no record created, no charge, state unchanged).
 
+## Working with the Spec Critic
+
+The Critic's findings come to you. Apply each fix to the spec and set the
+finding's outcome to `→ fixed: <what changed>`. If you disagree, say why to
+the operator; their decision becomes `accepted: …`, or the Critic withdraws
+with `rejected: …`. Fold answered questions into the spec.
+
 ## Decisions are the operator's
 
 What should happen on failure is a **product decision**. If the request and

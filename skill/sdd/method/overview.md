@@ -47,7 +47,7 @@ Pick the size by asking from the top, and stop at the first "yes":
 | Tests first | Happy path | Every scenario | Every scenario | Every scenario |
 | Failure categories required | none: keep a **Known gaps** list | validation, state, dependency | + boundary, access | + concurrency, combination, invariant |
 | A failure scenario's Then asserts | — | The error + nothing else happened | The error + no side effects + state unchanged | Same as production |
-| Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage | Independent reviewer *(v1)* | Independent reviewer every round *(v1)* |
+| Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage. A Critic round (`clarify`) is required for `standard` changes. | Critic round required at any size, in a fresh session | Same as production, every round |
 | Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v1)* | + mutation and property-based tests *(v1)* |
 
 `SDD check` enforces the category requirements at **every** level. The
@@ -96,6 +96,7 @@ draft ─(clarifying)─► SPEC GATE ─► spec-approved ─► design ─► 
 | Phase | Role | Status after |
 | --- | --- | --- |
 | `propose` → `specify` | Spec Author | `draft` |
+| `clarify` | Spec Critic, then Spec Author | `clarifying` |
 | `approve` (spec) | Operator | `spec-approved`: the spec is locked |
 | `design` | Architect | `designed` (`SDD advance designed`) |
 | `tasks` → `approve` (plan) | Planner, then the operator | `planned` |
@@ -138,6 +139,7 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD init --assurance <level> [--force]` | Create `specs/` and wire AGENTS.md/CLAUDE.md |
 | `SDD new <slug> --title "…" --capability name=PREFIX [--size mini\|standard] [--type feature\|defect\|hardening] [--assurance <higher level>]` | Create a change and make it active |
 | `SDD next-req <PREFIX>` | Next free requirement ID |
+| `SDD round [--fresh]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed |
 | `SDD check [--stage spec\|plan\|implement\|verify]` | Validate the active change. Exit 1 = errors. |
 | `SDD status [--json]` | Summary + next step |
 | `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `spec` (standard) or `plan` (mini) locks the spec. `results` (standard) marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |

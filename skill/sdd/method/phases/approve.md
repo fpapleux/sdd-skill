@@ -15,7 +15,8 @@ it against the right gate.
 2. Write the evidence: the operator's words, where and when. For example:
    `Operator in Claude Code chat, 2026-10-07: "/sdd approve — go ahead"`.
 3. Run `SDD approve <gate> --evidence "<evidence>"`. If the script refuses,
-   show why in plain language and stop.
+   show why in plain language and stop. A common refusal is a missing or
+   incomplete Critic round; the fix is `sdd clarify`.
 4. Report the new status and the next step:
    - after `spec` → `sdd design`;
    - after `plan` → `sdd implement`;

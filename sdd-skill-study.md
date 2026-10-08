@@ -766,10 +766,19 @@ capabilities, size caps).
 
 **Progress:**
 - Increment 1 merged in fpapleux/sdd-skill#1.
-- Increment 2 is in PR #2. It adds the `standard` size: a change folder read
-  as one spec, a status machine with clarifying, spec-approved and designed,
-  the spec, plan and results gates with integrity checks, a basic `design`
-  phase and the Architect role.
+- Increment 2 merged in fpapleux/sdd-skill#2. It added the `standard` size:
+  a change folder read as one spec, a status machine with clarifying,
+  spec-approved and designed, the spec, plan and results gates with
+  integrity checks, a basic `design` phase and the Architect role.
+- Increment 3 is in PR #3. It adds `clarify` and the Spec Critic:
+  - Each review round is recorded in a fixed format: a verdict per
+    requirement, typed findings that each need an outcome, and at most 5
+    answered questions.
+  - A round is required before the gate for `standard` changes at
+    `internal`+, and for any size at `production`+. The latest round must
+    have audited every current requirement.
+  - New `sdd.py round` command. In this increment, same-session rounds at
+    `production`+ only get a warning.
 
 ## Sources
 

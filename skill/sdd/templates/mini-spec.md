@@ -60,6 +60,10 @@ Implementer: fill test/red/green while working, then tick the box. -->
 ## Open questions
 <!-- Mark unknowns where they occur as [NEEDS CLARIFICATION: question] and list them here. -->
 
+## Clarifications
+<!-- Spec Critic: one round per review, started with `sdd.py round`. Format:
+method/format.md. Required before the gate at production and above. -->
+
 ## Amendments
 <!-- Spec changes after approval, one line each, then `sdd.py approve amend`:
 - A1 2026-10-07: <reason> → <what changed> -->
