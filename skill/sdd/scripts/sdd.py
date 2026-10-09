@@ -114,7 +114,7 @@ FAILURE_WORDS = re.compile(r"fail|error|assert|expected|exception|traceback|rais
                            r"not equal|!=|mismatch|undefined|cannot|missing|not found", re.I)
 SETUP_ERRORS = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|"
                           r"Cannot find module|command not found", re.I)
-UNCOUNTED_SECTIONS = ("Clarifications", "Verification", "Amendments", "Approvals")
+UNCOUNTED_SECTIONS = ("Clarifications", "Tasks", "Verification", "Amendments", "Approvals")
 FINDING_TYPES = ["ambiguity", "contradiction", "untestable", "coverage", "weak-negative",
                  "conflict", "scope"]
 ROUND_HEAD = re.compile(r"^### Round (\d+)\b(.*)$")
@@ -148,7 +148,7 @@ def strip_comments(text: str) -> str:
 
 
 def counted_lines(text: str) -> int:
-    """Spec length for the size cap: comments, Verification and Approvals don't count."""
+    """Cap spec/design length; exclude comments, task bookkeeping and review records."""
     clean = strip_comments(text)
     for name in UNCOUNTED_SECTIONS:
         clean = re.sub(rf"^## {name}\n.*?(?=^## |\Z)", "", clean, flags=re.S | re.M)
@@ -1082,7 +1082,7 @@ def cmd_init(project: Project, args) -> int:
             "constitution.md", assurance=args.assurance, assurance_meaning=LEVEL_MEANING[args.assurance]))
 
     # AGENTS.md carries the SDD rules for Codex; CLAUDE.md imports it for Claude Code.
-    block = (TEMPLATES / "agents-md-section.md").read_text().strip()
+    block = (TEMPLATES / "agents-section.md").read_text().strip()
     agents = project.root / "AGENTS.md"
     current = agents.read_text() if agents.exists() else ""
     marked = re.compile(r"<!-- sdd:begin -->.*?<!-- sdd:end -->", re.S)

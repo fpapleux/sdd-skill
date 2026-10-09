@@ -229,6 +229,6 @@ README or a code comment doesn't count.
   new entry per amendment.
 - `## Approvals`: a table written only by `SDD approve`. A change past
   `draft` must have a `plan` row; `SDD check` fails otherwise.
-- The size cap doesn't count Verification, Amendments, Approvals or comments.
+- The size cap excludes Clarifications, Tasks (including test/red/green evidence), Verification, Amendments, Approvals and comments; spec and design still count. Task coverage and evidence checks still apply.
 - After plan approval, the front matter carries `spec_hash`, the lock. Never
   edit it.

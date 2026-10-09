@@ -368,8 +368,8 @@ class CheckTests(Base):
         base = path.read_text()
         lines = sdd.counted_lines(base)
 
-        def padded(n):  # pad inside a counted section (Tasks), not Verification/Approvals
-            return base.replace("## Verification", "\n" * n + "## Verification", 1)
+        def padded(n):  # pad the design, which stays subject to the size cap
+            return base.replace("## Design notes\n", "## Design notes\n" + "\n" * n, 1)
 
         path.write_text(padded(200 - lines))
         self.assertEqual(sdd.counted_lines(path.read_text()), 200)
@@ -379,6 +379,27 @@ class CheckTests(Base):
         code, out = self.check()
         self.assertEqual(code, 0, out)
         self.assertIn("size cap", out)
+
+    def test_size_cap_excludes_task_checklist_and_completed_evidence(self):
+        self.repo.fill(self.cid)
+        before = sdd.counted_lines(self.repo.spec(self.cid).read_text())
+        evidence = "\n".join("  - detail: recorded assertion output" for _ in range(300))
+        self.repo.set_section(self.cid, "Tasks", DONE_TASKS.split("## Tasks\n", 1)[1] + evidence)
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sdd.counted_lines(self.repo.spec(self.cid).read_text()), before)
+        self.assertNotIn("size cap", out)
+
+    def test_size_cap_counts_sections_following_tasks(self):
+        text = "## Tasks\n" + VALID_TASKS.split("## Tasks\n", 1)[1] + "## Design notes\n- counted\n"
+        self.assertEqual(sdd.counted_lines(text), 2)
+
+    def test_task_exclusion_keeps_plan_coverage_validation(self):
+        self.repo.fill(self.cid)
+        self.repo.set_section(self.cid, "Tasks", "- [ ] T1 REQ-DUR-001.S1 Happy path\n  - test:\n  - red:\n  - green:\n")
+        code, out = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("REQ-DUR-001.N1: no task plans this scenario", out)
 
     def test_new_requirement_colliding_with_capability_fails(self):
         self.repo.write("specs/capabilities/duration/spec.md",
@@ -1184,6 +1205,19 @@ class StandardTests(Base):
         code, out = self.repo.run("check")
         self.assertIn("size cap", out)
         self.assertIn("400", out)
+
+    def test_standard_size_cap_excludes_task_file(self):
+        self.spec()
+        self.design()
+        self.tasks()
+        _, before = self.repo.run("status", "--json")
+        self.tasks(STD_TASKS + "  - detail: recorded assertion output\n" * 450)
+        code, out = self.repo.run("check", "--stage", "plan")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("size cap", out)
+        _, after = self.repo.run("status", "--json")
+        self.assertEqual(json.loads(after)["change"]["lines"],
+                         json.loads(before)["change"]["lines"])
 
     # gate 1: spec
     def test_spec_gate_locks_the_spec(self):

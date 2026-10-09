@@ -32,4 +32,4 @@ the spec doesn't ask for.
 - **Constitution.** Check the design against `specs/constitution.md`
   (project rules, dependency policy). Call out anything that needs an
   exception.
-- **Keep it short.** The whole change folder stays under 400 lines.
+- **Keep it short.** Counted spec/design content stays under 400 lines; task bookkeeping and review records are excluded.

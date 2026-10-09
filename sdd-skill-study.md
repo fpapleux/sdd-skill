@@ -550,7 +550,7 @@ sdd-skill/
                clarify.md design.md tasks.md analyze.md implement.md
                amend.md verify.md archive.md status.md
     templates/ constitution.md proposal.md spec-delta.md capability-spec.md
-               mini-spec.md design.md tasks.md verification.md agents-md-section.md
+               mini-spec.md design.md tasks.md verification.md agents-section.md
     scripts/sdd.py              # init, new, status, check, approve, advance, archive, next-req, use
     hooks/pre-commit            # tool-neutral gate (see 7.4)
   extras/claude/                # optional Claude Code enhancements

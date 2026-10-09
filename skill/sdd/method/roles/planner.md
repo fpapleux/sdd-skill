@@ -42,3 +42,4 @@ as an open question.
 - Every task proves a scenario. Scaffolding and refactoring fold into the
   first task that needs them.
 - Then run `SDD check` (plan stage) and fix every error.
+- Task checklists/evidence are excluded from the size cap; keep design and requirements within it. Coverage and red/green evidence remain mandatory.
