@@ -770,7 +770,7 @@ capabilities, size caps).
   a change folder read as one spec, a status machine with clarifying,
   spec-approved and designed, the spec, plan and results gates with
   integrity checks, a basic `design` phase and the Architect role.
-- Increment 3 is in PR #3. It adds `clarify` and the Spec Critic:
+- Increment 3 merged in fpapleux/sdd-skill#3. It adds `clarify` and the Spec Critic:
   - Each review round is recorded in a fixed format: a verdict per
     requirement, typed findings that each need an outcome, and at most 5
     answered questions.
@@ -779,6 +779,29 @@ capabilities, size caps).
     have audited every current requirement.
   - New `sdd.py round` command. In this increment, same-session rounds at
     `production`+ only get a warning.
+
+## 14. Delivery, and SDD on itself (2026-10-09)
+
+The operator added `sdd-deployment-approach.md`, a proposal for formalizing
+build, package and deployment in SDD. It was evaluated against SDD practice:
+
+- **No surveyed SDD tool covers delivery.** Spec Kit, Kiro, OpenSpec, BMAD
+  and GSD all stop at implement and verify.
+- **Its principles come from continuous delivery and software supply-chain
+  practice:** build once, promote the same bytes, approve a digest, keep
+  receipts and rollback evidence.
+- **These fit SDD**, provided delivery behavior is specified, evidence is
+  enforced by the script, and approvals are gated.
+
+| # | Decision | Outcome |
+| --- | --- | --- |
+| 15 | Where building and packaging happen | **At release level.** A release bundles verified changes, and its package is built once. The verified, approved and deployed digest are the same. |
+| 16 | Deployment | **A separate lifecycle,** with an approval bound to the target, digest and configuration, and a receipt. Archive means "spec work closed". The living spec describes **approved** behavior (this corrects the earlier "shipped" wording in §4 and the Spec Steward role). |
+| 17 | Install method | **A choice offered to the user.** The Architect presents fitting options with their trade-offs, the operator selects one, and the selection is recorded. Never a fixed "native installer" rule. |
+| 18 | SDD on itself | **Yes, from increment 4,** with three conditions: a pinned tool copy separate from the development checkout, assurance `production`, and requirements limited to script-testable behavior. |
+
+The private product pilot that the note originally included was removed from
+the public repository and from its history.
 
 ## Sources
 

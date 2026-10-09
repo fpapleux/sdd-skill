@@ -1,6 +1,6 @@
 # SDD Build, Package and Deployment Approach
 
-- Status: discussion draft for tomorrow's SDD skill work; no skill, implementation or deployment changes authorized by this note.
+- Status: approach agreed 2026-10-09 (see Decisions at the end); implemented through SDD changes on this repository, not by this note.
 - Request (operator, 2026-10-08): formalize deployment by software type/platform as part of SDD. Record the approach here first.
 - Target guidance (operator, 2026-10-09): the user selects compatible target platforms and agrees the installer format and installation procedure complexity before implementation.
 - Principle: specify delivery behavior, build a package once, verify it installed, approve its digest, deploy the same bytes and record recovery evidence.
@@ -71,3 +71,53 @@ Each profile records OS/version, architecture/runtime ABI, builder, package/depe
 - Test SDD guards for missing profiles/commands, corrupt or stale artifacts, missing approval/evidence, failed deployment and rollback status; test backward compatibility and N/A delivery.
 - Each product gets its own approved SDD change for its build/package/installer/activation behavior; this note is not implementation approval.
 - Start with Python/systemd; add other profiles when a product needs them.
+
+## Decisions (operator, 2026-10-09)
+
+1. **Build and package at release level.** A release bundles one or more
+   verified changes. Its candidate package is built once, from an identified
+   source revision. That exact package (its digest) is what gets verified
+   installed, approved, and deployed. Changes keep verifying source behavior,
+   and add packaging scenarios only when they change packaging.
+2. **Deployment is its own lifecycle.** It is separate from the change status
+   machine, because one package can go to several targets and a failed
+   deployment doesn't un-verify a change. Each deployment needs its own
+   approval, bound to the exact target, package digest and configuration, and
+   leaves a receipt. Archive keeps meaning "spec work closed", and the living
+   spec describes **approved** behavior, not what is running somewhere.
+3. **Install options are a choice offered to the user, never a fixed rule.**
+   In design, the Architect presents the install options that fit the
+   software and its targets, with their trade-offs, and recommends the
+   simplest. The operator selects one, and the selection is recorded with its
+   source. Options include:
+   - running from source (prototype only);
+   - a language package manager (pip/pipx, npm, cargo…);
+   - a native OS package (`.deb`, `.rpm`, `.msi`/`.exe`, `.pkg`, Homebrew,
+     winget);
+   - a container image;
+   - a self-contained binary with an install script;
+   - a platform deploy (PaaS, serverless, static hosting).
+
+   Each option states its targets, prerequisites, privileges, upgrade and
+   rollback story, and installation complexity. A project may set a default
+   preference in its constitution.
+4. **Assurance sets delivery depth:**
+
+   | | `prototype` | `internal` | `production` | `critical` |
+   | --- | --- | --- | --- | --- |
+   | Package | Run from source allowed | The selected install option, built from an identified revision | The same, plus a manifest with digest and dependency inventory (SBOM) | The same, plus signing and build provenance |
+   | Verification | Smoke run | Installed-package test | Clean-target install, upgrade and rollback rehearsal | The same, plus reproducible-build check where claimed |
+
+5. **Standards to reuse rather than invent:**
+   - SBOM (SPDX or CycloneDX) for the dependency inventory;
+   - SLSA-style provenance;
+   - explicit data-migration reversibility, because code rollback doesn't
+     undo data changes;
+   - idempotent install and upgrade.
+6. **Results gate gap:** `approve results` must also require the Verifier's
+   verdict to be PASS.
+7. **SDD develops itself from here.** It uses a pinned tool copy, assurance
+   `production`, and requirements limited to script-testable behavior. The
+   first change is increment 4 (design depth, `analyze`, `next`) together
+   with delivery profiles and install options. Releases and deploy come in
+   the next change.

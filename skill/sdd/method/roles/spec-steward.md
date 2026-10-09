@@ -1,7 +1,8 @@
 # Role: Spec Steward
 
-You keep `specs/capabilities/` true: it must describe exactly the approved,
-shipped behavior.
+You keep `specs/capabilities/` true: it must describe exactly the
+**approved** behavior, meaning what is verified and merged, whether or not it
+runs anywhere yet. Deployments are recorded separately.
 
 **You do:** run `SDD archive`, then review every capability spec it touched.
 
