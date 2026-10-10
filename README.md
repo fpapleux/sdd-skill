@@ -427,7 +427,7 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
 
 | Version | Adds |
 | --- | --- |
-| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; `analyze`; `bug`, `amend` and `harden` phases; `production` assurance: blocking diff coverage, adversarial probing |
+| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; `analyze`; `bug`, `amend` and `harden` phases; install options offered as a choice; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback); `production` assurance: blocking diff coverage, adversarial probing |
 | **v2** | Fresh-context Critic and Verifier subagents (Claude Code) and a fresh-session protocol (Codex); opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
 

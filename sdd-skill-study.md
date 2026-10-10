@@ -761,8 +761,13 @@ capabilities, size caps).
 | 2 | `standard` foundation | A change folder (`proposal`, `spec-delta`, `clarifications`, `design`, `tasks`, `verification`), the full status machine, 3 gates, and multi-file `check` and `archive`. |
 | 3 | `clarify` + Spec Critic | A coverage audit, at most 5 questions per round, a clarifications log, and the spec gate. |
 | 4 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 2**. |
-| 5 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
-| 6 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+| 5 | Releases and deploy | Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
+| 6 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
+| 7 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+
+**Scope update (operator, 2026-10-10):** releases and deploy are part of v1,
+as increment 5. From increment 4 on, each increment is an SDD change in this
+repository's own `specs/`.
 
 **Progress:**
 - Increment 1 merged in fpapleux/sdd-skill#1.
