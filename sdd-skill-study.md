@@ -804,6 +804,7 @@ build, package and deployment in SDD. It was evaluated against SDD practice:
 | 16 | Deployment | **A separate lifecycle,** with an approval bound to the target, digest and configuration, and a receipt. Archive means "spec work closed". The living spec describes **approved** behavior (this corrects the earlier "shipped" wording in §4 and the Spec Steward role). |
 | 17 | Install method | **A choice offered to the user.** The Architect presents fitting options with their trade-offs, the operator selects one, and the selection is recorded. Never a fixed "native installer" rule. |
 | 18 | SDD on itself | **Yes, from increment 4,** with three conditions: a pinned tool copy separate from the development checkout, assurance `production`, and requirements limited to script-testable behavior. |
+| 19 | Versioning (2026-10-10) | **`MAJOR.MINOR.BUILD`**: every push raises MINOR and resets BUILD; every release-candidate build raises BUILD; MAJOR becomes 1 when v1 is complete; history v0 = 0.1, increments 1–3 = 0.2–0.4; the first push under the rule is 0.5.0. This repo's rule. As a product, SDD lets each project choose its scheme, but a rebuild always gets a new build number (increment 5). |
 
 The private product pilot that the note originally included was removed from
 the public repository and from its history.

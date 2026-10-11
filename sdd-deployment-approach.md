@@ -116,7 +116,11 @@ Each profile records OS/version, architecture/runtime ABI, builder, package/depe
    - idempotent install and upgrade.
 6. **Results gate gap:** `approve results` must also require the Verifier's
    verdict to be PASS.
-7. **SDD develops itself from here.** It uses a pinned tool copy, assurance
+7. **Build numbers:** every candidate build gets a new build number, and a
+   rebuild from the same revision is a new build. Each project chooses its
+   version scheme in its constitution. This repository uses
+   `MAJOR.MINOR.BUILD`: MINOR goes up per push, BUILD per candidate build.
+8. **SDD develops itself from here.** It uses a pinned tool copy, assurance
    `production`, and requirements limited to script-testable behavior. The
    first change is increment 4 (design depth, `analyze`, `next`) together
    with delivery profiles and install options. Releases and deploy come in

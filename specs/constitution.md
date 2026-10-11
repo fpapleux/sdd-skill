@@ -59,6 +59,14 @@ platforms, naming. Keep this file under one page. -->
    the tool pointing at the code being changed.
 8. **Delivery.** One PR per increment, from `v1` into `main`. The operator
    decides when to merge.
+9. **Versioning.** `MAJOR.MINOR.BUILD`, recorded in `SKILL.md`
+   (`metadata.version`).
+   - Every push raises MINOR and resets BUILD to 0.
+   - Every release-candidate build (the release process) raises BUILD.
+   - MAJOR becomes 1 when v1 is complete.
+
+   History: v0 = 0.1, and v1 increments 1–3 = 0.2–0.4. The first push under
+   this rule is 0.5.0.
 
 ## Approvals
 | Gate | Date | Evidence |

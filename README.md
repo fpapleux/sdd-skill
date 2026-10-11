@@ -486,6 +486,11 @@ python3 -m unittest tests.test_sdd     # the script's test suite
 | `docs/two-dials.html` / `.pdf` | The two-dials guide. Rebuild with `weasyprint docs/two-dials.html docs/two-dials.pdf`, and keep the README section in sync. |
 | `sdd-skill-study.md` | Design study: rationale, landscape review, decisions |
 
+**Versioning:** `MAJOR.MINOR.BUILD`, recorded in `skill/sdd/SKILL.md`.
+- Every push raises MINOR and resets BUILD.
+- Every release-candidate build raises BUILD.
+- MAJOR becomes 1 when v1 is complete.
+
 The skill is developed with its own discipline. Script changes start with a
 failing test, and each release is dogfooded end to end by a fresh agent that
 reads only `SKILL.md`. Issues and pull requests are welcome; please include a
