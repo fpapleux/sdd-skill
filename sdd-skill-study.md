@@ -809,6 +809,61 @@ build, package and deployment in SDD. It was evaluated against SDD practice:
 The private product pilot that the note originally included was removed from
 the public repository and from its history.
 
+## 15. Backlog: future changes (recorded 2026-10-12)
+
+### Fresh-session roles and cost tuning (operator request, 2026-10-12)
+
+Some steps must run without the author's context for independence. Others
+benefit from a fresh context for throughput. Mechanical steps shouldn't use a
+model at all. Costs measured in this session:
+
+| Run | Tokens | Time |
+| --- | --- | --- |
+| Critic | 136k | 9 min |
+| Verifier | 178k | 14 min (much of it mechanical replay and mutation) |
+| Dogfood run | 159k | 14 min |
+| Research | 88k | 7 min |
+
+| Step | Why a fresh context | Recommended runner |
+| --- | --- | --- |
+| Spec Critic (`clarify`) | **Independence**: required at `production`+ | Subagent on the strongest model, high effort. Scope its input to the change, the constitution, related capability specs and a short code map. Cap the report length. |
+| Verifier (`verify`), semantic audit | **Independence**: required at `production`+ | Subagent on a strong model, medium–high effort. It does only the semantic work: scenario-to-test matching, and checking the reasons given for pre-existing tasks. |
+| Verifier, mechanical evidence | Independence, but it's deterministic | **Scripts, no model:** replay new tests against the base commit, run the mutation list, collect coverage and red/green evidence. |
+| Dogfood and eval runs | Tests the skill as an outsider would use it | Subagent on the model adopters typically use, medium effort, with a scripted operator. Later, the same run on two models (v3 evals). |
+| Implementer, per task group | Throughput and context hygiene on long changes; `[P]` tasks run in parallel worktrees | Subagent on a mid-tier model, medium effort, for routine tasks. Strongest model for design-heavy ones. |
+| Spec Steward review after archive | Fresh eyes for duplicates and contradictions | Subagent on a mid-tier model, low–medium effort. |
+| Architect failure-mode review (increment 4) | A second opinion on the design | Subagent on the strongest model, high effort. |
+| Research and docs lookups | Keeps the main context clean | Subagent on a mid-tier model, medium effort. |
+
+**Levers:**
+- Model choice per subagent (`.claude/agents/*.md` or the Agent tool's `model`);
+- `maxTurns`;
+- read-only tool sets;
+- scoped inputs and a capped report length;
+- background runs, in parallel where independent;
+- per-subagent reasoning effort, where the host supports it.
+
+On Codex, or wherever subagents aren't available, the portable fallback is a
+fresh session that the operator starts on a chosen model.
+
+**Prompt hygiene:** the orchestrator's prompt must point to the method files
+and must not carry the orchestrator's own conclusions or instructions that
+contradict the role. This session's Critic prompt broke that rule (`→ fixed:`
+for unapplied fixes).
+
+### Other recorded items
+- **Design depth** (planned): delivery profiles, install options offered as a
+  choice, failure modes the design introduces, `analyze`, `next`.
+- **Friction from change 0001:**
+  - a prose line starting with `## ` silently splits a section, so warn about
+    headings that aren't known section names;
+  - add a "proposed, not yet applied" outcome for Critic findings;
+  - count open questions per question, not per marker;
+  - turn the evidence capture and the mutation check (hand-scripted in this
+    change) into repository tooling.
+- **Releases and deploy** (increment 5), **`production` assurance** (6),
+  **`harden`** (7).
+
 ## Sources
 
 - Principles only: the author's role-based delivery process (internal
