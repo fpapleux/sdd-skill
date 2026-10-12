@@ -72,3 +72,4 @@ platforms, naming. Keep this file under one page. -->
 | Gate | Date | Evidence |
 | --- | --- | --- |
 | constitution | 2026-10-09 | Operator in Claude Code chat, 2026-10-09: "/sdd approve" (constitution at production with project rules 1–8 as proposed) |
+| constitution (re-approval) | 2026-10-12 | Operator in Claude Code chat, 2026-10-12: "/sdd approve" (re-approval after adding project rule 9, versioning, in b90d74f) |
