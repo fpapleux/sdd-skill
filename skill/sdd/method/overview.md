@@ -9,7 +9,10 @@ paperwork. Assurance decides the proof.**
   `mini` and `standard` (`full` comes later).
 - **Assurance** is set once per project in `specs/constitution.md`: how much
   trust does the product need? The levels are `prototype`, `internal`,
-  `production` and `critical`. A change may raise its own level (`new
+  `production` and `critical`. Approving the constitution records a
+  fingerprint. Later edits are reported, block the gates, and take effect
+  only once re-approved; while they're pending, the last approved level stays
+  in force, and a lowered level is recorded as lowered. A change may raise its own level (`new
   --assurance`). Lowering it needs a recorded waiver, which isn't available yet.
 
 ### Sizes
@@ -142,7 +145,7 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD round [--fresh]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed |
 | `SDD check [--stage spec\|plan\|implement\|verify]` | Validate the active change. Exit 1 = errors. |
 | `SDD status [--json]` | Summary + next step |
-| `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `spec` (standard) or `plan` (mini) locks the spec. `results` (standard) marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
+| `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `constitution` records its fingerprint (and refuses an unchanged or invalid one). `spec` (standard) or `plan` (mini) locks the spec. `results` (standard) needs a PASS verdict and marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
 | `SDD advance clarifying\|designed\|implementing\|verifying\|verified\|blocked\|abandoned` | Move the status (`verified` for mini only; standard uses `approve results`). A blocked change returns only to the status it had. |
 | `SDD archive` | Merge a verified change into `specs/capabilities/` (requirements, known gaps, history line) and archive it |
 | `SDD use <change-id>` | Switch the active change |

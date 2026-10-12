@@ -220,6 +220,12 @@ README or a code comment doesn't count.
 ## Verification, Open questions, Approvals
 
 - `## Verification`: written by the Verifier (see `method/roles/verifier.md`).
+  It ends with a **verdict line**, `Verdict: PASS` or `Verdict: GAPS — <why>`.
+  `approve results` (standard) and `advance verified` (mini) proceed only
+  when the latest verdict line says PASS. That word can be in any case and
+  followed by more text. A list marker or `**emphasis**` is fine, but lines
+  in code blocks, comments or tables don't count, and words other than PASS
+  or GAPS (such as PASSED) are refused.
 - `## Open questions`: write each unknown as `[NEEDS CLARIFICATION: …]` at
   the place where it matters. Plan approval is refused while any marker
   remains. When the operator answers, replace the marker with the decision and

@@ -330,6 +330,11 @@ A blank is an error, and so is a lazy "not needed".
 - every ticked task has red evidence that shows a failure, and green
   evidence;
 - before verification passes, every scenario is named in a **test file**;
+- `approve results` and `advance verified` need the Verifier's latest
+  verdict to be PASS;
+- the approved constitution is fingerprinted: later edits are reported, block
+  the gates, and take effect (including a lowered assurance level, recorded as
+  such) only when you re-approve them;
 - a change can't leave `draft` without a recorded approval, a `standard`
   change passes its spec, plan and results gates in order, and a blocked
   change can only return to where it was;

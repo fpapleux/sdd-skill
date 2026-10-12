@@ -4,7 +4,7 @@ title: Results gate ignores the verdict; constitution edits go undetected
 type: defect
 size: mini
 assurance: production
-status: planned
+status: implementing
 capabilities: approvals=APR
 created: 2026-10-12
 spec_hash: 83d9463a5a13
@@ -139,162 +139,162 @@ cell shall end with "assurance lowered <old> → <new>".
 - Test command: `python3 -m unittest tests.test_sdd`
 
 ## Tasks
-- [ ] T1 REQ-APR-001.R1 GAPS verdict refused at approve results (regression)
-  - test:
-  - red:
-  - green:
-- [ ] T2 REQ-APR-001.S1 PASS verdict accepted
-  - test:
-  - red:
-  - green:
-- [ ] T3 REQ-APR-001.N1 No verdict line refused
-  - test:
-  - red:
-  - green:
-- [ ] T4 REQ-APR-001.N2 Unknown verdict word refused
-  - test:
-  - red:
-  - green:
-- [ ] T5 REQ-APR-001.B1 Lowercase and trailing text accepted
-  - test:
-  - red:
-  - green:
-- [ ] T6 REQ-APR-001.B2 Emphasised later GAPS verdict refused
-  - test:
-  - red:
-  - green:
-- [ ] T7 REQ-APR-001.B3 Verdict inside a fenced code block ignored
-  - test:
-  - red:
-  - green:
-- [ ] T8 REQ-APR-001.N3 Latest GAPS after an earlier PASS refused
-  - test:
-  - red:
-  - green:
-- [ ] T9 REQ-APR-001.S2 Latest PASS after an earlier GAPS accepted
-  - test:
-  - red:
-  - green:
-- [ ] T10 REQ-APR-001.N4 Missing verification.md refused
-  - test:
-  - red:
-  - green:
-- [ ] T11 REQ-APR-001.R2 Mini GAPS verdict refused at advance verified (regression)
-  - test:
-  - red:
-  - green:
-- [ ] T12 REQ-APR-001.S3 Mini PASS verdict accepted
-  - test:
-  - red:
-  - green:
-- [ ] T13 REQ-APR-001.N5 Mini change without a verdict refused
-  - test:
-  - red:
-  - green:
-- [ ] T14 REQ-APR-002.R1 Status reports a constitution changed since approval (regression)
-  - test:
-  - red:
-  - green:
-- [ ] T15 REQ-APR-002.S1 Approval records the fingerprint in front matter and row
-  - test:
-  - red:
-  - green:
-- [ ] T16 REQ-APR-002.N1 approve plan refused while the constitution is changed
-  - test:
-  - red:
-  - green:
-- [ ] T17 REQ-APR-002.N5 check exits 1 while the constitution is changed
-  - test:
-  - red:
-  - green:
-- [ ] T18 REQ-APR-002.N6 advance verified refused while the constitution is changed
-  - test:
-  - red:
-  - green:
-- [ ] T19 REQ-APR-002.S2 Re-approval clears the change note
-  - test:
-  - red:
-  - green:
-- [ ] T20 REQ-APR-002.N2 Unchanged re-approval refused
-  - test:
-  - red:
-  - green:
-- [ ] T21 REQ-APR-002.N3 Hand-edited fingerprint reported
-  - test:
-  - red:
-  - green:
-- [ ] T22 REQ-APR-002.N7 Deleted fingerprint line reported
-  - test:
-  - red:
-  - green:
-- [ ] T23 REQ-APR-002.N8 Broken front matter reported
-  - test:
-  - red:
-  - green:
-- [ ] T24 REQ-APR-002.B1 Blank lines and comments are not changes
-  - test:
-  - red:
-  - green:
-- [ ] T25 REQ-APR-002.B2 Extra whitespace inside a line is not a change
-  - test:
-  - red:
-  - green:
-- [ ] T26 REQ-APR-002.B3 A hand-added row without fingerprint is not a change
-  - test:
-  - red:
-  - green:
-- [ ] T27 REQ-APR-002.N4 Earlier-version constitution: no change note
-  - test:
-  - red:
-  - green:
-- [ ] T28 REQ-APR-002.S3 Earlier-version constitution: approval records a fingerprint
-  - test:
-  - red:
-  - green:
-- [ ] T29 REQ-APR-002.S4 Never-approved constitution blocks nothing
-  - test:
-  - red:
-  - green:
-- [ ] T30 REQ-APR-003.R1 Lowered level not in force before re-approval (regression)
-  - test:
-  - red:
-  - green:
-- [ ] T31 REQ-APR-003.S1 Approved level applies to new changes
-  - test:
-  - red:
-  - green:
-- [ ] T32 REQ-APR-003.N3 Explicit lower level refused while pending
-  - test:
-  - red:
-  - green:
-- [ ] T33 REQ-APR-003.S2 Re-approval records the lowering, then applies it
-  - test:
-  - red:
-  - green:
-- [ ] T34 REQ-APR-003.N1 Invalid or missing level refused at approval
-  - test:
-  - red:
-  - green:
-- [ ] T35 REQ-APR-003.B1 Raised level not in force before re-approval
-  - test:
-  - red:
-  - green:
-- [ ] T36 REQ-APR-003.B2 Raised level approved without a lowered note
-  - test:
-  - red:
-  - green:
-- [ ] T37 REQ-APR-003.B3 Unchanged level approved without a lowered note
-  - test:
-  - red:
-  - green:
-- [ ] T38 REQ-APR-003.N2 Earlier-version constitution: front matter level, as before
-  - test:
-  - red:
-  - green:
-- [ ] T39 REQ-APR-003.S4 Earlier-version constitution: first approval records the level
-  - test:
-  - red:
-  - green:
+- [x] T1 REQ-APR-001.R1 GAPS verdict refused at approve results (regression)
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_R1_gaps_verdict_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T2 REQ-APR-001.S1 PASS verdict accepted
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S1_pass_verdict_accepted
+  - red: pre-existing — the results gate already accepted a PASS verdict; the fix must keep that
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T3 REQ-APR-001.N1 No verdict line refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N1_no_verdict_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T4 REQ-APR-001.N2 Unknown verdict word refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N2_unknown_verdict_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T5 REQ-APR-001.B1 Lowercase and trailing text accepted
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B1_lowercase_with_trailing_text_accepted
+  - red: pre-existing — a lowercase PASS was already accepted, because no verdict was read
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T6 REQ-APR-001.B2 Emphasised later GAPS verdict refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B2_emphasised_later_gaps_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T7 REQ-APR-001.B3 Verdict inside a fenced code block ignored
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B3_verdict_in_code_block_ignored
+  - red: pre-existing — a verdict inside a code block was already ignored, because no verdict was read
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T8 REQ-APR-001.N3 Latest GAPS after an earlier PASS refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N3_latest_gaps_after_pass_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T9 REQ-APR-001.S2 Latest PASS after an earlier GAPS accepted
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S2_latest_pass_after_gaps_accepted
+  - red: pre-existing — a latest PASS was already accepted, because no verdict was read
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T10 REQ-APR-001.N4 Missing verification.md refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N4_missing_verification_file_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T11 REQ-APR-001.R2 Mini GAPS verdict refused at advance verified (regression)
+  - test: tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_R2_mini_gaps_refused
+  - red: AssertionError: 0 != 1 : 0001-parse-duration: verifying → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T12 REQ-APR-001.S3 Mini PASS verdict accepted
+  - test: tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_S3_mini_pass_accepted
+  - red: pre-existing — the mini verified step already accepted a PASS verdict
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T13 REQ-APR-001.N5 Mini change without a verdict refused
+  - test: tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_N5_mini_no_verdict_refused
+  - red: AssertionError: 0 != 1 : 0001-parse-duration: verifying → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T14 REQ-APR-002.R1 Status reports a constitution changed since approval (regression)
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_R1_status_reports_change
+  - red: AssertionError: 'changed since approval' not found in 'project assurance: internal\nactive change: none\nnext: sdd quick "<idea>" (or sdd propose "<id
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T15 REQ-APR-002.S1 Approval records the fingerprint in front matter and row
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S1_approval_records_fingerprint
+  - red: AssertionError: unexpectedly None
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T16 REQ-APR-002.N1 approve plan refused while the constitution is changed
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N1_plan_gate_refused_while_changed
+  - red: AssertionError: 0 != 1 : 0001-demo: plan approved → planned
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T17 REQ-APR-002.N5 check exits 1 while the constitution is changed
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N5_check_fails_while_changed
+  - red: AssertionError: 0 != 1 : check 0001-demo (stage: plan, assurance: internal)
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T18 REQ-APR-002.N6 advance verified refused while the constitution is changed
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N6_advance_verified_refused_while_changed
+  - red: AssertionError: 0 != 1 : 0001-demo: verifying → verified
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T19 REQ-APR-002.S2 Re-approval clears the change note
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S2_reapproval_clears_change
+  - red: AssertionError: '· fingerprint None ·' not found in '| constitution (re-approval) | 2026-10-12 | Operator: ok |'
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T20 REQ-APR-002.N2 Unchanged re-approval refused
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N2_unchanged_reapproval_refused
+  - red: AssertionError: 0 != 1 : constitution re-approval recorded
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T21 REQ-APR-002.N3 Hand-edited fingerprint reported
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N3_edited_fingerprint_reported
+  - red: AssertionError: fingerprint: None
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T22 REQ-APR-002.N7 Deleted fingerprint line reported
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N7_deleted_fingerprint_reported
+  - red: AssertionError: fingerprint: None
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T23 REQ-APR-002.N8 Broken front matter reported
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N8_broken_front_matter_reported
+  - red: AssertionError: 'changed since approval' not found in 'project assurance: None (constitution not approved)\nactive change: none\nnext: sdd quick "<ide
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T24 REQ-APR-002.B1 Blank lines and comments are not changes
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B1_blank_lines_and_comments_ignored
+  - red: pre-existing — no constitution change was ever reported, so this no-change case passed before the fix
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T25 REQ-APR-002.B2 Extra whitespace inside a line is not a change
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B2_extra_whitespace_ignored
+  - red: pre-existing — no constitution change was ever reported, so this no-change case passed before the fix
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T26 REQ-APR-002.B3 A hand-added row without fingerprint is not a change
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B3_hand_added_row_ignored
+  - red: pre-existing — no constitution change was ever reported, so this no-change case passed before the fix
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T27 REQ-APR-002.N4 Earlier-version constitution: no change note
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N4_earlier_version_not_flagged
+  - red: pre-existing — an earlier-version constitution was never flagged; kept for backward compatibility
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T28 REQ-APR-002.S3 Earlier-version constitution: approval records a fingerprint
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S3_earlier_version_gets_fingerprint
+  - red: AssertionError: unexpectedly None
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T29 REQ-APR-002.S4 Never-approved constitution blocks nothing
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S4_never_approved_blocks_nothing
+  - red: pre-existing — a never-approved constitution already blocked nothing; kept as decided in Q7
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T30 REQ-APR-003.R1 Lowered level not in force before re-approval (regression)
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_R1_lowered_level_not_in_force
+  - red: AssertionError: 'prototype' != 'internal'
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T31 REQ-APR-003.S1 Approved level applies to new changes
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S1_approved_level_applies
+  - red: pre-existing — new changes already used the unchanged constitution level
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T32 REQ-APR-003.N3 Explicit lower level refused while pending
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N3_explicit_lower_level_refused_while_pending
+  - red: AssertionError: 0 != 1 : created specs/changes/0001-demo/spec.md (size: mini, assurance: prototype)
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T33 REQ-APR-003.S2 Re-approval records the lowering, then applies it
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S2_reapproval_records_lowering
+  - red: AssertionError: False is not true
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T34 REQ-APR-003.N1 Invalid or missing level refused at approval
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N1_invalid_or_missing_level_refused
+  - red: AssertionError: 0 != 1 : constitution re-approval recorded
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T35 REQ-APR-003.B1 Raised level not in force before re-approval
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B1_raised_level_not_in_force
+  - red: AssertionError: 'production' != 'internal'
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T36 REQ-APR-003.B2 Raised level approved without a lowered note
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B2_raised_level_approved_without_note
+  - red: pre-existing — approving a raised level already worked, with no lowered note
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T37 REQ-APR-003.B3 Unchanged level approved without a lowered note
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B3_unchanged_level_approved_without_note
+  - red: pre-existing — approving an unchanged level already worked, with no lowered note
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T38 REQ-APR-003.N2 Earlier-version constitution: front matter level, as before
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N2_earlier_version_uses_front_matter_level
+  - red: pre-existing — an earlier-version constitution already used its front-matter level; kept for backward compatibility
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
+- [x] T39 REQ-APR-003.S4 Earlier-version constitution: first approval records the level
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S4_earlier_version_first_approval_records_level
+  - red: AssertionError: unexpectedly None
+  - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->

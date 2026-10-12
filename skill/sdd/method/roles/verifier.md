@@ -54,7 +54,9 @@ Verdict: GAPS — 2 findings (T5 added; F1 awaiting the operator)
 ```
 
 The verdict is **PASS** only when the tests pass, the check is OK, every
-scenario is `yes`, and there are no open findings.
+scenario is `yes`, and there are no open findings. End the section with the
+verdict line (`Verdict: PASS` or `Verdict: GAPS — …`). The script reads the
+latest verdict line, and nothing can be marked verified on GAPS.
 
 **Spec gaps block PASS until the operator decides.** A spec gap is behavior
 the code has, or lacks, that the spec doesn't cover. You don't defer it

@@ -4,7 +4,9 @@ The operator invoking `sdd approve` **is** the approval. Your job is to record
 it against the right gate.
 
 1. Find the pending gate:
-   - The constitution isn't approved (`SDD status` says so) → `constitution`.
+   - The constitution isn't approved, or `SDD status` reports that it
+     changed since approval → `constitution`. Show the operator what
+     changed (use `git diff -- specs/constitution.md`) before asking.
    - A spec amendment is pending (`SDD status` says so) → `amend`. Check
      that it is logged under `## Amendments` first.
    - `mini`, `draft` → `plan`.
