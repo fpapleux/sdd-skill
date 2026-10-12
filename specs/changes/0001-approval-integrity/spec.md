@@ -7,7 +7,7 @@ assurance: production
 status: implementing
 capabilities: approvals=APR
 created: 2026-10-12
-spec_hash: c85d3fc174bd
+spec_hash: 39f4dbbb3da4
 ---
 
 # 0001-approval-integrity — Results gate ignores the verdict; constitution edits go undetected
@@ -30,7 +30,7 @@ covers what it claims to cover.
 ## Scope
 - In: the results gate (and the mini verified step) reading the Verifier's verdict; a fingerprint of the approved constitution, kept in its front matter and in its approval row; reporting unapproved constitution changes; the gates refusing while they exist; the last approved assurance level staying in force until re-approval; approve constitution refusing an unchanged constitution or an invalid level, and labelling a lowered level.
 - Out: fingerprinting other files (capability specs are already written only by sdd.py); a general waiver mechanism; changing what the Verifier writes beyond its Verdict line; requiring a first constitution approval before any gate (Q7).
-- Changes existing behavior: approve results accepted any verdict → it requires PASS. Changes already in verifying need a Verdict line before approve results or advance verified; changes already verified or archived are not re-checked (archive does not read the verdict). Constitution edits after approval were silent and took effect at once → they are reported, block the gates, and take effect only when re-approved. Re-approving an unchanged constitution was recorded again → it is refused. An invalid or missing assurance level with no approved level crashed with a traceback → new, check and status refuse with an error naming the four levels.
+- Changes existing behavior: approve results accepted any verdict → it requires PASS. Changes already in verifying need a Verdict line before approve results or advance verified; changes already verified or archived are not re-checked (archive does not read the verdict). Constitution edits after approval were silent and took effect at once → they are reported, block the gates, and take effect only when re-approved. Re-approving an unchanged constitution was recorded again → it is refused. With no approved level, an invalid assurance level crashed with a traceback and a missing one silently became internal → new, check and status refuse with an error naming the four levels.
 
 ## Requirements
 ### REQ-APR-001 The results gate requires a PASS verdict
@@ -57,9 +57,10 @@ PASSED, is unknown.
 | B5 | boundary | the S1 change, with an earlier "Verdict: PASS" and a later "1) Verdict: GAPS — F4" | approve results | exit 1 · status stays verifying · no results row |
 | B6 | boundary | the S1 change, with "Verdict: GAPS — F1" followed by a table row "\| Verdict \| PASS \|" | approve results | exit 1 · status stays verifying · no results row (a table row is not a verdict line) |
 | B7 | boundary | the S1 change, with "Verdict: GAPS — F1" followed by "The final Verdict: PASS was expected" | approve results | exit 1 · status stays verifying · no results row (a mid-line mention is not a verdict line) |
-| B8 | boundary | the S1 change, with "Verdict: GAPS — F1" followed by "<!-- Verdict: PASS -->" | approve results | exit 1 · status stays verifying · no results row (a comment is not a verdict line) |
+| B8 | boundary | the S1 change, with "Verdict: GAPS — F1" followed by a multi-line HTML comment whose middle line is "Verdict: PASS" | approve results | exit 1 · status stays verifying · no results row (a comment is not a verdict line) |
 | N3 | state | the S1 change, with an earlier "Verdict: PASS" and a later "Verdict: GAPS — F2" | approve results | exit 1 · status stays verifying · no results row |
 | S2 | state | the S1 change, with an earlier "Verdict: GAPS" and a later "Verdict: PASS" | approve results | exit 0 · status verified (the latest verdict wins) |
+| N6 | validation | the S1 change, but the latest line is "Verdict: PASSED" | approve results | exit 1 · the error lists PASS and GAPS · status stays verifying · no results row |
 | N4 | dependency | the S1 change, but its verification.md file was deleted | approve results | exit 1 · error "no verdict" · status stays verifying · no results row |
 | S3 | happy | a mini change in verifying, verify check OK, the Verification section ending with "Verdict: PASS" | advance verified | exit 0 · status verified |
 | R2 | validation | a mini change in verifying, verify check OK, the Verification section ending with "Verdict: GAPS" | advance verified | exit 1 · the error contains "GAPS" · status stays verifying · spec.md is unchanged |
@@ -100,6 +101,7 @@ approved_level.
 | B1 | boundary | an approved constitution with only blank lines and an HTML comment added | status | no change note · exit 0 · nothing is rewritten |
 | B2 | boundary | an approved constitution with a double space added inside one rule | status | no change note · exit 0 · nothing is rewritten |
 | B3 | boundary | an approved constitution with a row added by hand to the Approvals section, without a fingerprint | status | no change note · exit 0 · nothing is rewritten |
+| B4 | boundary | an approved constitution in which one rule's line was split into two lines with the same words | status | the output says the constitution changed since approval · exit 0 · nothing is rewritten |
 | N4 | state | a constitution approved by an earlier version (approved: yes, no fingerprint anywhere) | status | no change note · exit 0 · nothing is rewritten |
 | S3 | state | that earlier-version constitution | approve constitution | exit 0 · a fingerprint is recorded in the front matter and the row · status shows no change note |
 | S4 | state | a constitution that was never approved (approved: no, as init writes it) and a mini draft ready for plan approval | approve plan | exit 0 · the change is planned, as today |
@@ -134,6 +136,7 @@ levels, new, check and status shall refuse with an error naming the four levels.
 | N4 | validation | a never-approved constitution with "assurance: prodution" | new demo | exit 1 · the error names "prodution" and lists the four levels · no change folder is created |
 | N5 | validation | that never-approved constitution with "assurance: prodution" | status | exit 1 · the error names "prodution" and lists the four levels |
 | N6 | validation | a constitution approved by an earlier version, then edited to "assurance: prodution", with an active change | check | exit 1 · the error names "prodution" and lists the four levels |
+| N7 | validation | a never-approved constitution whose assurance line was deleted | new demo | exit 1 · the error says "(missing)" and lists the four levels · no change folder is created |
 
 - N/A access: sdd.py runs locally with no users or roles; who may approve is governed by the agent rules
 - N/A dependency: only the local constitution file is read; a missing file is already reported as not initialized
@@ -148,8 +151,9 @@ levels, new, check and status shall refuse with an error naming the four levels.
 - Modules: skill/sdd/scripts/sdd.py only; tests in tests/test_sdd.py.
 - Verdict: a helper reads the Verification section without fenced blocks, comments and table rows, finds lines that begin with "Verdict:" after list markers and emphasis, and returns the latest verdict word. approve results (standard) and advance verified (mini) refuse anything but PASS, after the existing verify check, writing nothing on refusal.
 - Fingerprint: SHA-256 (12 hex digits) of the constitution, comments and blank lines removed, whitespace runs collapsed per line, Approvals section and the approved/fingerprint/approved_level keys excluded. approve constitution stores it in the front matter and appends "· fingerprint <hex> · level <level>" (plus "· assurance lowered X → Y" when lower) to the row's Evidence cell; it refuses an unchanged constitution or an invalid level.
-- Reference: the newest approval row whose Evidence carries a fingerprint. Changed = that row's fingerprint differs from the content, or the front-matter fingerprint is missing, unreadable or different. No such row: earlier-version behavior.
+- Reference: the newest approval row whose Evidence carries a fingerprint. Changed = that row's fingerprint differs from the content, or the front-matter fingerprint is missing, unreadable or different. No such row: a valid front-matter fingerprint is the reference (A1); with neither, earlier-version behavior.
 - While changed: Project.level() returns the reference row's level; status prints the change note and "X (Y pending approval)"; status --json gains constitution_changed and assurance_pending; analyze adds an error, which makes check exit 1 and every gate that runs it refuse.
+- Table rows are skipped before the verdict pattern runs. A line starting with "|" can't match the pattern anyway, so this is defense in depth, and B6 can't fail on its own (round-2 F8, documented rather than tested).
 - Existing tests that encode the old behavior are updated: results/verified approvals need a PASS verdict; a repeat constitution approval needs a change.
 - Test strategy: one unit test per scenario through the Repo helper (temporary repositories), named test_REQ_APR_00N_<ID>_…; mutation-check every new rule (project rule 4).
 - Test command: `python3 -m unittest tests.test_sdd`
@@ -335,10 +339,10 @@ levels, new, check and status shall refuse with an error naming the four levels.
   - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict
   - red: pre-existing — mid-line mentions already failed the anchored verdict pattern; now pinned (Verifier F7)
   - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
-- [x] T46 REQ-APR-001.B8 Commented verdict is not a verdict line
-  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict
-  - red: pre-existing — comments were already stripped before verdicts are read; now pinned (Verifier F7)
-  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [ ] T46 REQ-APR-001.B8 Multi-line commented verdict is not a verdict line (reopened by A2)
+  - test:
+  - red:
+  - green:
 - [x] T47 REQ-APR-002.N9 Only the trailing note in Evidence counts
   - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N9_quoted_older_note_is_ignored
   - red: AssertionError: 'changed since approval' unexpectedly found in 'project assurance: prototype (production pending approval)\nthe constitution changed s
@@ -363,6 +367,18 @@ levels, new, check and status shall refuse with an error naming the four levels.
   - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N6_invalid_level_refused_by_check
   - red: AssertionError: 0 != 1 : check 0001-demo (stage: plan, assurance: internal)
   - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [ ] T53 REQ-APR-001.N6 PASSED is an unknown verdict word
+  - test:
+  - red:
+  - green:
+- [ ] T54 REQ-APR-002.B4 Re-wrapping a rule is a change
+  - test:
+  - red:
+  - green:
+- [ ] T55 REQ-APR-003.N7 Missing level refused by new
+  - test:
+  - red:
+  - green:
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->
@@ -429,6 +445,82 @@ Findings:
 
 Verdict: GAPS — 7 findings (T40 and T41 added; F3–F7 awaiting the operator)
 
+### Round 2
+
+- Date: 2026-10-12 · Verifier: fresh session (production)
+- Tests: `python3 -m unittest tests.test_sdd` → Ran 205 tests, OK
+- Check: `sdd.py check --stage verify` (pinned tool) → OK · 0 errors · 21 warnings (the 21 pre-existing tasks). The development copy's check also reports OK. Status moved with `SDD advance verifying` (implementing → verifying).
+- Coverage: coverage.py and pytest-cov are not installed. Line coverage with the standard-library `trace` module, on a scratch copy: 97 of the 98 statements this change added to sdd.py run. Uncovered: sdd.py:602, where `level()` returns the approved level for an unchanged constitution whose level is invalid. Only a forged approval row or a hash collision reaches it, so it is dead defensive code, not a missing scenario.
+- Red evidence: the 13 A1 tests were run against sdd.py from e68474c (scratch copy). The six with a red line (T42, T43, T47, T50, T51, T52) fail with exactly their recorded assertion, and the seven pre-existing ones pass. Against 0cafdc9, the 14 round-1 pre-existing tests pass. So does N9, whose red is recorded against e68474c.
+- Pre-existing (21 tasks): the 14 from round 1 still pass on 0cafdc9, and round 1 checked their mutations. The 7 from A1 all pass on e68474c, so the behavior existed. T40 and T41 are sound: any rewrite fails their file-unchanged assertion. So are T45 (killed by an unanchored verdict pattern), T48 (killed by taking the newest row, fingerprint or not) and T49 (killed by removing the fallback). T44 and T46 are unsound: their tests stay green when the rule they claim to pin is broken → F8.
+- Probes (scratch copy): while the constitution is changed, approve spec, results and amend, and archive, refuse with its error; advance designed, blocked, abandoned and implementing don't. N6's setup without the edit verifies, so its "otherwise OK" holds. S5's literal Given (a rule added) is reported as changed.
+- Mutations (27, scratch copy, full suite): 19 killed, 2 equivalent (dropping the table-row skip alone; `match` → `search` on a `^`-anchored pattern), 6 survived → F8–F11, plus the dead line above.
+
+| Scenario | Test | Result | Then fully asserted |
+| --- | --- | --- | --- |
+| REQ-APR-001.S1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S1_pass_verdict_accepted | pass | yes |
+| REQ-APR-001.R1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_R1_gaps_verdict_refused | pass | yes |
+| REQ-APR-001.N1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N1_no_verdict_refused | pass | yes |
+| REQ-APR-001.N2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N2_unknown_verdict_refused | pass | yes |
+| REQ-APR-001.B1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B1_lowercase_with_trailing_text_accepted | pass | yes |
+| REQ-APR-001.B2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B2_emphasised_later_gaps_refused | pass | yes |
+| REQ-APR-001.B3 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B3_verdict_in_code_block_ignored | pass | yes |
+| REQ-APR-001.B4 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B4_numbered_dot_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.B5 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B5_numbered_paren_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.B6 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B6_table_row_is_not_a_verdict | pass | weak: the Given can't fail; with the table-row rule broken it stays green → F8 |
+| REQ-APR-001.B7 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict | pass | yes |
+| REQ-APR-001.B8 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict | pass | weak: the Given can't fail; with comment stripping removed it stays green → F8 |
+| REQ-APR-001.N3 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N3_latest_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.S2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S2_latest_pass_after_gaps_accepted | pass | yes |
+| REQ-APR-001.N4 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N4_missing_verification_file_refused | pass | yes |
+| REQ-APR-001.S3 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_S3_mini_pass_accepted | pass | yes |
+| REQ-APR-001.R2 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_R2_mini_gaps_refused | pass | yes |
+| REQ-APR-001.N5 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_N5_mini_no_verdict_refused | pass | yes |
+| REQ-APR-002.S1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S1_approval_records_fingerprint | pass | yes |
+| REQ-APR-002.R1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_R1_status_reports_change | pass | yes |
+| REQ-APR-002.N1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N1_plan_gate_refused_while_changed | pass | yes |
+| REQ-APR-002.N5 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N5_check_fails_while_changed | pass | yes |
+| REQ-APR-002.N6 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N6_advance_verified_refused_while_changed | pass | yes |
+| REQ-APR-002.S2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S2_reapproval_clears_change | pass | yes |
+| REQ-APR-002.N2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N2_unchanged_reapproval_refused | pass | yes |
+| REQ-APR-002.N3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N3_edited_fingerprint_reported | pass | yes |
+| REQ-APR-002.N7 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N7_deleted_fingerprint_reported | pass | yes |
+| REQ-APR-002.N8 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N8_broken_front_matter_reported | pass | yes |
+| REQ-APR-002.B1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B1_blank_lines_and_comments_ignored | pass | yes |
+| REQ-APR-002.B2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B2_extra_whitespace_ignored | pass | yes |
+| REQ-APR-002.B3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B3_hand_added_row_ignored | pass | yes |
+| REQ-APR-002.N4 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N4_earlier_version_not_flagged | pass | yes |
+| REQ-APR-002.S3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S3_earlier_version_gets_fingerprint | pass | yes |
+| REQ-APR-002.S4 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S4_never_approved_blocks_nothing | pass | yes |
+| REQ-APR-002.N9 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N9_quoted_older_note_is_ignored | pass | yes |
+| REQ-APR-002.N10 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N10_newest_fingerprinted_row_is_the_reference | pass | yes |
+| REQ-APR-002.S5 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S5_front_matter_fingerprint_is_the_fallback | pass | yes (it edits the level rather than adding a rule, so the level in force can be observed; the literal Given is also reported, probed) |
+| REQ-APR-003.S1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S1_approved_level_applies | pass | yes |
+| REQ-APR-003.R1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_R1_lowered_level_not_in_force | pass | yes |
+| REQ-APR-003.N3 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N3_explicit_lower_level_refused_while_pending | pass | yes |
+| REQ-APR-003.S2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S2_reapproval_records_lowering | pass | yes |
+| REQ-APR-003.N1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N1_invalid_or_missing_level_refused | pass | yes |
+| REQ-APR-003.B1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B1_raised_level_not_in_force | pass | yes |
+| REQ-APR-003.B2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B2_raised_level_approved_without_note | pass | yes |
+| REQ-APR-003.B3 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B3_unchanged_level_approved_without_note | pass | yes |
+| REQ-APR-003.N2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N2_earlier_version_uses_front_matter_level | pass | yes |
+| REQ-APR-003.S4 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S4_earlier_version_first_approval_records_level | pass | yes |
+| REQ-APR-003.N4 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N4_invalid_level_refused_by_new | pass | yes |
+| REQ-APR-003.N5 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N5_invalid_level_refused_by_status | pass | yes |
+| REQ-APR-003.N6 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N6_invalid_level_refused_by_check | pass | yes |
+
+Findings:
+- Round-1 findings: F1 and F2 are resolved, since B2 and B3 assert that status rewrites nothing. F3 is resolved: numbered markers count, and B4 and B5 catch dropping them. F4 is resolved: only the trailing note counts, and N9 catches an unanchored note. F5 is resolved in the statement and by S5, which catches removing the fallback, but the Design notes still say otherwise → F12. F6 is resolved for invalid levels (N4–N6 catch a fallback to internal), but the missing-level half is untested → F11. F7: mid-line mentions (B7) and the newest fingerprinted row (N10) are now pinned; tables (B6) and comments (B8) are not → F8.
+- F8 (weak test, F7 recurring) REQ-APR-001.B6 and B8: neither Given can fail. B6's row has no colon after "Verdict", and B8's one-line comment starts with `<`, so the anchored pattern never matches either one, with the rule or without it. Two mutants survive all 205 tests and fail open on a later PASS (probed: GAPS, then the line → verified). One is a pattern that accepts a leading pipe, so a row `| Verdict: PASS |` counts. The other drops comment stripping, so "Verdict: PASS" on its own line inside a comment spanning lines counts. T44's and T46's "now pinned" reasons don't hold. This is the second round with a gap on these rules, so per the Verifier role no third round of tasks is added; the pattern goes to the operator. Fixing it changes the Givens → asked the operator: A) amend B6 to a row `| Verdict: PASS |` and B8 to a comment spanning lines, with tasks, or B) accept it as a known gap (today the anchored pattern makes such lines inert).
+- F9 (test coverage, project rule 4) REQ-APR-001: no scenario covers "anything else, such as PASSED, is unknown". Accepting any word that starts with PASS survives the suite (probed: "Verdict: PASSED" → verified) → asked the operator: A) amend now (a boundary scenario where "Verdict: PASSED" is refused, and a task) or B) accept it as a known gap.
+- F10 (test coverage, project rule 4) REQ-APR-002: no scenario covers "re-wrapping a paragraph is a change". Hashing the normalized lines joined by spaces survives (probed: a re-wrapped rule is then not reported) → asked the operator: A) amend now (a scenario and a task) or B) accept it as a known gap.
+- F11 (test coverage and Scope, project rules 4 and 5) REQ-APR-003: the A1 rule that new, check and status refuse a missing or invalid level is tested only with "prodution". Restoring the old default for a missing assurance line survives the suite (probed: new creates the change at internal, and status shows internal), which is F6's silent fallback. Scope "Changes existing behavior" also says a missing level "crashed with a traceback". At 0cafdc9 it silently became internal; only an invalid level crashed, and only in new. So the approved Scope misstates this change → asked the operator: A) amend now (a scenario for a deleted assurance line with no approved level, a task, and the Scope line corrected) or B) accept it as a known gap, still correcting the Scope line.
+- F12 (doc) Design notes still say "No such row: earlier-version behavior", which A1's front-matter fallback (REQ-APR-002 statement, S5) contradicts. Design notes aren't locked, so a one-line edit fixes it with no amendment.
+
+Verdict: GAPS — 5 findings (F8 recurs from F7 and goes to the operator, with no tasks added; F9–F11 await the operator, A or B; F12 needs a Design-notes edit)
+
+- Operator decision (2026-10-12): amendment A2 for F8–F12 (B8 rewritten, B6 documented as defense in depth, F9–F11 scenarios added, Scope corrected, F12 Design notes fixed); the round-2 Verifier re-checks after implementation.
+
 ## Open questions
 - Q1 Should the mini verified step also require PASS? → A: yes, one rule for both sizes (operator, 2026-10-12)
 - Q4 Verdict grammar? → A: PASS or GAPS, case-insensitive, trailing text allowed, latest line wins (operator, 2026-10-12)
@@ -475,9 +567,11 @@ method/format.md. Required before the gate at production and above. -->
 <!-- Spec changes after approval, one line each, then `sdd.py approve amend`:
 - A1 2026-10-07: <reason> → <what changed> -->
 - A1 2026-10-12: Verifier round 1 (fresh session) spec gaps F3–F7, operator chose A for all → REQ-APR-001: numbered list markers count, scenarios B4–B8 pin the exclusions (tables, mid-line, comments); REQ-APR-002: only the trailing Evidence note counts, the front-matter fingerprint is the fallback reference, scenarios N9, N10, S5; REQ-APR-003: a missing or invalid level with no approved level fails closed, scenarios N4–N6; Scope "Changes existing behavior" updated; tasks T42–T52 added
+- A2 2026-10-12: Verifier round 2 (fresh session) findings F8–F12, operator chose amendment A2 → REQ-APR-001: B8 uses a multi-line comment, new N6 (PASSED refused); REQ-APR-002: new B4 (re-wrapping is a change); REQ-APR-003: new N7 (missing level refused); Scope corrected (a missing level silently became internal, an invalid one crashed); Design notes: B6 documented as defense in depth, front-matter fallback described (F12); T46 reopened, tasks T53–T55 added
 
 ## Approvals
 | Gate | Date | Evidence |
 | --- | --- | --- |
 | plan | 2026-10-12 | Operator in Claude Code chat, 2026-10-12: "/sdd approve" (gate: plan for 0001-approval-integrity, after the fresh-session Critic round 1 with Q6=B and Q7=A applied) |
 | amend | 2026-10-12 | Operator in Claude Code chat, 2026-10-12: "/sdd approve" (amendment A1: Verifier spec gaps F3–F7, all A) |
+| amend | 2026-10-12 | Operator in Claude Code chat, 2026-10-12: "/sdd approve" (amendment A2: Verifier round-2 findings F8–F12) |

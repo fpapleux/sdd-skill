@@ -860,7 +860,17 @@ for unapplied fixes).
   - add a "proposed, not yet applied" outcome for Critic findings;
   - count open questions per question, not per marker;
   - turn the evidence capture and the mutation check (hand-scripted in this
-    change) into repository tooling.
+    change) into repository tooling;
+  - **clause coverage in `analyze`**: every clause of a requirement statement
+    needs a scenario. In change 0001, verification rounds 1 and 2 each found
+    stated rules with no test (F7, F9–F11) that this check would have
+    caught before implementation;
+  - `amend` from `verifying` with new scenarios is a dead end, because the
+    verify-stage check demands tests for them. `amend.md` should say "move
+    back to `implementing` first";
+  - verification round 2 cost 200k tokens and 17 minutes, most of it
+    mechanical (old-code replay, 27 mutants), which supports scripting those
+    parts.
 - **Releases and deploy** (increment 5), **`production` assurance** (6),
   **`harden`** (7).
 
