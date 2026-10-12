@@ -129,8 +129,9 @@ AMENDMENT_ENTRY = re.compile(r"^\s*[-*]\s*A\d+\b")
 LOCK_ERROR = "the spec changed since it was approved"
 CONSTITUTION_ERROR = "the constitution changed since approval"
 CONSTITUTION_BOOKKEEPING = ("approved", "fingerprint", "approved_level")
-ROW_FINGERPRINT = re.compile(r"fingerprint ([0-9a-f]{12}) · level ([a-z]+)")
-VERDICT_LINE = re.compile(r"^\s*(?:[-*+]\s+)?[*_]*verdict[*_]*\s*:[*_\s]*([A-Za-z]*)(.*)$", re.I)
+ROW_FINGERPRINT = re.compile(
+    r"· fingerprint ([0-9a-f]{12}) · level ([a-z]+)(?: · assurance lowered [a-z]+ → [a-z]+)?\s*$")
+VERDICT_LINE = re.compile(r"^\s*(?:(?:[-*+]|\d+[.)])\s+)?[*_]*verdict[*_]*\s*:[*_\s]*([A-Za-z]*)(.*)$", re.I)
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build",
              ".tox", ".mypy_cache", ".pytest_cache", "target", ".next"}
 CHANGE_KEYS = ["id", "title", "type", "size", "assurance", "status", "capabilities", "created"]
@@ -594,8 +595,13 @@ class Project:
         state = self.constitution_state()
         if state["changed"] and state["approved_level"]:
             return state["approved_level"]
-        level = state["fm"].get("assurance", "internal")
-        return level if level in LEVELS else (state["approved_level"] or "internal")
+        level = state["fm"].get("assurance", "")
+        if level in LEVELS:
+            return level
+        if state["approved_level"]:
+            return state["approved_level"]
+        raise SddError(f"the constitution's assurance level '{level or '(missing)'}' is not one of: "
+                       f"{', '.join(LEVELS)}")
 
     def active(self):
         if not self.active_file.exists():

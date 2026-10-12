@@ -1655,6 +1655,26 @@ class VerdictStandardTests(Base):
         self.verification("Verdict: PASS\n\n```\nVerdict: GAPS\n```\n")
         self.accepted()
 
+    def test_REQ_APR_001_B4_numbered_dot_gaps_after_pass_refused(self):
+        self.verification("Verdict: PASS\n\n1. Verdict: GAPS — F4\n")
+        self.refused("GAPS — F4")
+
+    def test_REQ_APR_001_B5_numbered_paren_gaps_after_pass_refused(self):
+        self.verification("Verdict: PASS\n\n1) Verdict: GAPS — F4\n")
+        self.refused("GAPS — F4")
+
+    def test_REQ_APR_001_B6_table_row_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\n| Verdict | PASS |\n| --- | --- |\n")
+        self.refused("GAPS — F1")
+
+    def test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\nThe final Verdict: PASS was expected\n")
+        self.refused("GAPS — F1")
+
+    def test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\n<!-- Verdict: PASS -->\n")
+        self.refused("GAPS — F1")
+
     def test_REQ_APR_001_N3_latest_gaps_after_pass_refused(self):
         self.verification("Verdict: PASS\n\nVerdict: GAPS — F2\n")
         self.refused("GAPS — F2")
@@ -1852,12 +1872,16 @@ class ConstitutionFingerprintTests(ConstitutionTests):
     def test_REQ_APR_002_B2_extra_whitespace_ignored(self):
         self.approve()
         self.edit("No production code", "No  production   code")
+        before = self.c.read_text()
         self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
 
     def test_REQ_APR_002_B3_hand_added_row_ignored(self):
         self.approve()
         self.edit("| --- | --- | --- |", "| --- | --- | --- |\n| constitution | 2026-10-12 | hand-written |")
+        before = self.c.read_text()
         self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
 
     def test_REQ_APR_002_N4_earlier_version_not_flagged(self):
         self.as_earlier_version()
@@ -1873,6 +1897,35 @@ class ConstitutionFingerprintTests(ConstitutionTests):
         self.assertIsNotNone(fingerprint_in(text))
         self.assertIn(f"· fingerprint {fingerprint_in(text)} ·", last_approval_row(text))
         self.assertNotIn("changed since approval", self.status())
+
+    def test_REQ_APR_002_N9_quoted_older_note_is_ignored(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: production")
+        self.repo.ok("approve", "constitution", "--evidence",
+                     "Operator: raise it (previous note: · fingerprint 0123456789ab · level prototype)")
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.status_json()["assurance"], "production")
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "production")
+
+    def test_REQ_APR_002_N10_newest_fingerprinted_row_is_the_reference(self):
+        self.approve()
+        self.edit(f"fingerprint: {fingerprint_in(self.c.read_text())}\n", "")
+        self.c.write_text(self.c.read_text().rstrip("\n") + "\n| constitution | 2026-10-12 | hand-written |\n")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_S5_front_matter_fingerprint_is_the_fallback(self):
+        self.approve()
+        text = self.c.read_text()
+        self.c.write_text("\n".join(l for l in text.splitlines() if "· fingerprint " not in l) + "\n")
+        self.edit("assurance: internal", "assurance: prototype")
+        out = self.status()
+        self.assertIn("changed since approval", out)
+        self.assertIn("internal (prototype pending approval)", out)
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "internal")
 
     def test_REQ_APR_002_S4_never_approved_blocks_nothing(self):
         cid = self.mini_ready()
@@ -1959,6 +2012,32 @@ class ApprovedLevelTests(ConstitutionTests):
         self.repo.ok("new", "demo", "--title", "Demo")
         self.assertEqual(self.assurance_of("0001-demo"), "prototype")
         self.assertEqual(self.c.read_text(), before)
+
+    def assert_four_levels(self, out):
+        self.assertIn("prodution", out)
+        for level in ("prototype", "internal", "production", "critical"):
+            self.assertIn(level, out)
+
+    def test_REQ_APR_003_N4_invalid_level_refused_by_new(self):
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("new", "demo", "--title", "Demo")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
+        self.assertFalse((self.repo.root / "specs/changes/0001-demo").exists())
+
+    def test_REQ_APR_003_N5_invalid_level_refused_by_status(self):
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
+
+    def test_REQ_APR_003_N6_invalid_level_refused_by_check(self):
+        self.as_earlier_version()
+        self.mini_ready()
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
 
     def test_REQ_APR_003_S4_earlier_version_first_approval_records_level(self):
         self.as_earlier_version()

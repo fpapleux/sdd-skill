@@ -311,58 +311,58 @@ levels, new, check and status shall refuse with an error naming the four levels.
   - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S4_earlier_version_first_approval_records_level
   - red: AssertionError: unexpectedly None
   - green: ok (Ran 39 tests in 2.609s, OK; full suite 194 OK)
-- [ ] T40 REQ-APR-002.B2 Assert that status rewrites nothing (verify finding F1)
-  - test:
-  - red:
-  - green:
-- [ ] T41 REQ-APR-002.B3 Assert that status rewrites nothing (verify finding F2)
-  - test:
-  - red:
-  - green:
-- [ ] T42 REQ-APR-001.B4 Numbered '1.' GAPS after PASS refused
-  - test:
-  - red:
-  - green:
-- [ ] T43 REQ-APR-001.B5 Numbered '1)' GAPS after PASS refused
-  - test:
-  - red:
-  - green:
-- [ ] T44 REQ-APR-001.B6 Table row is not a verdict line
-  - test:
-  - red:
-  - green:
-- [ ] T45 REQ-APR-001.B7 Mid-line mention is not a verdict line
-  - test:
-  - red:
-  - green:
-- [ ] T46 REQ-APR-001.B8 Commented verdict is not a verdict line
-  - test:
-  - red:
-  - green:
-- [ ] T47 REQ-APR-002.N9 Only the trailing note in Evidence counts
-  - test:
-  - red:
-  - green:
-- [ ] T48 REQ-APR-002.N10 Newest fingerprinted row is the reference
-  - test:
-  - red:
-  - green:
-- [ ] T49 REQ-APR-002.S5 Front-matter fingerprint is the fallback reference
-  - test:
-  - red:
-  - green:
-- [ ] T50 REQ-APR-003.N4 Invalid level refused by new
-  - test:
-  - red:
-  - green:
-- [ ] T51 REQ-APR-003.N5 Invalid level refused by status
-  - test:
-  - red:
-  - green:
-- [ ] T52 REQ-APR-003.N6 Invalid level refused by check
-  - test:
-  - red:
-  - green:
+- [x] T40 REQ-APR-002.B2 Assert that status rewrites nothing (verify finding F1)
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B2_extra_whitespace_ignored
+  - red: pre-existing — status never rewrote the constitution; this task adds the missing file-unchanged assertion (Verifier F1)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T41 REQ-APR-002.B3 Assert that status rewrites nothing (verify finding F2)
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B3_hand_added_row_ignored
+  - red: pre-existing — status never rewrote the constitution; this task adds the missing file-unchanged assertion (Verifier F2)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T42 REQ-APR-001.B4 Numbered '1.' GAPS after PASS refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B4_numbered_dot_gaps_after_pass_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T43 REQ-APR-001.B5 Numbered '1)' GAPS after PASS refused
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B5_numbered_paren_gaps_after_pass_refused
+  - red: AssertionError: 0 != 1 : 0001-durations: results approved → verified
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T44 REQ-APR-001.B6 Table row is not a verdict line
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B6_table_row_is_not_a_verdict
+  - red: pre-existing — table rows were already skipped by the verdict reader; the scenario now pins it (Verifier F7)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T45 REQ-APR-001.B7 Mid-line mention is not a verdict line
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict
+  - red: pre-existing — mid-line mentions already failed the anchored verdict pattern; now pinned (Verifier F7)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T46 REQ-APR-001.B8 Commented verdict is not a verdict line
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict
+  - red: pre-existing — comments were already stripped before verdicts are read; now pinned (Verifier F7)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T47 REQ-APR-002.N9 Only the trailing note in Evidence counts
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N9_quoted_older_note_is_ignored
+  - red: AssertionError: 'changed since approval' unexpectedly found in 'project assurance: prototype (production pending approval)\nthe constitution changed s
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T48 REQ-APR-002.N10 Newest fingerprinted row is the reference
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N10_newest_fingerprinted_row_is_the_reference
+  - red: pre-existing — the newest fingerprinted row was already the reference; now pinned (Verifier F7)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T49 REQ-APR-002.S5 Front-matter fingerprint is the fallback reference
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S5_front_matter_fingerprint_is_the_fallback
+  - red: pre-existing — the front-matter fallback existed since the first implementation pass; amendment A1 specified it (Verifier F5)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T50 REQ-APR-003.N4 Invalid level refused by new
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N4_invalid_level_refused_by_new
+  - red: AssertionError: 0 != 1 : created specs/changes/0001-demo/spec.md (size: mini, assurance: internal)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T51 REQ-APR-003.N5 Invalid level refused by status
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N5_invalid_level_refused_by_status
+  - red: AssertionError: 0 != 1 : project assurance: internal (constitution not approved)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
+- [x] T52 REQ-APR-003.N6 Invalid level refused by check
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N6_invalid_level_refused_by_check
+  - red: AssertionError: 0 != 1 : check 0001-demo (stage: plan, assurance: internal)
+  - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->
