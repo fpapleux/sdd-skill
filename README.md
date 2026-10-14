@@ -24,10 +24,13 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v1 in progress.** The `mini` and `standard` sizes work end to end
-> at every assurance level, including spec locking, amendments and defect
-> changes. The `full` size, an independent reviewer, and extra verification for
-> high-assurance work are on the [roadmap](#roadmap).
+> **Status: v1 in progress, version 0.15.0.** The `mini` and `standard` sizes
+> work end to end at every assurance level, with spec locking, amendments,
+> defect changes and a Spec Critic. Since 0.8.0, an approval covers exactly
+> what was approved: the results gate needs a PASS verdict, and edits to an
+> approved constitution are caught. SDD is now developed with SDD. Next up:
+> subagent fan-out. See the [release notes](RELEASE_NOTES.md) and the
+> [roadmap](#roadmap).
 
 ---
 
@@ -42,7 +45,7 @@ the code, verifies the result against the spec, and merges the change into a
 - [Working with existing code](#working-with-existing-code)
 - [Reference](#reference)
 - [Current limitations](#current-limitations)
-- [Roadmap](#roadmap)
+- [Roadmap](#roadmap) · [Release notes](RELEASE_NOTES.md)
 - [FAQ](#faq)
 - [Development](#development)
 - [Acknowledgements](#acknowledgements) · [License](#license)
@@ -423,6 +426,8 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   testing and property-based tests aren't built yet. For now, run `verify` in
   a fresh session.
 - No `analyze`, `baseline` or `harden` phases yet.
+- No subagents yet: independent review means you open a fresh session and
+  run `clarify` or `verify` there. Subagent fan-out is the next increment.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
@@ -436,7 +441,22 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
 | **v2** | Opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
 
-The full design rationale is in [sdd-skill-study.md](sdd-skill-study.md).
+v1 is built in increments, each one an SDD change from increment 4 on:
+
+| # | Increment | State |
+| --- | --- | --- |
+| 1 | `amend` and `bug`; the approved spec is locked | done (0.2) |
+| 2 | `standard` size with spec, plan and results gates | done (0.3) |
+| 3 | `clarify` and the Spec Critic | done (0.4) |
+| — | Defect 0001: approval integrity (PASS verdict, constitution fingerprint) | done (0.8–0.13) |
+| 4 | Subagent fan-out: prime orchestrator, role tiers, read-only Critic and Verifier subagents, scripted verification evidence | next |
+| 5 | `design` depth with the Architect, `analyze`, `next` | planned |
+| 6 | Releases and deploy | planned |
+| 7 | `production` assurance: blocking diff coverage, adversarial probe | planned |
+| 8 | `harden <capability> --to <level>` | planned |
+
+What each version changed is in [RELEASE_NOTES.md](RELEASE_NOTES.md). The
+full design rationale is in [sdd-skill-study.md](sdd-skill-study.md).
 
 ## FAQ
 
@@ -496,9 +516,13 @@ python3 -m unittest tests.test_sdd     # the script's test suite
 - Every release-candidate build raises BUILD.
 - MAJOR becomes 1 when v1 is complete.
 
-The skill is developed with its own discipline. Script changes start with a
-failing test, and each release is dogfooded end to end by a fresh agent that
-reads only `SKILL.md`. Issues and pull requests are welcome; please include a
+The skill is developed with its own discipline. Since 0.5.0 this repository
+runs SDD on itself at `production` assurance (see `specs/`), using a pinned
+copy of the tool that is separate from the code being changed. Script changes
+start with a failing test, every new rule is broken on purpose once to prove
+a test catches it, and review and verification run in fresh sessions.
+Dogfood runs by a fresh agent that reads only `SKILL.md` follow the larger
+increments. Issues and pull requests are welcome; please include a
 failing test for script changes.
 
 ## Acknowledgements
