@@ -330,6 +330,11 @@ A blank is an error, and so is a lazy "not needed".
 - every ticked task has red evidence that shows a failure, and green
   evidence;
 - before verification passes, every scenario is named in a **test file**;
+- `approve results` and `advance verified` need the Verifier's latest
+  verdict to be PASS;
+- the approved constitution is fingerprinted: later edits are reported, block
+  the gates, and take effect (including a lowered assurance level, recorded as
+  such) only when you re-approve them;
 - a change can't leave `draft` without a recorded approval, a `standard`
   change passes its spec, plan and results gates in order, and a blocked
   change can only return to where it was;
@@ -427,7 +432,7 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
 
 | Version | Adds |
 | --- | --- |
-| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; `analyze`; `bug`, `amend` and `harden` phases; `production` assurance: blocking diff coverage, adversarial probing |
+| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; `analyze`; `bug`, `amend` and `harden` phases; install options offered as a choice; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback); `production` assurance: blocking diff coverage, adversarial probing |
 | **v2** | Fresh-context Critic and Verifier subagents (Claude Code) and a fresh-session protocol (Codex); opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
 
@@ -485,6 +490,11 @@ python3 -m unittest tests.test_sdd     # the script's test suite
 | `tests/test_sdd.py` | Tests for `sdd.py`, including failure cases |
 | `docs/two-dials.html` / `.pdf` | The two-dials guide. Rebuild with `weasyprint docs/two-dials.html docs/two-dials.pdf`, and keep the README section in sync. |
 | `sdd-skill-study.md` | Design study: rationale, landscape review, decisions |
+
+**Versioning:** `MAJOR.MINOR.BUILD`, recorded in `skill/sdd/SKILL.md`.
+- Every push raises MINOR and resets BUILD.
+- Every release-candidate build raises BUILD.
+- MAJOR becomes 1 when v1 is complete.
 
 The skill is developed with its own discipline. Script changes start with a
 failing test, and each release is dogfooded end to end by a fresh agent that

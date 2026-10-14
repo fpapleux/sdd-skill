@@ -118,9 +118,12 @@ class Repo:
         text = pattern.sub(lambda m: m.group(1) + body + "\n", text, count=1)
         path.write_text(text)
 
-    def fill(self, change_id, reqs=VALID_REQS, gaps="- None\n", design_and_tasks=VALID_TASKS):
+    def fill(self, change_id, reqs=VALID_REQS, gaps="- None\n", design_and_tasks=VALID_TASKS,
+             verdict="PASS"):
         self.set_section(change_id, "Requirements", reqs)
         self.set_section(change_id, "Known gaps", gaps)
+        if verdict:  # since REQ-APR-001, verified needs the Verifier's PASS verdict
+            self.set_section(change_id, "Verification", f"Verdict: {verdict}\n")
         # Design notes section body is followed by the Tasks section we inject.
         path = self.spec(change_id)
         text = path.read_text()
@@ -824,6 +827,8 @@ class DogfoodFixTests(Base):
     # B5: approving the constitution again is labelled as such.
     def test_constitution_reapproval_is_labelled(self):
         self.repo.ok("approve", "constitution", "--evidence", "first")
+        c = self.repo.root / "specs/constitution.md"  # since REQ-APR-002, re-approval needs a change
+        c.write_text(c.read_text().replace("## Approvals", "10. A new rule.\n\n## Approvals", 1))
         out = self.repo.ok("approve", "constitution", "--evidence", "second")
         self.assertIn("re-approval", out)
         text = (self.repo.root / "specs/constitution.md").read_text()
@@ -1160,6 +1165,8 @@ class StandardTests(Base):
         self.repo.ok("advance", "verifying")
         if tests:
             self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        # since REQ-APR-001, the results gate needs the Verifier's PASS verdict
+        set_file_section(self.f("verification.md"), "Verification", "Verdict: PASS\n")
 
     # layout
     def test_new_standard_creates_a_change_folder(self):
@@ -1560,6 +1567,508 @@ class ClarifyGateTests(Base):
         set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
         data = json.loads(self.repo.ok("status", "--json"))
         self.assertIn("approve", data["next"])
+
+
+# ---------------------------------------------------------------- change 0001-approval-integrity (REQ-APR-*)
+
+def fingerprint_in(text):
+    match = re.search(r"(?m)^fingerprint: ([0-9a-f]{12})$", text)
+    return match.group(1) if match else None
+
+
+def last_approval_row(text):
+    rows = [l for l in text.split("## Approvals", 1)[1].splitlines()
+            if l.startswith("| ") and not l.startswith("| Gate") and not l.startswith("| ---")]
+    return rows[-1] if rows else ""
+
+
+class VerdictStandardTests(Base):
+    """REQ-APR-001: the standard results gate reads the Verifier's verdict."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--size", "standard",
+                     "--capability", "duration=DUR")
+        self.dir = self.repo.root / "specs/changes/0001-durations"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        set_file_section(self.dir / "design.md", "Test strategy", "- Test command: `python3 -m unittest`\n")
+        self.repo.ok("advance", "designed")
+        set_file_section(self.dir / "tasks.md", "Tasks", STD_DONE_TASKS)
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+
+    def verification(self, body):
+        set_file_section(self.dir / "verification.md", "Verification", body)
+
+    def status_of(self):
+        return re.search(r"^status: (\S+)", (self.dir / "proposal.md").read_text(), re.M).group(1)
+
+    def results_rows(self):
+        return (self.dir / "proposal.md").read_text().count("| results |")
+
+    def accepted(self):
+        out = self.repo.ok("approve", "results", "--evidence", "ok")
+        self.assertEqual(self.status_of(), "verified")
+        self.assertEqual(self.results_rows(), 1)
+        return out
+
+    def refused(self, *expected):
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1, out)
+        for text in expected:
+            self.assertIn(text, out)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.results_rows(), 0)
+        return out
+
+    def test_REQ_APR_001_S1_pass_verdict_accepted(self):
+        self.verification("- Tests: 2 passed\n\nVerdict: PASS\n")
+        self.accepted()
+
+    def test_REQ_APR_001_R1_gaps_verdict_refused(self):
+        self.verification("- Tests: 2 passed\n\nVerdict: GAPS — F1 open: weak test for N1\n")
+        self.refused("GAPS — F1 open")
+
+    def test_REQ_APR_001_N1_no_verdict_refused(self):
+        self.verification("- Tests: 2 passed\n")
+        self.refused("no verdict")
+
+    def test_REQ_APR_001_N2_unknown_verdict_refused(self):
+        self.verification("Verdict: maybe\n")
+        self.refused("PASS", "GAPS", "maybe")
+
+    def test_REQ_APR_001_B1_lowercase_with_trailing_text_accepted(self):
+        self.verification("Verdict: pass — 0 findings\n")
+        self.accepted()
+
+    def test_REQ_APR_001_B2_emphasised_later_gaps_refused(self):
+        self.verification("Verdict: PASS\n\n**Verdict:** GAPS — F3\n")
+        self.refused("GAPS")
+
+    def test_REQ_APR_001_B3_verdict_in_code_block_ignored(self):
+        self.verification("Verdict: PASS\n\n```\nVerdict: GAPS\n```\n")
+        self.accepted()
+
+    def test_REQ_APR_001_B4_numbered_dot_gaps_after_pass_refused(self):
+        self.verification("Verdict: PASS\n\n1. Verdict: GAPS — F4\n")
+        self.refused("GAPS — F4")
+
+    def test_REQ_APR_001_B5_numbered_paren_gaps_after_pass_refused(self):
+        self.verification("Verdict: PASS\n\n1) Verdict: GAPS — F4\n")
+        self.refused("GAPS — F4")
+
+    def test_REQ_APR_001_B6_table_row_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\n| Verdict | PASS |\n| --- | --- |\n")
+        self.refused("GAPS — F1")
+
+    def test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\nThe final Verdict: PASS was expected\n")
+        self.refused("GAPS — F1")
+
+    def test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict(self):
+        self.verification("Verdict: GAPS — F1\n\n<!-- reviewer draft\nVerdict: PASS\nend of draft -->\n")
+        self.refused("GAPS — F1")
+
+    def test_REQ_APR_001_N3_latest_gaps_after_pass_refused(self):
+        self.verification("Verdict: PASS\n\nVerdict: GAPS — F2\n")
+        self.refused("GAPS — F2")
+
+    def test_REQ_APR_001_S2_latest_pass_after_gaps_accepted(self):
+        self.verification("Verdict: GAPS\n\nVerdict: PASS\n")
+        self.accepted()
+
+    def test_REQ_APR_001_N6_passed_is_an_unknown_verdict(self):
+        self.verification("- Tests: 2 passed\n\nVerdict: PASSED\n")
+        self.refused("PASS", "GAPS", "PASSED")
+
+    def test_REQ_APR_001_N4_missing_verification_file_refused(self):
+        (self.dir / "verification.md").unlink()
+        self.refused("no verdict")
+
+
+class VerdictMiniTests(Base):
+    """REQ-APR-001: the mini verified step reads the Verifier's verdict."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.cid = self.new()
+        self.repo.fill(self.cid, design_and_tasks=DONE_TASKS)
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+
+    def status_of(self):
+        return re.search(r"^status: (\S+)", self.repo.spec(self.cid).read_text(), re.M).group(1)
+
+    def refused(self, verification, expected):
+        self.repo.set_section(self.cid, "Verification", verification)
+        before = self.repo.spec(self.cid).read_text()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1, out)
+        self.assertIn(expected, out)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.repo.spec(self.cid).read_text(), before)
+
+    def test_REQ_APR_001_S3_mini_pass_accepted(self):
+        self.repo.set_section(self.cid, "Verification", "Verdict: PASS\n")
+        self.repo.ok("advance", "verified")
+        self.assertEqual(self.status_of(), "verified")
+
+    def test_REQ_APR_001_R2_mini_gaps_refused(self):
+        self.refused("Verdict: GAPS — weak N1\n", "GAPS")
+
+    def test_REQ_APR_001_N5_mini_no_verdict_refused(self):
+        self.refused("- Tests: 2 passed\n", "no verdict")
+
+
+class ConstitutionTests(Base):
+    """Shared helpers for REQ-APR-002 and REQ-APR-003."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.c = self.repo.root / "specs/constitution.md"
+
+    def approve(self):
+        return self.repo.ok("approve", "constitution", "--evidence", "Operator: ok")
+
+    def edit(self, old, new):
+        text = self.c.read_text()
+        assert old in text, old
+        self.c.write_text(text.replace(old, new, 1))
+
+    def add_rule(self):
+        self.edit("## Approvals", "10. Anything goes.\n\n## Approvals")
+
+    def status(self):
+        return self.repo.ok("status")
+
+    def status_json(self):
+        return json.loads(self.repo.ok("status", "--json"))
+
+    def as_earlier_version(self, level="internal"):
+        """A constitution approved before fingerprints existed."""
+        self.edit("approved: no", "approved: yes")
+        if level != "internal":
+            self.edit("assurance: internal", f"assurance: {level}")
+        self.edit("| --- | --- | --- |", "| --- | --- | --- |\n| constitution | 2026-10-01 | old approval |")
+
+    def mini_ready(self, slug="demo"):
+        self.repo.ok("new", slug, "--title", "Demo", "--capability", "duration=DUR")
+        cid = sorted(p.name for p in (self.repo.root / "specs/changes").iterdir() if p.is_dir())[-1]
+        self.repo.fill(cid)
+        return cid
+
+    def assurance_of(self, cid):
+        return re.search(r"^assurance: (\S+)", self.repo.spec(cid).read_text(), re.M).group(1)
+
+
+class ConstitutionFingerprintTests(ConstitutionTests):
+    """REQ-APR-002: constitution changes after approval are detected."""
+
+    def test_REQ_APR_002_S1_approval_records_fingerprint(self):
+        self.approve()
+        text = self.c.read_text()
+        fp = fingerprint_in(text)
+        self.assertIsNotNone(fp)
+        self.assertIn("approved_level: internal", text)
+        self.assertTrue(last_approval_row(text).endswith(f"· fingerprint {fp} · level internal |"))
+        self.assertNotIn("changed since approval", self.status())
+
+    def test_REQ_APR_002_R1_status_reports_change(self):
+        self.approve()
+        self.add_rule()
+        out = self.status()
+        self.assertIn("changed since approval", out)
+        self.assertIn("sdd approve", out)
+        data = self.status_json()
+        self.assertTrue(data["constitution_changed"])
+        self.assertTrue(data["constitution_approved"])
+
+    def test_REQ_APR_002_N1_plan_gate_refused_while_changed(self):
+        self.approve()
+        cid = self.mini_ready()
+        self.add_rule()
+        before = self.repo.spec(cid).read_text()
+        code, out = self.repo.run("approve", "plan", "--evidence", "ok")
+        self.assertEqual(code, 1, out)
+        self.assertIn("changed since approval", out)
+        self.assertEqual(self.repo.spec(cid).read_text(), before)
+
+    def test_REQ_APR_002_N5_check_fails_while_changed(self):
+        self.approve()
+        self.mini_ready()
+        self.add_rule()
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1, out)
+        self.assertIn("changed since approval", out)
+
+    def test_REQ_APR_002_N6_advance_verified_refused_while_changed(self):
+        self.approve()
+        cid = self.mini_ready()
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.set_section(cid, "Verification", "Verdict: PASS\n")
+        self.add_rule()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1, out)
+        self.assertIn("changed since approval", out)
+        self.assertIn("status: verifying", self.repo.spec(cid).read_text())
+
+    def test_REQ_APR_002_S2_reapproval_clears_change(self):
+        self.approve()
+        self.add_rule()
+        self.approve()
+        text = self.c.read_text()
+        row = last_approval_row(text)
+        self.assertIn("| constitution (re-approval) |", row)
+        self.assertIn(f"· fingerprint {fingerprint_in(text)} ·", row)
+        self.assertNotIn("changed since approval", self.status())
+
+    def test_REQ_APR_002_N2_unchanged_reapproval_refused(self):
+        self.approve()
+        before = self.c.read_text()
+        code, out = self.repo.run("approve", "constitution", "--evidence", "again")
+        self.assertEqual(code, 1, out)
+        self.assertIn("nothing changed since approval", out)
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_N3_edited_fingerprint_reported(self):
+        self.approve()
+        self.edit(f"fingerprint: {fingerprint_in(self.c.read_text())}", "fingerprint: 000000000000")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_N7_deleted_fingerprint_reported(self):
+        self.approve()
+        self.edit(f"fingerprint: {fingerprint_in(self.c.read_text())}\n", "")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_N8_broken_front_matter_reported(self):
+        self.approve()
+        lines = self.c.read_text().splitlines(keepends=True)
+        self.c.write_text("".join(l for i, l in enumerate(lines) if not (l == "---\n" and i < 8)))
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_B1_blank_lines_and_comments_ignored(self):
+        self.approve()
+        self.edit("## Approvals", "\n\n<!-- a reviewer's note -->\n\n## Approvals")
+        before = self.c.read_text()
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_B2_extra_whitespace_ignored(self):
+        self.approve()
+        self.edit("No production code", "No  production   code")
+        before = self.c.read_text()
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_B4_rewrapped_rule_is_a_change(self):
+        self.approve()
+        self.edit("No production code without", "No production code\nwithout")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_B3_hand_added_row_ignored(self):
+        self.approve()
+        self.edit("| --- | --- | --- |", "| --- | --- | --- |\n| constitution | 2026-10-12 | hand-written |")
+        before = self.c.read_text()
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_N4_earlier_version_not_flagged(self):
+        self.as_earlier_version()
+        self.add_rule()
+        before = self.c.read_text()
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_S3_earlier_version_gets_fingerprint(self):
+        self.as_earlier_version()
+        self.approve()
+        text = self.c.read_text()
+        self.assertIsNotNone(fingerprint_in(text))
+        self.assertIn(f"· fingerprint {fingerprint_in(text)} ·", last_approval_row(text))
+        self.assertNotIn("changed since approval", self.status())
+
+    def test_REQ_APR_002_N9_quoted_older_note_is_ignored(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: production")
+        self.repo.ok("approve", "constitution", "--evidence",
+                     "Operator: raise it (previous note: · fingerprint 0123456789ab · level prototype)")
+        self.assertNotIn("changed since approval", self.status())
+        self.assertEqual(self.status_json()["assurance"], "production")
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "production")
+
+    def test_REQ_APR_002_N10_newest_fingerprinted_row_is_the_reference(self):
+        self.approve()
+        self.edit(f"fingerprint: {fingerprint_in(self.c.read_text())}\n", "")
+        self.c.write_text(self.c.read_text().rstrip("\n") + "\n| constitution | 2026-10-12 | hand-written |\n")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
+    def test_REQ_APR_002_S5_front_matter_fingerprint_is_the_fallback(self):
+        self.approve()
+        text = self.c.read_text()
+        self.c.write_text("\n".join(l for l in text.splitlines() if "· fingerprint " not in l) + "\n")
+        self.edit("assurance: internal", "assurance: prototype")
+        out = self.status()
+        self.assertIn("changed since approval", out)
+        self.assertIn("internal (prototype pending approval)", out)
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "internal")
+
+    def test_REQ_APR_002_S4_never_approved_blocks_nothing(self):
+        cid = self.mini_ready()
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.assertIn("status: planned", self.repo.spec(cid).read_text())
+
+
+class ApprovedLevelTests(ConstitutionTests):
+    """REQ-APR-003: the approved assurance level stays in force."""
+
+    def test_REQ_APR_003_S1_approved_level_applies(self):
+        self.approve()
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "internal")
+
+    def test_REQ_APR_003_R1_lowered_level_not_in_force(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: prototype")
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "internal")
+        self.assertIn("internal (prototype pending approval)", self.status())
+        data = self.status_json()
+        self.assertEqual(data["assurance"], "internal")
+        self.assertEqual(data["assurance_pending"], "prototype")
+
+    def test_REQ_APR_003_N3_explicit_lower_level_refused_while_pending(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: prototype")
+        code, out = self.repo.run("new", "demo", "--title", "Demo", "--assurance", "prototype")
+        self.assertEqual(code, 1, out)
+        self.assertIn("lower than the project level 'internal'", out)
+        self.assertFalse((self.repo.root / "specs/changes/0001-demo").exists())
+
+    def test_REQ_APR_003_S2_reapproval_records_lowering(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: prototype")
+        self.approve()
+        self.assertTrue(last_approval_row(self.c.read_text())
+                        .endswith("· assurance lowered internal → prototype |"))
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "prototype")
+
+    def test_REQ_APR_003_N1_invalid_or_missing_level_refused(self):
+        self.approve()
+        for broken in ("assurance: sloppy\n", ""):
+            with self.subTest(broken=broken or "(deleted)"):
+                text = self.c.read_text()
+                self.c.write_text(re.sub(r"(?m)^assurance: .*\n", broken, text, count=1))
+                before = self.c.read_text()
+                code, out = self.repo.run("approve", "constitution", "--evidence", "ok")
+                self.assertEqual(code, 1, out)
+                for level in ("prototype", "internal", "production", "critical"):
+                    self.assertIn(level, out)
+                self.assertEqual(self.c.read_text(), before)
+                data = self.status_json()
+                self.assertEqual(data["assurance"], "internal")
+                self.c.write_text(text)
+
+    def test_REQ_APR_003_B1_raised_level_not_in_force(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: production")
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "internal")
+        self.assertIn("internal (production pending approval)", self.status())
+
+    def test_REQ_APR_003_B2_raised_level_approved_without_note(self):
+        self.approve()
+        self.edit("assurance: internal", "assurance: production")
+        self.approve()
+        self.assertNotIn("lowered", last_approval_row(self.c.read_text()))
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "production")
+
+    def test_REQ_APR_003_B3_unchanged_level_approved_without_note(self):
+        self.approve()
+        self.add_rule()
+        self.approve()
+        self.assertNotIn("lowered", last_approval_row(self.c.read_text()))
+
+    def test_REQ_APR_003_N2_earlier_version_uses_front_matter_level(self):
+        self.as_earlier_version()
+        self.edit("assurance: internal", "assurance: prototype")
+        before = self.c.read_text()
+        self.repo.ok("new", "demo", "--title", "Demo")
+        self.assertEqual(self.assurance_of("0001-demo"), "prototype")
+        self.assertEqual(self.c.read_text(), before)
+
+    def assert_four_levels(self, out):
+        self.assertIn("prodution", out)
+        for level in ("prototype", "internal", "production", "critical"):
+            self.assertIn(level, out)
+
+    def test_REQ_APR_003_N4_invalid_level_refused_by_new(self):
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("new", "demo", "--title", "Demo")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
+        self.assertFalse((self.repo.root / "specs/changes/0001-demo").exists())
+
+    def test_REQ_APR_003_N5_invalid_level_refused_by_status(self):
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
+
+    def test_REQ_APR_003_N6_invalid_level_refused_by_check(self):
+        self.as_earlier_version()
+        self.mini_ready()
+        self.edit("assurance: internal", "assurance: prodution")
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1, out)
+        self.assert_four_levels(out)
+
+    def test_REQ_APR_003_N7_missing_level_refused_by_new(self):
+        text = self.c.read_text()
+        self.assertIn("approved: no", text)
+        self.c.write_text(re.sub(r"^assurance: .*\n", "", text, count=1, flags=re.M))
+        code, out = self.repo.run("new", "demo", "--title", "Demo")
+        self.assertEqual(code, 1, out)
+        self.assertIn("(missing)", out)
+        for level in ("prototype", "internal", "production", "critical"):
+            self.assertIn(level, out)
+        self.assertFalse((self.repo.root / "specs/changes/0001-demo").exists())
+
+    def test_REQ_APR_003_S4_earlier_version_first_approval_records_level(self):
+        self.as_earlier_version()
+        self.edit("assurance: internal", "assurance: prototype")
+        self.approve()
+        text = self.c.read_text()
+        self.assertIsNotNone(fingerprint_in(text))
+        self.assertIn("approved_level: prototype", text)
+        self.assertNotIn("lowered", last_approval_row(text))
 
 
 if __name__ == "__main__":

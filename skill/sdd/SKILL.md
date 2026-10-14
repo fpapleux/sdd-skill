@@ -3,7 +3,7 @@ name: sdd
 description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.13.0"
 ---
 
 # SDD — spec-driven development

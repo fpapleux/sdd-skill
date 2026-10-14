@@ -127,6 +127,11 @@ DEFECT_FIELDS = ("Symptom", "Reproduce", "Current behavior", "Expected behavior"
 DEFECT_FIELD = re.compile(r"^\s*[-*]\s*([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$")
 AMENDMENT_ENTRY = re.compile(r"^\s*[-*]\s*A\d+\b")
 LOCK_ERROR = "the spec changed since it was approved"
+CONSTITUTION_ERROR = "the constitution changed since approval"
+CONSTITUTION_BOOKKEEPING = ("approved", "fingerprint", "approved_level")
+ROW_FINGERPRINT = re.compile(
+    r"· fingerprint ([0-9a-f]{12}) · level ([a-z]+)(?: · assurance lowered [a-z]+ → [a-z]+)?\s*$")
+VERDICT_LINE = re.compile(r"^\s*(?:(?:[-*+]|\d+[.)])\s+)?[*_]*verdict[*_]*\s*:[*_\s]*([A-Za-z]*)(.*)$", re.I)
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build",
              ".tox", ".mypy_cache", ".pytest_cache", "target", ".next"}
 CHANGE_KEYS = ["id", "title", "type", "size", "assurance", "status", "capabilities", "created"]
@@ -491,6 +496,55 @@ def check_rounds(rounds: list, level: str, req_ids: set, err, warn) -> int:
     return unanswered
 
 
+def latest_verdict(section_text: str):
+    """(word, rest) of the last verdict line, ignoring fenced code, comments and tables."""
+    found, in_fence = None, False
+    for line in strip_comments(section_text).splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            continue
+        if in_fence or stripped.startswith("|"):
+            continue
+        match = VERDICT_LINE.match(line)
+        if match:
+            found = (match.group(1), match.group(2).rstrip())
+    return found
+
+
+def verdict_problem(change: str):
+    """None when the Verifier's latest verdict is PASS; otherwise why it can't be verified."""
+    found = latest_verdict(sections(strip_comments(change)).get("Verification", ""))
+    if found is None:
+        return "no verdict in the Verification section (the Verifier ends it with 'Verdict: PASS' or 'Verdict: GAPS')"
+    word, rest = found
+    if word.upper() == "PASS":
+        return None
+    if word.upper() == "GAPS":
+        return f"the latest verdict is '{word}{rest}'"
+    return f"verdict '{word or '(empty)'}' is neither PASS nor GAPS"
+
+
+def constitution_fingerprint(text: str) -> str:
+    """12 hex digits over the rules; bookkeeping keys, Approvals, comments and spacing excluded."""
+    match = FRONT_MATTER.match(text)
+    head, body = ([], text) if not match else (
+        [l for l in match.group(1).splitlines()
+         if l.split(":", 1)[0].strip() not in CONSTITUTION_BOOKKEEPING], text[match.end():])
+    body = re.sub(r"^## Approvals\n.*?(?=^## |\Z)", "", strip_comments(body), flags=re.S | re.M)
+    lines = [" ".join(line.split()) for line in head + body.splitlines() if line.strip()]
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()[:12]
+
+
+def approval_rows(text: str) -> list:
+    rows = []
+    for line in sections(strip_comments(text)).get("Approvals", "").splitlines():
+        cells = table_cells(line) if line.strip().startswith("|") else []
+        if cells and not is_separator(cells) and cells[0].lower() != "gate":
+            rows.append(cells)
+    return rows
+
+
 # ---------------------------------------------------------------- project
 
 class Project:
@@ -519,8 +573,35 @@ class Project:
         if not self.constitution.exists():
             raise SddError("this repository is not initialized: run `sdd init` first")
 
+    def constitution_state(self) -> dict:
+        """Compare the constitution with its newest fingerprinted approval."""
+        text = self.constitution.read_text()
+        fm = read_front_matter(text)
+        current = constitution_fingerprint(text)
+        reference = None
+        for cells in approval_rows(text):
+            match = ROW_FINGERPRINT.search(cells[-1])
+            if match:
+                reference = (match.group(1), match.group(2))
+        if reference is None and re.fullmatch(r"[0-9a-f]{12}", fm.get("fingerprint", "")):
+            reference = (fm["fingerprint"], fm.get("approved_level", ""))
+        changed = bool(reference) and (current != reference[0] or fm.get("fingerprint") != reference[0])
+        approved_level = reference[1] if reference and reference[1] in LEVELS else None
+        return {"text": text, "fm": fm, "current": current, "reference": reference,
+                "changed": changed, "approved_level": approved_level}
+
     def level(self) -> str:
-        return read_front_matter(self.constitution.read_text()).get("assurance", "internal")
+        """The project level: the approved one while the constitution has unapproved edits."""
+        state = self.constitution_state()
+        if state["changed"] and state["approved_level"]:
+            return state["approved_level"]
+        level = state["fm"].get("assurance", "")
+        if level in LEVELS:
+            return level
+        if state["approved_level"]:
+            return state["approved_level"]
+        raise SddError(f"the constitution's assurance level '{level or '(missing)'}' is not one of: "
+                       f"{', '.join(LEVELS)}")
 
     def active(self):
         if not self.active_file.exists():
@@ -683,6 +764,9 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
             if STATUS_ORDER.index(effective) >= STATUS_ORDER.index(first) and gate not in recorded:
                 err(f"status is '{status}' but no {gate} approval is recorded in ## Approvals "
                     f"(only `sdd.py approve {gate}` may pass that gate)")
+    if project.constitution_state()["changed"]:
+        err(f"{CONSTITUTION_ERROR}: review the edits, then sdd approve (constitution); "
+            "the gates refuse until then")
     locked = fm.get("spec_hash")
     if locked and effective not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked:
         err(f"{LOCK_ERROR} (Intent, Defect, Scope, Requirements or Known gaps): log it under "
@@ -980,6 +1064,8 @@ def project_text_files(project: Project) -> dict:
 def next_step(project: Project, fm: dict, report: Report) -> str:
     status = fm.get("status", "draft")
     counts = report.counts
+    if project.constitution_state()["changed"]:
+        return f"{CONSTITUTION_ERROR}: review it, then sdd approve"
     if fm.get("size") == "standard":
         step = next_step_standard(status, counts, report)
         if step:
@@ -1150,15 +1236,22 @@ def cmd_new(project: Project, args) -> int:
 
 def cmd_status(project: Project, args) -> int:
     project.require_init()
-    constitution = read_front_matter(project.constitution.read_text())
-    data = {"initialized": True, "assurance": constitution.get("assurance"),
+    state = project.constitution_state()
+    constitution = state["fm"]
+    effective = project.level()
+    pending = constitution.get("assurance") if state["changed"] and \
+        constitution.get("assurance") != effective else None
+    data = {"initialized": True, "assurance": effective, "assurance_pending": pending,
             "constitution_approved": constitution.get("approved") == "yes",
+            "constitution_changed": state["changed"],
             "change": None, "in_flight": project.in_flight(), "notes": [],
             "capabilities": [{"name": info["name"], "prefix": prefix, "requirements": len(info["reqs"])}
                              for prefix, info in sorted(project.registry().items(),
                                                         key=lambda kv: kv[1]["name"])]}
     if not data["constitution_approved"]:
         data["notes"].append("constitution not approved yet (sdd approve)")
+    if state["changed"]:
+        data["notes"].append(f"{CONSTITUTION_ERROR}: review the edits, then sdd approve")
     active = project.active()
     if active and project.main_file(active):
         path = project.main_file(active)
@@ -1176,8 +1269,11 @@ def cmd_status(project: Project, args) -> int:
     if args.json:
         print(json.dumps(data, indent=2))
         return 0
-    print(f"project assurance: {data['assurance']}"
+    shown = data["assurance"] + (f" ({pending} pending approval)" if pending else "")
+    print(f"project assurance: {shown}"
           + ("" if data["constitution_approved"] else " (constitution not approved)"))
+    if state["changed"]:
+        print(f"{CONSTITUTION_ERROR}: review the edits, then sdd approve")
     change = data["change"]
     if change:
         sc, tk = change["scenarios"], change["tasks"]
@@ -1221,11 +1317,24 @@ def cmd_approve(project: Project, args) -> int:
     if not evidence:
         raise SddError("approval needs --evidence: the operator's words and where they were given")
     if args.gate == "constitution":
-        again = read_front_matter(project.constitution.read_text()).get("approved") == "yes"
-        text = set_front_matter(project.constitution.read_text(), "approved", "yes")
+        state = project.constitution_state()
+        text, fm = state["text"], state["fm"]
+        level = fm.get("assurance", "")
+        if level not in LEVELS:
+            raise SddError(f"the constitution's assurance level '{level or '(missing)'}' is not one of: "
+                           f"{', '.join(LEVELS)}")
+        if state["reference"] and not state["changed"]:
+            raise SddError("nothing changed since approval: the constitution matches its last approval")
+        again = fm.get("approved") == "yes"
+        note = f"· fingerprint {state['current']} · level {level}"
+        previous = state["approved_level"]
+        if previous and LEVELS.index(level) < LEVELS.index(previous):
+            note += f" · assurance lowered {previous} → {level}"
+        for key, value in (("approved", "yes"), ("fingerprint", state["current"]), ("approved_level", level)):
+            text = set_front_matter(text, key, value)
         project.constitution.write_text(text)
         append_approval(project.constitution, "constitution (re-approval)" if again else "constitution",
-                        evidence)
+                        f"{evidence} {note}")
         print("constitution re-approval recorded" if again else "constitution approved")
         return 0
     path = project.current(args.change)
@@ -1260,6 +1369,9 @@ def cmd_approve(project: Project, args) -> int:
         if not report.ok:
             print(report.render())
             raise SddError("results approval refused: the verify check fails")
+        problem = verdict_problem(change_text(path))
+        if problem:
+            raise SddError(f"results approval refused: {problem}")
         append_approval(path, "results", evidence)
         path.write_text(set_front_matter(path.read_text(), "status", "verified"))
         print(f"{path.parent.name}: results approved → verified")
@@ -1347,6 +1459,9 @@ def cmd_advance(project: Project, args) -> int:
         if not report.ok:
             print(report.render())
             raise SddError("cannot mark verified: the verify check fails")
+        problem = verdict_problem(change_text(path))
+        if problem:
+            raise SddError(f"cannot mark verified: {problem}")
     path.write_text(set_front_matter(text, "status", target))
     if target == "abandoned" and project.active() == path.parent.name:
         project.set_active(None)

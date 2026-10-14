@@ -761,8 +761,13 @@ capabilities, size caps).
 | 2 | `standard` foundation | A change folder (`proposal`, `spec-delta`, `clarifications`, `design`, `tasks`, `verification`), the full status machine, 3 gates, and multi-file `check` and `archive`. |
 | 3 | `clarify` + Spec Critic | A coverage audit, at most 5 questions per round, a clarifications log, and the spec gate. |
 | 4 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 2**. |
-| 5 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
-| 6 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+| 5 | Releases and deploy | Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
+| 6 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
+| 7 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+
+**Scope update (operator, 2026-10-10):** releases and deploy are part of v1,
+as increment 5. From increment 4 on, each increment is an SDD change in this
+repository's own `specs/`.
 
 **Progress:**
 - Increment 1 merged in fpapleux/sdd-skill#1.
@@ -770,7 +775,7 @@ capabilities, size caps).
   a change folder read as one spec, a status machine with clarifying,
   spec-approved and designed, the spec, plan and results gates with
   integrity checks, a basic `design` phase and the Architect role.
-- Increment 3 is in PR #3. It adds `clarify` and the Spec Critic:
+- Increment 3 merged in fpapleux/sdd-skill#3. It adds `clarify` and the Spec Critic:
   - Each review round is recorded in a fixed format: a verdict per
     requirement, typed findings that each need an outcome, and at most 5
     answered questions.
@@ -779,6 +784,95 @@ capabilities, size caps).
     have audited every current requirement.
   - New `sdd.py round` command. In this increment, same-session rounds at
     `production`+ only get a warning.
+
+## 14. Delivery, and SDD on itself (2026-10-09)
+
+The operator added `sdd-deployment-approach.md`, a proposal for formalizing
+build, package and deployment in SDD. It was evaluated against SDD practice:
+
+- **No surveyed SDD tool covers delivery.** Spec Kit, Kiro, OpenSpec, BMAD
+  and GSD all stop at implement and verify.
+- **Its principles come from continuous delivery and software supply-chain
+  practice:** build once, promote the same bytes, approve a digest, keep
+  receipts and rollback evidence.
+- **These fit SDD**, provided delivery behavior is specified, evidence is
+  enforced by the script, and approvals are gated.
+
+| # | Decision | Outcome |
+| --- | --- | --- |
+| 15 | Where building and packaging happen | **At release level.** A release bundles verified changes, and its package is built once. The verified, approved and deployed digest are the same. |
+| 16 | Deployment | **A separate lifecycle,** with an approval bound to the target, digest and configuration, and a receipt. Archive means "spec work closed". The living spec describes **approved** behavior (this corrects the earlier "shipped" wording in §4 and the Spec Steward role). |
+| 17 | Install method | **A choice offered to the user.** The Architect presents fitting options with their trade-offs, the operator selects one, and the selection is recorded. Never a fixed "native installer" rule. |
+| 18 | SDD on itself | **Yes, from increment 4,** with three conditions: a pinned tool copy separate from the development checkout, assurance `production`, and requirements limited to script-testable behavior. |
+| 19 | Versioning (2026-10-10) | **`MAJOR.MINOR.BUILD`**: every push raises MINOR and resets BUILD; every release-candidate build raises BUILD; MAJOR becomes 1 when v1 is complete; history v0 = 0.1, increments 1–3 = 0.2–0.4; the first push under the rule is 0.5.0. This repo's rule. As a product, SDD lets each project choose its scheme, but a rebuild always gets a new build number (increment 5). |
+
+The private product pilot that the note originally included was removed from
+the public repository and from its history.
+
+## 15. Backlog: future changes (recorded 2026-10-12)
+
+### Fresh-session roles and cost tuning (operator request, 2026-10-12)
+
+Some steps must run without the author's context for independence. Others
+benefit from a fresh context for throughput. Mechanical steps shouldn't use a
+model at all. Costs measured in this session:
+
+| Run | Tokens | Time |
+| --- | --- | --- |
+| Critic | 136k | 9 min |
+| Verifier | 178k | 14 min (much of it mechanical replay and mutation) |
+| Dogfood run | 159k | 14 min |
+| Research | 88k | 7 min |
+
+| Step | Why a fresh context | Recommended runner |
+| --- | --- | --- |
+| Spec Critic (`clarify`) | **Independence**: required at `production`+ | Subagent on the strongest model, high effort. Scope its input to the change, the constitution, related capability specs and a short code map. Cap the report length. |
+| Verifier (`verify`), semantic audit | **Independence**: required at `production`+ | Subagent on a strong model, medium–high effort. It does only the semantic work: scenario-to-test matching, and checking the reasons given for pre-existing tasks. |
+| Verifier, mechanical evidence | Independence, but it's deterministic | **Scripts, no model:** replay new tests against the base commit, run the mutation list, collect coverage and red/green evidence. |
+| Dogfood and eval runs | Tests the skill as an outsider would use it | Subagent on the model adopters typically use, medium effort, with a scripted operator. Later, the same run on two models (v3 evals). |
+| Implementer, per task group | Throughput and context hygiene on long changes; `[P]` tasks run in parallel worktrees | Subagent on a mid-tier model, medium effort, for routine tasks. Strongest model for design-heavy ones. |
+| Spec Steward review after archive | Fresh eyes for duplicates and contradictions | Subagent on a mid-tier model, low–medium effort. |
+| Architect failure-mode review (increment 4) | A second opinion on the design | Subagent on the strongest model, high effort. |
+| Research and docs lookups | Keeps the main context clean | Subagent on a mid-tier model, medium effort. |
+
+**Levers:**
+- Model choice per subagent (`.claude/agents/*.md` or the Agent tool's `model`);
+- `maxTurns`;
+- read-only tool sets;
+- scoped inputs and a capped report length;
+- background runs, in parallel where independent;
+- per-subagent reasoning effort, where the host supports it.
+
+On Codex, or wherever subagents aren't available, the portable fallback is a
+fresh session that the operator starts on a chosen model.
+
+**Prompt hygiene:** the orchestrator's prompt must point to the method files
+and must not carry the orchestrator's own conclusions or instructions that
+contradict the role. This session's Critic prompt broke that rule (`→ fixed:`
+for unapplied fixes).
+
+### Other recorded items
+- **Design depth** (planned): delivery profiles, install options offered as a
+  choice, failure modes the design introduces, `analyze`, `next`.
+- **Friction from change 0001:**
+  - a prose line starting with `## ` silently splits a section, so warn about
+    headings that aren't known section names;
+  - add a "proposed, not yet applied" outcome for Critic findings;
+  - count open questions per question, not per marker;
+  - turn the evidence capture and the mutation check (hand-scripted in this
+    change) into repository tooling;
+  - **clause coverage in `analyze`**: every clause of a requirement statement
+    needs a scenario. In change 0001, verification rounds 1 and 2 each found
+    stated rules with no test (F7, F9–F11) that this check would have
+    caught before implementation;
+  - `amend` from `verifying` with new scenarios is a dead end, because the
+    verify-stage check demands tests for them. `amend.md` should say "move
+    back to `implementing` first";
+  - verification round 2 cost 200k tokens and 17 minutes, most of it
+    mechanical (old-code replay, 27 mutants), which supports scripting those
+    parts.
+- **Releases and deploy** (increment 5), **`production` assurance** (6),
+  **`harden`** (7).
 
 ## Sources
 
