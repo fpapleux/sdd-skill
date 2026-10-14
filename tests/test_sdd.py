@@ -1672,7 +1672,7 @@ class VerdictStandardTests(Base):
         self.refused("GAPS — F1")
 
     def test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict(self):
-        self.verification("Verdict: GAPS — F1\n\n<!-- Verdict: PASS -->\n")
+        self.verification("Verdict: GAPS — F1\n\n<!-- reviewer draft\nVerdict: PASS\nend of draft -->\n")
         self.refused("GAPS — F1")
 
     def test_REQ_APR_001_N3_latest_gaps_after_pass_refused(self):
@@ -1682,6 +1682,10 @@ class VerdictStandardTests(Base):
     def test_REQ_APR_001_S2_latest_pass_after_gaps_accepted(self):
         self.verification("Verdict: GAPS\n\nVerdict: PASS\n")
         self.accepted()
+
+    def test_REQ_APR_001_N6_passed_is_an_unknown_verdict(self):
+        self.verification("- Tests: 2 passed\n\nVerdict: PASSED\n")
+        self.refused("PASS", "GAPS", "PASSED")
 
     def test_REQ_APR_001_N4_missing_verification_file_refused(self):
         (self.dir / "verification.md").unlink()
@@ -1876,6 +1880,13 @@ class ConstitutionFingerprintTests(ConstitutionTests):
         self.assertNotIn("changed since approval", self.status())
         self.assertEqual(self.c.read_text(), before)
 
+    def test_REQ_APR_002_B4_rewrapped_rule_is_a_change(self):
+        self.approve()
+        self.edit("No production code without", "No production code\nwithout")
+        before = self.c.read_text()
+        self.assertIn("changed since approval", self.status())
+        self.assertEqual(self.c.read_text(), before)
+
     def test_REQ_APR_002_B3_hand_added_row_ignored(self):
         self.approve()
         self.edit("| --- | --- | --- |", "| --- | --- | --- |\n| constitution | 2026-10-12 | hand-written |")
@@ -2038,6 +2049,17 @@ class ApprovedLevelTests(ConstitutionTests):
         code, out = self.repo.run("check")
         self.assertEqual(code, 1, out)
         self.assert_four_levels(out)
+
+    def test_REQ_APR_003_N7_missing_level_refused_by_new(self):
+        text = self.c.read_text()
+        self.assertIn("approved: no", text)
+        self.c.write_text(re.sub(r"^assurance: .*\n", "", text, count=1, flags=re.M))
+        code, out = self.repo.run("new", "demo", "--title", "Demo")
+        self.assertEqual(code, 1, out)
+        self.assertIn("(missing)", out)
+        for level in ("prototype", "internal", "production", "critical"):
+            self.assertIn(level, out)
+        self.assertFalse((self.repo.root / "specs/changes/0001-demo").exists())
 
     def test_REQ_APR_003_S4_earlier_version_first_approval_records_level(self):
         self.as_earlier_version()

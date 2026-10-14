@@ -339,10 +339,10 @@ levels, new, check and status shall refuse with an error naming the four levels.
   - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict
   - red: pre-existing — mid-line mentions already failed the anchored verdict pattern; now pinned (Verifier F7)
   - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
-- [ ] T46 REQ-APR-001.B8 Multi-line commented verdict is not a verdict line (reopened by A2)
-  - test:
-  - red:
-  - green:
+- [x] T46 REQ-APR-001.B8 Multi-line commented verdict is not a verdict line (reopened by A2)
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict
+  - red: pre-existing — comment stripping already spans lines; test now uses a multi-line comment and fails when stripping is removed (F8)
+  - green: ok (Ran 4 tests in 0.335s, OK; full suite 208 OK)
 - [x] T47 REQ-APR-002.N9 Only the trailing note in Evidence counts
   - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N9_quoted_older_note_is_ignored
   - red: AssertionError: 'changed since approval' unexpectedly found in 'project assurance: prototype (production pending approval)\nthe constitution changed s
@@ -367,18 +367,18 @@ levels, new, check and status shall refuse with an error naming the four levels.
   - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N6_invalid_level_refused_by_check
   - red: AssertionError: 0 != 1 : check 0001-demo (stage: plan, assurance: internal)
   - green: ok (Ran 50 tests in 3.429s, OK; full suite 205 OK)
-- [ ] T53 REQ-APR-001.N6 PASSED is an unknown verdict word
-  - test:
-  - red:
-  - green:
-- [ ] T54 REQ-APR-002.B4 Re-wrapping a rule is a change
-  - test:
-  - red:
-  - green:
-- [ ] T55 REQ-APR-003.N7 Missing level refused by new
-  - test:
-  - red:
-  - green:
+- [x] T53 REQ-APR-001.N6 PASSED is an unknown verdict word
+  - test: tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N6_passed_is_an_unknown_verdict
+  - red: pre-existing — the verdict word is the whole letter run, so PASSED was already unknown; fails under a prefix-match mutant (F9)
+  - green: ok (Ran 4 tests in 0.335s, OK; full suite 208 OK)
+- [x] T54 REQ-APR-002.B4 Re-wrapping a rule is a change
+  - test: tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B4_rewrapped_rule_is_a_change
+  - red: pre-existing — the fingerprint already hashes line by line; fails when lines are joined with spaces (F10)
+  - green: ok (Ran 4 tests in 0.335s, OK; full suite 208 OK)
+- [x] T55 REQ-APR-003.N7 Missing level refused by new
+  - test: tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N7_missing_level_refused_by_new
+  - red: pre-existing — the level check from T50 already names '(missing)'; fails when a missing level defaults to internal (F11)
+  - green: ok (Ran 4 tests in 0.335s, OK; full suite 208 OK)
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->
