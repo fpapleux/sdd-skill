@@ -121,7 +121,7 @@ Each profile records OS/version, architecture/runtime ABI, builder, package/depe
    version scheme in its constitution. This repository uses
    `MAJOR.MINOR.BUILD`: MINOR goes up per push, BUILD per candidate build.
 8. **SDD develops itself from here.** It uses a pinned tool copy, assurance
-   `production`, and requirements limited to script-testable behavior. The
-   first change is increment 4 (design depth, `analyze`, `next`) together
-   with delivery profiles and install options. Releases and deploy come in
-   the next change.
+   `production`, and requirements limited to script-testable behavior.
+   Increment 4 is subagent fan-out. Increment 5 is design depth (`analyze`,
+   `next`) together with delivery profiles and install options. Releases and
+   deploy come in increment 6.
