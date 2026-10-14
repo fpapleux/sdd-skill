@@ -4,7 +4,7 @@ title: Results gate ignores the verdict; constitution edits go undetected
 type: defect
 size: mini
 assurance: production
-status: implementing
+status: archived
 capabilities: approvals=APR
 created: 2026-10-12
 spec_hash: 39f4dbbb3da4
@@ -520,6 +520,80 @@ Findings:
 Verdict: GAPS — 5 findings (F8 recurs from F7 and goes to the operator, with no tasks added; F9–F11 await the operator, A or B; F12 needs a Design-notes edit)
 
 - Operator decision (2026-10-12): amendment A2 for F8–F12 (B8 rewritten, B6 documented as defense in depth, F9–F11 scenarios added, Scope corrected, F12 Design notes fixed); the round-2 Verifier re-checks after implementation.
+
+### Round 3
+
+- Date: 2026-10-14 · Verifier: fresh session (production)
+- Tests: `python3 -m unittest tests.test_sdd` → Ran 208 tests, OK
+- Check: `sdd.py check --stage verify` (pinned tool) → OK · 0 errors · 24 warnings (the 24 pre-existing tasks). The development copy's check also reports OK. Status moved with `SDD advance verifying` (implementing → verifying).
+- Scope of A2: df3c168..fd65ac9 changes tests/test_sdd.py and the spec only; sdd.py is unchanged, so T46 and T53–T55 are correctly pre-existing.
+- Coverage: coverage.py and pytest-cov are not installed. Line coverage with the standard-library `trace` module, on a scratch copy: the only uncovered line in the change's code is still sdd.py:602, the dead defensive line from round 2. Nothing new.
+- Pre-existing (T46, T53, T54, T55): each reason holds. A mutant breaks each rule, and only the named test fails: no comment stripping (in latest_verdict and verdict_problem) → B8; a prefix match on PASS → N6; normalized lines joined with spaces → B4; a missing level defaulting to internal → N7. Removing only latest_verdict's inner strip is an equivalent mutant, because verdict_problem already strips comments.
+- Scope line (A2): at 0cafdc9, `level()` returned `get("assurance", "internal")`, so a missing level silently became internal, as the corrected Scope says.
+- Design notes: F12 is fixed (the front-matter fallback is described), and B6 is documented as defense in depth, as the operator decided in A2.
+- Givens and Thens for B8, N6, B4 and N7 checked against the tests: B8 uses a comment spanning lines with "Verdict: PASS" on its own line; N6 asserts exit 1, PASS, GAPS, verifying and no results row; B4 asserts the change note, exit 0 (`repo.ok`) and the file unchanged; N7 asserts approved: no, exit 1, "(missing)", the four levels and no change folder.
+
+| Scenario | Test | Result | Then fully asserted |
+| --- | --- | --- | --- |
+| REQ-APR-001.S1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S1_pass_verdict_accepted | pass | yes |
+| REQ-APR-001.R1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_R1_gaps_verdict_refused | pass | yes |
+| REQ-APR-001.N1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N1_no_verdict_refused | pass | yes |
+| REQ-APR-001.N2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N2_unknown_verdict_refused | pass | yes |
+| REQ-APR-001.B1 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B1_lowercase_with_trailing_text_accepted | pass | yes |
+| REQ-APR-001.B2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B2_emphasised_later_gaps_refused | pass | yes |
+| REQ-APR-001.B3 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B3_verdict_in_code_block_ignored | pass | yes |
+| REQ-APR-001.B4 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B4_numbered_dot_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.B5 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B5_numbered_paren_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.B6 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B6_table_row_is_not_a_verdict | pass | yes (asserts its Then; the Given can't fail on its own, documented as defense in depth by operator decision A2) |
+| REQ-APR-001.B7 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B7_mid_line_mention_is_not_a_verdict | pass | yes |
+| REQ-APR-001.B8 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_B8_commented_verdict_is_not_a_verdict | pass | yes |
+| REQ-APR-001.N3 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N3_latest_gaps_after_pass_refused | pass | yes |
+| REQ-APR-001.S2 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_S2_latest_pass_after_gaps_accepted | pass | yes |
+| REQ-APR-001.N6 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N6_passed_is_an_unknown_verdict | pass | yes |
+| REQ-APR-001.N4 | tests/test_sdd.py::VerdictStandardTests.test_REQ_APR_001_N4_missing_verification_file_refused | pass | yes |
+| REQ-APR-001.S3 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_S3_mini_pass_accepted | pass | yes |
+| REQ-APR-001.R2 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_R2_mini_gaps_refused | pass | yes |
+| REQ-APR-001.N5 | tests/test_sdd.py::VerdictMiniTests.test_REQ_APR_001_N5_mini_no_verdict_refused | pass | yes |
+| REQ-APR-002.S1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S1_approval_records_fingerprint | pass | yes |
+| REQ-APR-002.R1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_R1_status_reports_change | pass | yes |
+| REQ-APR-002.N1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N1_plan_gate_refused_while_changed | pass | yes |
+| REQ-APR-002.N5 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N5_check_fails_while_changed | pass | yes |
+| REQ-APR-002.N6 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N6_advance_verified_refused_while_changed | pass | yes |
+| REQ-APR-002.S2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S2_reapproval_clears_change | pass | yes |
+| REQ-APR-002.N2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N2_unchanged_reapproval_refused | pass | yes |
+| REQ-APR-002.N3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N3_edited_fingerprint_reported | pass | yes |
+| REQ-APR-002.N7 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N7_deleted_fingerprint_reported | pass | yes |
+| REQ-APR-002.N8 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N8_broken_front_matter_reported | pass | yes |
+| REQ-APR-002.B1 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B1_blank_lines_and_comments_ignored | pass | yes |
+| REQ-APR-002.B2 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B2_extra_whitespace_ignored | pass | yes |
+| REQ-APR-002.B3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B3_hand_added_row_ignored | pass | yes |
+| REQ-APR-002.B4 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_B4_rewrapped_rule_is_a_change | pass | yes |
+| REQ-APR-002.N4 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N4_earlier_version_not_flagged | pass | yes |
+| REQ-APR-002.S3 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S3_earlier_version_gets_fingerprint | pass | yes |
+| REQ-APR-002.S4 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S4_never_approved_blocks_nothing | pass | yes |
+| REQ-APR-002.N9 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N9_quoted_older_note_is_ignored | pass | yes |
+| REQ-APR-002.N10 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_N10_newest_fingerprinted_row_is_the_reference | pass | yes |
+| REQ-APR-002.S5 | tests/test_sdd.py::ConstitutionFingerprintTests.test_REQ_APR_002_S5_front_matter_fingerprint_is_the_fallback | pass | yes |
+| REQ-APR-003.S1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S1_approved_level_applies | pass | yes |
+| REQ-APR-003.R1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_R1_lowered_level_not_in_force | pass | yes |
+| REQ-APR-003.N3 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N3_explicit_lower_level_refused_while_pending | pass | yes |
+| REQ-APR-003.S2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S2_reapproval_records_lowering | pass | yes |
+| REQ-APR-003.N1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N1_invalid_or_missing_level_refused | pass | yes |
+| REQ-APR-003.B1 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B1_raised_level_not_in_force | pass | yes |
+| REQ-APR-003.B2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B2_raised_level_approved_without_note | pass | yes |
+| REQ-APR-003.B3 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_B3_unchanged_level_approved_without_note | pass | yes |
+| REQ-APR-003.N2 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N2_earlier_version_uses_front_matter_level | pass | yes |
+| REQ-APR-003.S4 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_S4_earlier_version_first_approval_records_level | pass | yes |
+| REQ-APR-003.N4 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N4_invalid_level_refused_by_new | pass | yes |
+| REQ-APR-003.N5 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N5_invalid_level_refused_by_status | pass | yes |
+| REQ-APR-003.N6 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N6_invalid_level_refused_by_check | pass | yes |
+| REQ-APR-003.N7 | tests/test_sdd.py::ApprovedLevelTests.test_REQ_APR_003_N7_missing_level_refused_by_new | pass | yes |
+
+Findings:
+- Round-2 findings: F8 is closed. B8 now fails when comment stripping is removed, and B6 is accepted as defense in depth (A2). F9 (N6), F10 (B4) and F11 (N7 and the Scope line) are resolved, and each is caught by its mutant. F12 is resolved in Design notes.
+- No new findings.
+
+Verdict: PASS — 0 open findings · 53 scenarios fully asserted · 208 tests OK
 
 ## Open questions
 - Q1 Should the mini verified step also require PASS? → A: yes, one rule for both sizes (operator, 2026-10-12)
