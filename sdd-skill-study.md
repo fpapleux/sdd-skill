@@ -683,11 +683,11 @@ change is a normal delta against it.
    *and* the same flow in Codex. Confirm how Codex handles frontmatter,
    arguments and subagents.
 2. **v1: make it anchored.** `clarify` (with Critic coverage audit),
-   `analyze`, `archive`, `bug`, `amend`, `harden`, living `capabilities/`,
+   subagent fan-out (role tiers, Critic and Verifier subagents), `analyze`, `archive`, `bug`, `amend`, `harden`, living `capabilities/`,
    `standard` size, `production` assurance (six core categories, branch
    coverage on the diff, adversarial probe), size caps.
-3. **v2: independence and enforcement.** Claude subagents (`extras/claude`),
-   fresh-session protocol for Codex, pre-commit gate, CI recipe, `baseline`.
+3. **v2: enforcement.** Pre-commit gate, CI recipe, `baseline`. (Claude
+   subagents and the fresh-session protocol moved into v1: decision 11.)
 4. **v3: distribution and quality.** Claude plugin + marketplace, `full`
    size, `critical` assurance (concurrency, decision tables, property-based
    tests, mutation testing per stack), eval suite run
@@ -748,9 +748,9 @@ capabilities, size caps).
 
 | # | Decision | Outcome |
 | --- | --- | --- |
-| 11 | Independence at `production`+ | **Fresh-session protocol in v1.** The Critic and Verifier run in a new session and hand off only through files, in both tools. Claude subagents stay in v2. |
+| 11 | Independence at `production`+ | **Fresh-session protocol in v1.** The Critic and Verifier run in a new session and hand off only through files, in both tools. **Revised 2026-10-14:** subagent fan-out moves into v1 as increment 4, because subagents drive adoption and performance. The fresh session stays the portable fallback. |
 | 12 | Blocking diff coverage | **Computed by `sdd.py`** from an lcov report plus the git diff. Each uncovered changed line or branch needs a scenario or a justification. |
-| 13 | How v1 is built | **Current discipline:** failing tests first for every script change, plus a dogfood run after increments 4 and 6. |
+| 13 | How v1 is built | **Current discipline:** failing tests first for every script change, plus a dogfood run after increments 4, 5 and 8 (operator, 2026-10-14). |
 | 14 | Publishing | **`v1` branch**, pushed as increments land, with one PR into `main` when v1 is done. |
 
 **Increments:**
@@ -760,13 +760,14 @@ capabilities, size caps).
 | 1 | `amend` + `bug` | The spec is locked at approval (a hash of the spec sections). Edits after that need a logged, approved amendment. `bug` creates a defect change: symptom, reproduction, current vs expected behavior, the violated REQ or "spec gap", root cause, and regression scenarios (`R1`…). |
 | 2 | `standard` foundation | A change folder (`proposal`, `spec-delta`, `clarifications`, `design`, `tasks`, `verification`), the full status machine, 3 gates, and multi-file `check` and `archive`. |
 | 3 | `clarify` + Spec Critic | A coverage audit, at most 5 questions per round, a clarifications log, and the spec gate. |
-| 4 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 2**. |
-| 5 | Releases and deploy | Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
-| 6 | `production` assurance | Fresh-session Critic and Verifier, lcov diff coverage that blocks, an adversarial probe, and the results gate. |
-| 7 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 3**. |
+| 4 | Subagent fan-out | The prime model orchestrates: it owns the operator conversation, the gates and the routing. Role files gain a tool-neutral tier (`strong`, `mid`, `light`), an effort level and a read-only flag; `extras/claude/agents` maps them to models. The Critic and Verifier run as read-only subagents on strong models. The Planner tags each task with a tier, and a task escalates one tier after two failed attempts. Mechanical verification evidence (replay against the base commit, mutations, coverage) moves into `sdd.py`. A fresh session stays the fallback in Codex. See §15. Followed by **dogfood run 2**. |
+| 5 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 3**. |
+| 6 | Releases and deploy | Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
+| 7 | `production` assurance | Blocking lcov diff coverage, an adversarial probe, and the results gate. |
+| 8 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 4**. |
 
 **Scope update (operator, 2026-10-10):** releases and deploy are part of v1,
-as increment 5. From increment 4 on, each increment is an SDD change in this
+as increment 6 since the 2026-10-14 renumbering (first planned as increment 5). From increment 4 on, each increment is an SDD change in this
 repository's own `specs/`.
 
 **Progress:**
@@ -804,7 +805,7 @@ build, package and deployment in SDD. It was evaluated against SDD practice:
 | 16 | Deployment | **A separate lifecycle,** with an approval bound to the target, digest and configuration, and a receipt. Archive means "spec work closed". The living spec describes **approved** behavior (this corrects the earlier "shipped" wording in §4 and the Spec Steward role). |
 | 17 | Install method | **A choice offered to the user.** The Architect presents fitting options with their trade-offs, the operator selects one, and the selection is recorded. Never a fixed "native installer" rule. |
 | 18 | SDD on itself | **Yes, from increment 4,** with three conditions: a pinned tool copy separate from the development checkout, assurance `production`, and requirements limited to script-testable behavior. |
-| 19 | Versioning (2026-10-10) | **`MAJOR.MINOR.BUILD`**: every push raises MINOR and resets BUILD; every release-candidate build raises BUILD; MAJOR becomes 1 when v1 is complete; history v0 = 0.1, increments 1–3 = 0.2–0.4; the first push under the rule is 0.5.0. This repo's rule. As a product, SDD lets each project choose its scheme, but a rebuild always gets a new build number (increment 5). |
+| 19 | Versioning (2026-10-10) | **`MAJOR.MINOR.BUILD`**: every push raises MINOR and resets BUILD; every release-candidate build raises BUILD; MAJOR becomes 1 when v1 is complete; history v0 = 0.1, increments 1–3 = 0.2–0.4; the first push under the rule is 0.5.0. This repo's rule. As a product, SDD lets each project choose its scheme, but a rebuild always gets a new build number (increment 6). |
 
 The private product pilot that the note originally included was removed from
 the public repository and from its history.
@@ -812,6 +813,8 @@ the public repository and from its history.
 ## 15. Backlog: future changes (recorded 2026-10-12)
 
 ### Fresh-session roles and cost tuning (operator request, 2026-10-12)
+
+Scheduled as v1 increment 4, subagent fan-out (operator, 2026-10-14).
 
 Some steps must run without the author's context for independence. Others
 benefit from a fresh context for throughput. Mechanical steps shouldn't use a
@@ -832,7 +835,7 @@ model at all. Costs measured in this session:
 | Dogfood and eval runs | Tests the skill as an outsider would use it | Subagent on the model adopters typically use, medium effort, with a scripted operator. Later, the same run on two models (v3 evals). |
 | Implementer, per task group | Throughput and context hygiene on long changes; `[P]` tasks run in parallel worktrees | Subagent on a mid-tier model, medium effort, for routine tasks. Strongest model for design-heavy ones. |
 | Spec Steward review after archive | Fresh eyes for duplicates and contradictions | Subagent on a mid-tier model, low–medium effort. |
-| Architect failure-mode review (increment 4) | A second opinion on the design | Subagent on the strongest model, high effort. |
+| Architect failure-mode review (increment 5) | A second opinion on the design | Subagent on the strongest model, high effort. |
 | Research and docs lookups | Keeps the main context clean | Subagent on a mid-tier model, medium effort. |
 
 **Levers:**
@@ -871,8 +874,8 @@ for unapplied fixes).
   - verification round 2 cost 200k tokens and 17 minutes, most of it
     mechanical (old-code replay, 27 mutants), which supports scripting those
     parts.
-- **Releases and deploy** (increment 5), **`production` assurance** (6),
-  **`harden`** (7).
+- **Subagent fan-out** (increment 4), **design depth** (5), **releases and
+  deploy** (6), **`production` assurance** (7), **`harden`** (8).
 
 ## Sources
 

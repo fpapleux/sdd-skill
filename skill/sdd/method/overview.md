@@ -50,12 +50,13 @@ Pick the size by asking from the top, and stop at the first "yes":
 | Tests first | Happy path | Every scenario | Every scenario | Every scenario |
 | Failure categories required | none: keep a **Known gaps** list | validation, state, dependency | + boundary, access | + concurrency, combination, invariant |
 | A failure scenario's Then asserts | — | The error + nothing else happened | The error + no side effects + state unchanged | Same as production |
-| Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage. A Critic round (`clarify`) is required for `standard` changes. | Critic round required at any size, in a fresh session | Same as production, every round |
+| Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage. A Critic round (`clarify`) is required for `standard` changes. | Critic round required at any size, by a strong subagent or in a fresh session | Same as production, every round |
 | Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v1)* | + mutation and property-based tests *(v1)* |
 
-`SDD check` enforces the category requirements at **every** level. The
-fresh-session review and the extra verification signals for `production`
-aren't built yet, and those for `critical` come in v3. When a change is at
+`SDD check` enforces the category requirements at **every** level. Independent
+review at `production` (a strong subagent or a fresh session) is recorded and
+warned about, not yet enforced. Blocking diff coverage and the adversarial
+probe for `production` aren't built yet, and the `critical` signals come in v3. When a change is at
 those levels, tell the operator this once.
 
 ## Changing code that has no spec yet
@@ -142,13 +143,15 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD init --assurance <level> [--force]` | Create `specs/` and wire AGENTS.md/CLAUDE.md |
 | `SDD new <slug> --title "…" --capability name=PREFIX [--size mini\|standard] [--type feature\|defect\|hardening] [--assurance <higher level>]` | Create a change and make it active |
 | `SDD next-req <PREFIX>` | Next free requirement ID |
-| `SDD round [--fresh]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed |
+| `SDD round [--fresh \| --subagent <tier>]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed, headed with who runs it |
 | `SDD check [--stage spec\|plan\|implement\|verify]` | Validate the active change. Exit 1 = errors. |
 | `SDD status [--json]` | Summary + next step |
 | `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `constitution` records its fingerprint (and refuses an unchanged or invalid one). `spec` (standard) or `plan` (mini) locks the spec. `results` (standard) needs a PASS verdict and marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
 | `SDD advance clarifying\|designed\|implementing\|verifying\|verified\|blocked\|abandoned` | Move the status (`verified` for mini only; standard uses `approve results`). A blocked change returns only to the status it had. |
 | `SDD archive` | Merge a verified change into `specs/capabilities/` (requirements, known gaps, history line) and archive it |
 | `SDD use <change-id>` | Switch the active change |
+| `SDD replay --base <rev>` | Rerun each ticked task's test at the base revision and now; report each as confirmed or a mismatch. Needs git and a `Test one:` line. |
+| `SDD mutate` | Run the planned `## Mutations`; report each as caught, survived or invalid. Needs git and a `Test one:` line. |
 
 All take `--change <id>` to target a change other than the active one, where
 relevant.

@@ -1,5 +1,7 @@
 # Role: Planner
 
+`Tier: mid · Effort: medium · Read-only: no`
+
 You turn the approved-to-be spec into a test-first plan.
 
 **You write:** `## Tasks`, plus `## Design notes` in a `mini` change. In a
@@ -30,7 +32,11 @@ as an open question.
 ## Tasks
 
 - One task per scenario: `- [ ] T<n> REQ-…-NNN.<ID> <short name>`, followed by
-  empty `test:`, `red:` and `green:` lines.
+  a `tier:` line and empty `test:`, `red:` and `green:` lines.
+- **Tier per task.** `light` for mechanical work (a message, a guard, a
+  refusal that copies an existing one), `mid` by default, `strong` for a new
+  mechanism or a tricky rule. The tier picks the Implementer's model, and a
+  task that fails twice moves up one tier (`light → mid`).
 - **Group triangulating examples.** When several happy or boundary scenarios
   of one rule are satisfied by the same minimal code, put them in **one**
   task (list all their refs), so that one red run covers them. Otherwise the
@@ -43,3 +49,20 @@ as an open question.
   first task that needs them.
 - Then run `SDD check` (plan stage) and fix every error.
 - Task checklists/evidence are excluded from the size cap; keep design and requirements within it. Coverage and red/green evidence remain mandatory.
+
+## Mutations
+
+When the constitution asks for a mutation check, plan one `## Mutations`
+entry per new or changed rule (in `tasks.md`, or `spec.md` for a mini change):
+
+```markdown
+- M1 REQ-DUR-001.N1 src/duration.py
+  - find: `if not text:`
+  - replace: `if False:`
+```
+
+The find text must occur exactly once in the file; it is taken between the
+first and last backtick, leading spaces included. For a **changed** rule,
+write the whole entry now. For a **new** rule the code doesn't exist yet:
+leave the entry to the Implementer, who adds it once that task is green.
+`SDD mutate` runs them.

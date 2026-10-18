@@ -3,7 +3,7 @@ name: sdd
 description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
-  version: "0.13.0"
+  version: "0.16.0"
 ---
 
 # SDD — spec-driven development
@@ -95,3 +95,32 @@ feature can be split into several `mini` changes.
 
   If two planned fixes for the same problem have failed, stop and report
   your analysis to the operator instead of trying a third.
+
+## 4. Orchestration
+
+You are the **prime model**. You keep the conversation with the operator,
+every gate and every `SDD approve`, and the routing. Where the host has
+subagents (in Claude Code, the Agent tool with a general-purpose subagent),
+hand each role's work to one:
+
+- **Hand-off by files.** Give it the phase file, the role file and the change
+  ID. It reads everything else from `specs/` and reports back in a few lines.
+- **Model by tier.** Each role file starts with `Tier · Effort · Read-only`.
+  Pass the tier's model: strong → `opus`, mid → `sonnet`, light → `haiku`,
+  and the effort where the host takes one. An Implementer runs on its task's
+  tier.
+- **Read-only roles** (Spec Critic, Verifier) are told to write nothing but
+  their own record. The host doesn't enforce this, so check the diff they
+  leave.
+- **Subagents never ask the operator and never approve.** Questions and gate
+  decisions come back to you: you ask, and you record the answer.
+- **One writer at a time.** Don't run tasks or roles on the same change in
+  parallel.
+- **Escalation.** When an Implementer fails the same task twice, add the next
+  tier to its tier line (`  - tier: light → mid`) and spawn it again on that
+  model.
+
+Where the host has no subagents (Codex), play each role yourself, in order.
+The Spec Critic and the Verifier then run in a fresh session (a new chat), as
+`clarify` and `verify` say.
+

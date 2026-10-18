@@ -41,18 +41,23 @@ Required at `prototype` (write "- None" if there are none). Optional otherwise. 
 
 ## Design notes
 <!-- Planner: just enough "how" for a small change: modules touched, approach,
-test strategy. Keep the test command line. -->
+test strategy. Keep the test command line; "Test one" runs a single test
+for sdd replay and sdd mutate, e.g. `python3 -m unittest {name}`. -->
 - Test command:
+- Test one:
 
 ## Tasks
 <!-- Planner: one task per scenario; schedule each negative next to its happy path.
 
 - [ ] T1 REQ-CHK-001.S1 Guest pays for a cart
+  - tier: mid
   - test:
   - red:
   - green:
 
-Implementer: fill test/red/green while working, then tick the box. -->
+Implementer: fill test/red/green while working, then tick the box.
+When the constitution asks for a mutation check, add a "## Mutations"
+section after the tasks (format: method/format.md). -->
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->

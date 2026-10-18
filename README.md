@@ -24,10 +24,15 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v1 in progress.** The `mini` and `standard` sizes work end to end
-> at every assurance level, including spec locking, amendments and defect
-> changes. The `full` size, an independent reviewer, and extra verification for
-> high-assurance work are on the [roadmap](#roadmap).
+> **Status: v1 in progress, version 0.16.0.** The `mini` and `standard` sizes
+> work end to end at every assurance level, with spec locking, amendments,
+> defect changes and a Spec Critic. Since 0.8.0, an approval covers exactly
+> what was approved: the results gate needs a PASS verdict, and edits to an
+> approved constitution are caught. Since 0.16.0, a prime model can hand each
+> role to a subagent on a model sized to the task, and the script replays red
+> evidence and runs planned mutations for the Verifier. SDD is developed with
+> SDD. Next up: design depth. See the [release notes](RELEASE_NOTES.md) and
+> the [roadmap](#roadmap).
 
 ---
 
@@ -42,7 +47,7 @@ the code, verifies the result against the spec, and merges the change into a
 - [Working with existing code](#working-with-existing-code)
 - [Reference](#reference)
 - [Current limitations](#current-limitations)
-- [Roadmap](#roadmap)
+- [Roadmap](#roadmap) · [Release notes](RELEASE_NOTES.md)
 - [FAQ](#faq)
 - [Development](#development)
 - [Acknowledgements](#acknowledgements) · [License](#license)
@@ -171,6 +176,27 @@ not through conversation.
 | **Spec Steward** | The living spec (via the script) | Accept behavior that was never approved |
 | **You (operator)** | Intent, answers, approvals | — |
 
+### Subagents
+
+Where the host has subagents (Claude Code), the model you talk to is the
+**prime model**. It keeps the conversation, the gates and every approval, and
+hands each role's work to a subagent that reads the rest from `specs/`.
+
+- **Model by tier.** Each role file states a tier, an effort and whether the
+  role is read-only. A task carries its own tier (`light`, `mid` or `strong`)
+  in the plan, and the Implementer runs on that model. A task that fails twice
+  moves up one tier.
+- **Independent review.** At `production` and above, the Spec Critic and the
+  Verifier run as strong subagents, recorded as `Critic: subagent (strong)` and
+  `Verifier: subagent (strong)`. The script warns when the record says
+  otherwise.
+- **Scripted evidence.** `sdd.py replay --base <rev>` reruns each ticked task's
+  test at the base revision and now, to confirm its red or pre-existing claim.
+  `sdd.py mutate` breaks each rule listed under `## Mutations` in a scratch
+  copy and checks that a test fails. Neither touches your working tree.
+- **Codex.** Without subagents, the same session plays each role in order, and
+  the Critic and Verifier run in a fresh session, as before.
+
 ### What it creates in your repository
 
 ```text
@@ -267,8 +293,8 @@ unsure between two, take the higher one.
 | **Tests first** | Happy path | Every scenario | Every scenario | Every scenario |
 | **Failure cases** | **None required.** A **Known gaps** list instead, one line per thing not handled | Bad input · wrong state or duplicates · failure of anything it calls | The above + boundaries · access rights (6 core categories) | The 6 core + concurrency · rule combinations · invariants |
 | **A failure test checks** | — | The error shown, and that nothing else happened | The error, no side effects, state unchanged | Same as production |
-| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage. `standard` changes get a Critic round. | Critic round at any size, in a fresh session (fresh session enforced later in v1) | Independent reviewer, every round *(v3)* |
-| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier: blocking coverage of changed code, plus probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v3)* |
+| **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage. `standard` changes get a Critic round. | Critic round at any size, by a strong subagent or in a fresh session (recorded, and the script warns otherwise) | Independent reviewer, every round *(v3)* |
+| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier (strong subagent or fresh session, recorded), with red evidence replayed and planned mutations run by the script; blocking coverage of changed code and probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v3)* |
 
 ### Same dials, different results
 
@@ -398,8 +424,8 @@ python3 ~/.claude/skills/sdd/scripts/sdd.py check --stage verify
 python3 ~/.claude/skills/sdd/scripts/sdd.py next-req DUR     # next free requirement ID
 ```
 
-Other commands: `init`, `new`, `approve`, `advance`, `archive`, `use`. Run
-`sdd.py --help` for details. Exit code `1` means errors were found.
+Other commands: `init`, `new`, `round`, `approve`, `advance`, `archive`, `use`,
+`replay --base <rev>` and `mutate`. Run `sdd.py --help` for details. Exit code `1` means errors were found.
 
 ### Rules the agent follows
 
@@ -419,10 +445,16 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   models; the extra safeguards (a design gate, contracts, decision records)
   come in v3.
 - The `production` and `critical` levels: the script enforces their failure
-  categories, but the independent reviewer, blocking coverage, mutation
-  testing and property-based tests aren't built yet. For now, run `verify` in
-  a fresh session.
+  categories and records who reviewed, but blocking coverage, the adversarial
+  probe and property-based tests aren't built yet. The independent reviewer is
+  recorded and warned about, not enforced.
 - No `analyze`, `baseline` or `harden` phases yet.
+- Subagents are an instruction to the host, not an enforced boundary: the
+  host doesn't stop a "read-only" subagent from writing, so check the diff.
+  The runner and tier in review records are written by the agent and not
+  verified. Without subagents (Codex), independent review means a fresh session.
+- `replay` and `mutate` need git and a `Test one:` line in the design, have no
+  time limit, and plan a mutation as a single-line find and replace.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
@@ -432,11 +464,26 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
 
 | Version | Adds |
 | --- | --- |
-| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; `analyze`; `bug`, `amend` and `harden` phases; install options offered as a choice; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback); `production` assurance: blocking diff coverage, adversarial probing |
-| **v2** | Fresh-context Critic and Verifier subagents (Claude Code) and a fresh-session protocol (Codex); opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
+| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; subagent fan-out (a prime model orchestrates; the Critic and Verifier run as read-only subagents on strong models, routine tasks on cheaper ones; a fresh session is the fallback in Codex); `analyze`; `bug`, `amend` and `harden` phases; install options offered as a choice; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback); `production` assurance: blocking diff coverage, adversarial probing |
+| **v2** | Opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
 
-The full design rationale is in [sdd-skill-study.md](sdd-skill-study.md).
+v1 is built in increments, each one an SDD change from increment 4 on:
+
+| # | Increment | State |
+| --- | --- | --- |
+| 1 | `amend` and `bug`; the approved spec is locked | done (0.2) |
+| 2 | `standard` size with spec, plan and results gates | done (0.3) |
+| 3 | `clarify` and the Spec Critic | done (0.4) |
+| — | Defect 0001: approval integrity (PASS verdict, constitution fingerprint) | done (0.8–0.13) |
+| 4 | Subagent fan-out: prime orchestrator, role tiers, read-only Critic and Verifier subagents, scripted verification evidence | done (0.14–0.16) |
+| 5 | `design` depth with the Architect, `analyze`, `next` | planned |
+| 6 | Releases and deploy | planned |
+| 7 | `production` assurance: blocking diff coverage, adversarial probe | planned |
+| 8 | `harden <capability> --to <level>` | planned |
+
+What each version changed is in [RELEASE_NOTES.md](RELEASE_NOTES.md). The
+full design rationale is in [sdd-skill-study.md](sdd-skill-study.md).
 
 ## FAQ
 
@@ -496,9 +543,14 @@ python3 -m unittest tests.test_sdd     # the script's test suite
 - Every release-candidate build raises BUILD.
 - MAJOR becomes 1 when v1 is complete.
 
-The skill is developed with its own discipline. Script changes start with a
-failing test, and each release is dogfooded end to end by a fresh agent that
-reads only `SKILL.md`. Issues and pull requests are welcome; please include a
+The skill is developed with its own discipline. Since 0.5.0 this repository
+runs SDD on itself at `production` assurance (see `specs/`), using a pinned
+copy of the tool that is separate from the code being changed. Script changes
+start with a failing test, every new rule is broken on purpose once to prove
+a test catches it, and review and verification run in fresh sessions or on
+strong subagents.
+Dogfood runs by a fresh agent that reads only `SKILL.md` follow the larger
+increments. Issues and pull requests are welcome; please include a
 failing test for script changes.
 
 ## Acknowledgements

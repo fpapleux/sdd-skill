@@ -1,0 +1,511 @@
+<!-- Planner: one task per scenario (group triangulating happy/boundary
+examples of one rule), each negative right after its happy path. -->
+
+## Tasks
+<!-- Tiers dogfood REQ-ORC-001; the pinned tool ignores tier lines. Where a
+"no warning" or "no error" scenario passes before the rule exists, its task comes
+after the first negative so that its red run is real. -->
+
+- [x] T1 REQ-ORC-001.S1 light mid strong tiers pass; status shows the counts
+  - tier: mid
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_S1_three_tiers_pass_and_status_counts_them
+  - red: AssertionError: 'tiers: 1 light, 1 mid, 1 strong' not found in 'project assurance: internal ...'
+  - green: Ran 1 test in 0.047s OK
+- [x] T2 REQ-ORC-001.S2 REQ-ORC-001.S3 an escalation chain counts as its last tier
+  - tier: mid
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_S2_escalation_counts_as_the_higher_tier
+  - red: AssertionError: {'light': 1} != {'light': 1, 'mid': 1} (and != {'light': 1, 'strong': 1}); FAILED (failures=2)
+  - green: Ran 3 tests in 0.17s OK (S2 and S3 tests)
+- [x] T3 REQ-ORC-001.N1 REQ-ORC-001.N3 unknown or capitalised tier refused
+  - tier: light
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_N1_unknown_tier_refused
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan) — 'cheap' and 'Light' accepted; FAILED (failures=2)
+  - green: Ran 5 tests in 0.18s OK (N1 and N3 tests)
+- [x] T4 REQ-ORC-001.N2 REQ-ORC-001.N5 REQ-ORC-001.B1 each escalation step goes up exactly one tier
+  - tier: mid
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_N2_downward_escalation_refused
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan) — strong → light, light → strong, mid → mid accepted; FAILED (failures=3)
+  - green: Ran 8 tests in 0.33s OK (N2, N5 and B1 tests)
+- [x] T5 REQ-ORC-001.N6 ASCII arrow refused
+  - tier: light
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_N6_ascii_arrow_refused
+  - red: AssertionError: 'an escalation is written with "→"' not found in "T1: tier 'light -> mid' is not one of: light, mid, strong"
+  - green: Ran 9 tests in 0.35s OK
+- [x] T6 REQ-ORC-001.N4 two tier lines refused
+  - tier: light
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_N4_two_tier_lines_refused
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan) — two tier lines accepted
+  - green: Ran 10 tests in 0.40s OK
+- [x] T7 REQ-ORC-001.B2 missing tier warns at the plan stage
+  - tier: light
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_B2_missing_tier_warns
+  - red: AssertionError: 'T1: no tier' not found in ''
+  - green: Ran 13 tests in 0.53s OK
+- [x] T8 REQ-ORC-001.B3 REQ-ORC-001.B4 status counts untiered tasks; no tiers line without tasks
+  - tier: light
+  - test: tests/test_sdd.py::TierTests.test_REQ_ORC_001_B3_status_counts_untiered_tasks
+  - red: pre-existing (after T1) — T1's tier_counts already counts tasks without a tier as untiered and adds the tiers key only when the change has tasks
+  - green: Ran 13 tests in 0.53s OK (B3 and B4 tests)
+- [x] T9 REQ-ORC-002.S1 round --subagent strong heads the round
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_S1_round_subagent_heads_the_round
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] (unrecognized --subagent)
+  - green: Ran 1 test in 0.04s OK
+- [x] T10 REQ-ORC-002.N1 round --subagent cheap is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_N1_unknown_subagent_tier_is_a_usage_error
+  - red: AssertionError: 0 != 2 : added Round 1 (subagent (cheap)) to .../clarifications.md
+  - green: Ran 2 tests in 0.10s OK
+- [x] T11 REQ-ORC-002.N2 --subagent with --fresh is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_N2_subagent_with_fresh_is_a_usage_error
+  - red: AssertionError: 0 != 2 : added Round 1 (subagent (strong)) to .../clarifications.md
+  - green: Ran 3 tests in 0.17s OK
+- [x] T12 REQ-ORC-002.N3 round --subagent after the spec gate points to amend
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_N3_round_after_spec_gate_points_to_amend
+  - red: pre-existing (after T9) — cmd_round's status guard already refuses past clarifying and points to sdd amend; T9 added the --subagent option the test passes
+  - green: Ran 4 tests in 0.22s OK
+- [x] T13 REQ-ORC-002.S2 a strong subagent round counts as independent
+  - tier: mid
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_S2_strong_subagent_round_is_independent
+  - red: AssertionError: Lists differ: ['  - Round 1 ran in the same session; at [88 chars]on)'] != []
+  - green: Ran 5 tests in 0.22s OK
+- [x] T14 REQ-ORC-002.N4 REQ-ORC-002.B2 REQ-ORC-002.B3 other subagent forms are not independent
+  - tier: mid
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_N4_hand_written_invalid_tier_not_independent
+  - red: AssertionError: 'runner' not found in '  - Round 1 ran in the same session; at production and above ...' (cheap, bare, mid); FAILED (failures=3)
+  - green: Ran 8 tests in 0.44s OK (N4, B2 and B3 tests)
+- [x] T15 REQ-ORC-002.B1 a later same-session round still warns
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_B1_later_same_session_round_warns
+  - red: pre-existing — check_rounds has always judged only the latest round, so a later same-session round warns
+  - green: Ran 10 tests in 0.50s OK
+- [x] T16 REQ-ORC-002.B4 no runner warning below production
+  - tier: light
+  - test: tests/test_sdd.py::CriticRunnerTests.test_REQ_ORC_002_B4_no_runner_warning_below_production
+  - red: pre-existing — check_rounds warns about the runner only at production and above, any runner
+  - green: Ran 10 tests in 0.50s OK
+- [x] T17 REQ-ORC-003.N1 REQ-ORC-003.N2 same-session or missing Verifier line warns
+  - tier: mid
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_N1_same_session_verifier_warns
+  - red: AssertionError: 'the Verifier should run in a fresh session or a strong subagent' not found in 'check 0001-parse-duration (stage: verify, assurance: production) ...'; FAILED (failures=2)
+  - green: Ran 2 tests in 0.27s OK (N1 and N2 tests)
+- [x] T18 REQ-ORC-003.S1 REQ-ORC-003.S2 REQ-ORC-003.B4 fresh session and strong subagent don't warn, in any case
+  - tier: mid
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_S1_strong_subagent_verifier
+  - red: AssertionError (after T17): 'Verifier' unexpectedly found in 'check 0001-parse-duration (stage: verify, assurance: production) ...'; FAILED (failures=3)
+  - green: Ran 5 tests in 0.73s OK (S1, S2 and B4 tests)
+- [x] T19 REQ-ORC-003.N3 REQ-ORC-003.N5 a subagent below strong warns
+  - tier: light
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_N3_invalid_tier_verifier_warns
+  - red: AssertionError: 'the Verifier should run in a fresh session or a strong subagent' not found in 'check 0001-parse-duration (stage: verify ...' (cheap, mid); FAILED (failures=2)
+  - green: Ran 7 tests in 0.93s OK (N3 and N5 tests)
+- [x] T20 REQ-ORC-003.N4 no Verifier warning before the verify stage
+  - tier: light
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_N4_no_verifier_warning_in_draft
+  - red: pre-existing (after T17) — T17 placed the Verifier warning inside the verify-stage block, so a draft never reaches it
+  - green: Ran 9 tests in 1.15s OK
+- [x] T21 REQ-ORC-003.B1 no Verifier warning below production
+  - tier: light
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_B1_no_verifier_warning_below_production
+  - red: AssertionError (after T17): 'Verifier' unexpectedly found in 'check 0001-parse-duration (stage: verify, assurance: internal) ...'
+  - green: Ran 9 tests in 1.1s OK
+- [x] T22 REQ-ORC-003.B2 the latest Verifier line counts
+  - tier: light
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_B2_latest_verifier_line_counts
+  - red: pre-existing (after T18) — T18's latest_verifier already keeps the last matching line, so the later same-session line wins
+  - green: Ran 12 tests in 1.6s OK
+- [x] T23 REQ-ORC-003.B3 a Verifier line inside a comment is ignored
+  - tier: light
+  - test: tests/test_sdd.py::VerifierRunnerTests.test_REQ_ORC_003_B3_verifier_line_in_fenced_code_ignored
+  - red: AssertionError: 'the Verifier should run in a fresh session or a strong subagent' not found in 'check 0001-parse-duration (stage: verify ...' (fenced line counted; the comment case passed already: analyze strips comments)
+  - green: Ran 12 tests in 1.6s OK (comment and fenced-code tests)
+- [x] T24 REQ-EVD-002.N1 a mutation without replace is an error
+  - tier: mid
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N1_missing_replace_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 1 test in 0.07s OK
+- [x] T25 REQ-EVD-002.S1 REQ-EVD-002.B3 a complete entry, or one with an empty replace, is accepted
+  - tier: mid
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_S1_complete_entry_accepted
+  - red: pre-existing (after T24) — T24's check only requires the find and replace lines to exist, so complete and empty-replace entries already pass
+  - green: Ran 3 tests in 0.14s OK (S1 and B3 tests)
+- [x] T26 REQ-EVD-002.N3 a mutation without a file is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N3_missing_file_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 4 tests in 0.16s OK
+- [x] T27 REQ-EVD-002.N7 a find line without backticks is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N7_find_without_backticks_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 5 tests in 0.18s OK
+- [x] T28 REQ-EVD-002.N2 a scenario outside this change is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N2_scenario_outside_the_change_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 6 tests in 0.22s OK
+- [x] T29 REQ-EVD-002.N4 a duplicate mutation ID is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N4_duplicate_id_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 7 tests in 0.25s OK
+- [x] T30 REQ-EVD-002.N5 a path leaving the project is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N5_path_leaving_the_project_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 8 tests in 0.30s OK
+- [x] T31 REQ-EVD-002.N6 an absolute path is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_N6_absolute_path_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 9 tests in 0.30s OK
+- [x] T32 REQ-EVD-002.B2 a replace equal to its find is an error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_B2_replace_equal_to_find_is_an_error
+  - red: AssertionError: 0 != 1 : check 0001-parse-duration (stage: plan, assurance: internal)
+  - green: Ran 12 tests in 0.44s (B2 green; B4 still red, its own task)
+- [x] T33 REQ-EVD-002.B1 no Mutations section, no error
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_B1_no_mutations_section_no_error
+  - red: pre-existing — check_mutations reads an empty list when the section is absent, so nothing is reported
+  - green: Ran 12 tests in 0.44s OK
+- [x] T34 REQ-EVD-002.B4 Mutations don't count toward the size cap
+  - tier: light
+  - test: tests/test_sdd.py::MutationsCheckTests.test_REQ_EVD_002_B4_mutations_not_counted_toward_the_size_cap
+  - red: AssertionError: 70 != 38 (the 30-line Mutations section counted toward the cap)
+  - green: Ran 12 tests in 0.40s OK
+- [x] T35 REQ-EVD-001.S1 replay confirms a red task (base copy, overlay, cleanup)
+  - tier: strong
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_S1_red_task_confirmed
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] (no replay command)
+  - green: Ran 1 test in 0.95s OK
+- [x] T36 REQ-EVD-001.N1 red claimed but the test passes at the base
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N1_red_claimed_but_passes_at_base
+  - red: AssertionError: 'T1 mismatch: red claimed, but the test passes at the base' not found in 'T1 mismatch'
+  - green: Ran 2 tests in 1.8s OK
+- [x] T37 REQ-EVD-001.N3 the test fails in the working tree
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N3_test_fails_now
+  - red: AssertionError: 0 != 1 : T1 confirmed
+  - green: Ran 3 tests in 2.7s OK
+- [x] T38 REQ-EVD-001.S2 replay confirms a pre-existing task
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_S2_pre_existing_task_confirmed
+  - red: AssertionError: 1 != 0 : T1 mismatch: red claimed, but the test passes at the base
+  - green: Ran 4 tests in 3.6s OK
+- [x] T39 REQ-EVD-001.N2 pre-existing claimed but the test fails at the base
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N2_pre_existing_claimed_but_fails_at_base
+  - red: AssertionError: 0 != 1 : T1 confirmed
+  - green: Ran 5 tests in 4.8s OK
+- [x] T40 REQ-EVD-001.N4 no Test one line
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N4_no_test_one_line
+  - red: IndexError: list index out of range (replay ran an empty command instead of refusing)
+  - green: Ran 6 tests in 5.0s OK
+- [x] T41 REQ-EVD-001.N5 unknown base revision
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N5_unknown_base_revision
+  - red: subprocess.CalledProcessError: Command '['git', 'archive', '--format=tar', 'nosuchrev']' returned non-zero exit status 128
+  - green: Ran 7 tests in 5.7s OK
+- [x] T42 REQ-EVD-001.N6 not a git repository
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N6_not_a_git_repository
+  - red: AssertionError: 'replay needs a git repository' not found in "error: unknown base revision 'HEAD'"
+  - green: Ran 8 tests in 6.2s OK
+- [x] T43 REQ-EVD-001.N7 a runner that doesn't exist makes every task a mismatch
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N7_missing_runner_fails_every_task
+  - red: FileNotFoundError: [Errno 2] No such file or directory: 'no-such-runner' (replay crashed)
+  - green: Ran 9 tests in 7.0s OK
+- [x] T44 REQ-EVD-001.N8 a ticked task without a test line is a mismatch
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N8_ticked_task_without_test_line
+  - red: AssertionError: 'T1 mismatch: no test to run' not found in 'T1 mismatch: red claimed, but the test passes at the base'
+  - green: Ran 10 tests in 7.5s OK
+- [x] T45 REQ-EVD-001.N9 a test line without :: is a mismatch when the template needs it
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N9_test_line_without_separator
+  - red: AssertionError: 'T1 mismatch: the test line has no "::"' not found in 'T1 mismatch: the test fails now'
+  - green: Ran 11 tests in 8.0s OK
+- [x] T46 REQ-EVD-001.N10 replay without --base is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N10_replay_without_base_is_a_usage_error
+  - red: pre-existing (after T35) — T35 declared --base required, so argparse already exits 2 and names it
+  - green: Ran 13 tests in 13s OK
+- [x] T47 REQ-EVD-001.B1 unticked tasks are skipped
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B1_unticked_task_skipped
+  - red: AssertionError: 'T2 skipped' not found in 'T1 confirmed'
+  - green: Ran 13 tests in 12s OK
+- [x] T48 REQ-EVD-001.B2 nothing ticked, nothing to replay
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B2_nothing_ticked
+  - red: AssertionError: 'nothing to replay' not found in 'T1 skipped (not ticked)'
+  - green: Ran 14 tests in 14s OK
+- [x] T49 REQ-EVD-001.B3 {file} and {name} are substituted and the command printed
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B3_file_and_name_substituted_and_printed
+  - red: AssertionError: 'runner tests/t_x.py Cases.test_a' not found in 'T1 mismatch: the test fails now ...'
+  - green: Ran 15 tests in 15s OK
+- [x] T50 REQ-EVD-001.B4 untracked test fixtures are laid over the base copy
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B4_untracked_fixture_laid_over_base
+  - red: AssertionError: 1 != 0 : run: <python> -B tests/fixture_check.py rule_a (pre-existing mismatch: fixture missing at the base)
+  - green: Ran 16 tests in 17s OK
+- [x] T65 REQ-EVD-001.S3 REQ-EVD-001.S4 a red line naming an earlier task is checked only now (A1)
+  - tier: mid
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_S3_pre_existing_after_earlier_task
+  - red: AssertionError: 1 != 0 : run: <python> -B tests/check.py rule_a ... (T2 judged against the base; S3 and S4); FAILED (failures=2)
+  - green: Ran 18 tests in 16s OK (S3 and S4 tests)
+- [x] T66 REQ-EVD-001.N11 a dependent task whose test fails now is a mismatch (A1)
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_N11_dependent_task_fails_now
+  - red: AssertionError (after T65): 0 != 1 : run: <python> -B tests/check.py rule_a (T2 reported confirmed now)
+  - green: Ran 19 tests in 17s OK
+- [x] T67 REQ-EVD-001.B5 naming a later task is not a dependency (A1)
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B5_later_task_is_not_a_dependency
+  - red: AssertionError (after T65): 0 != 1 : run: <python> -B tests/check.py rule_a (T1 reported confirmed now, depending on the later T2)
+  - green: Ran 20 tests in 18s OK
+- [x] T68 REQ-EVD-001.B6 a task ID mentioned without "(after" is not a dependency (A1)
+  - tier: light
+  - test: tests/test_sdd.py::ReplayTests.test_REQ_EVD_001_B6_task_id_without_marker_is_not_a_dependency
+  - red: pre-existing (after T65) — T65's match requires the literal '(after T<n>)' marker, so a bare task ID never makes a dependency
+  - green: Ran 21 tests in 21s OK
+- [x] T51 REQ-EVD-003.S1 mutate reports a caught mutation (scratch copy, cleanup)
+  - tier: strong
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_S1_mutation_caught
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] (no mutate command)
+  - green: Ran 1 test in 0.6s OK
+- [x] T52 REQ-EVD-003.N1 a mutation the test doesn't notice survives
+  - tier: mid
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N1_mutation_survived
+  - red: pre-existing (after T51) — T51's run_mutation already returns survived when every test still passes after the mutation
+  - green: Ran 3 tests in 2.9s OK
+- [x] T53 REQ-EVD-003.N2 a test that fails without the mutation makes it invalid
+  - tier: mid
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N2_test_fails_without_the_mutation
+  - red: AssertionError: 0 != 1 : M1 caught
+  - green: Ran 3 tests in 2.8s OK
+- [x] T54 REQ-EVD-003.N3 a find text not in the file is invalid
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N3_find_text_not_in_file
+  - red: AssertionError: 'M1 invalid: the find text is not in the file' not found in 'M1 survived'
+  - green: Ran 5 tests in 4.2s (N3 OK; N4 still red, its own task)
+- [x] T55 REQ-EVD-003.N4 a find text found twice is invalid
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N4_find_text_found_twice
+  - red: AssertionError: 'M1 invalid: the find text occurs 2 times' not found in 'M1 survived'
+  - green: Ran 5 tests in 4.3s OK
+- [x] T56 REQ-EVD-003.N5 no Test one line
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N5_no_test_one_line
+  - red: IndexError: list index out of range (mutate ran an empty command instead of refusing)
+  - green: Ran 22 tests in 21s OK (MutateTests and ReplayTests)
+- [x] T57 REQ-EVD-003.N6 a missing file is invalid
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N6_file_does_not_exist
+  - red: FileNotFoundError: [Errno 2] No such file or directory: '<repo>/src/gone.py' (mutate crashed)
+  - green: Ran 7 tests in 4.4s OK
+- [x] T58 REQ-EVD-003.N7 a task without a test line makes the mutation invalid
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N7_task_without_test_line
+  - red: TypeError: 'NoneType' object is not iterable (mutate crashed on the empty test line)
+  - green: Ran 9 tests in 5.0s OK
+- [x] T59 REQ-EVD-003.N9 a scenario no task plans makes the mutation invalid
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N9_scenario_no_task_plans
+  - red: AssertionError: 'M1 invalid: no test to run' not found in 'M1 survived'
+  - green: Ran 9 tests in 5.0s OK (same minimal code as T58: no runnable test is invalid)
+- [x] T60 REQ-EVD-003.N8 not a git repository
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_N8_not_a_git_repository
+  - red: subprocess.CalledProcessError: Command '['git', 'ls-files', ...]' returned non-zero exit status 128 (mutate crashed)
+  - green: Ran 10 tests in 5.9s OK
+- [x] T61 REQ-EVD-003.B1 no Mutations section, nothing to run
+  - tier: light
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_B1_no_mutations_section
+  - red: AssertionError: 'no mutations are planned' not found in ''
+  - green: Ran 11 tests in 6.5s OK
+- [x] T62 REQ-EVD-003.B2 every mutation is reported; one survivor fails the run
+  - tier: mid
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_B2_one_caught_one_survived
+  - red: pre-existing (after T51) — T51's cmd_mutate already reports every mutation in its loop and exits 1 on any non-caught result
+  - green: Ran 14 tests in 9.3s OK
+- [x] T63 REQ-EVD-003.B3 leading spaces in a find text are kept
+  - tier: mid
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_B3_leading_spaces_kept
+  - red: pre-existing (after T27) — T27's parser takes the text between backticks verbatim, so leading spaces survive
+  - green: Ran 14 tests in 9.3s OK
+- [x] T64 REQ-EVD-003.B4 a scenario planned by two tasks is caught by either test
+  - tier: mid
+  - test: tests/test_sdd.py::MutateTests.test_REQ_EVD_003_B4_scenario_planned_by_two_tasks
+  - red: pre-existing (after T51) — T51's run_mutation already runs every planning task's test and calls a mutation caught when any fails after
+  - green: Ran 14 tests in 9.3s OK
+
+Method work (project rule 1: design work, verified by review and the dogfood run;
+no scenario, so no task). Done after T64, listed in the implement report:
+- SKILL.md: Orchestration section (prime model, routing, tier → model, Codex fallback)
+- method/roles/*.md: Tier · Effort · Read-only line per role (design table)
+- planner.md, implementer.md: task tiers, escalation, who writes Mutations entries
+- clarify.md, verify.md: Critic and Verifier as strong subagents; replay and mutate in verify
+- format.md, overview.md: tier line, Mutations, Test one, runner forms, new commands
+- templates: Test one line in the design template; Mutations in tasks and mini-spec
+
+## Mutations
+<!-- One entry per new rule, added by the Implementer once the guarding task is
+green (design: planner.md). The pinned tool has no mutate (rule 7), so the Verifier
+runs these by hand. Not mutated: run_test's OSError branch (REQ-EVD-001.N7), whose
+single-line text also occurs in require_git (known gap: single-line find). -->
+
+- M1 REQ-ORC-001.S1 skill/sdd/scripts/sdd.py
+  - find: `            print("  tiers: "`
+  - replace: `            print("  levels: "`
+- M2 REQ-ORC-001.S2 skill/sdd/scripts/sdd.py
+  - find: `    return task["tiers"][0].split("→")[-1].strip()`
+  - replace: `    return task["tiers"][0].split("→")[0].strip()`
+- M3 REQ-ORC-001.N1 skill/sdd/scripts/sdd.py
+  - find: `        if part not in TIERS:`
+  - replace: `        if False:`
+- M4 REQ-ORC-001.N2 skill/sdd/scripts/sdd.py
+  - find: `        if TIERS.index(high) != TIERS.index(low) + 1:`
+  - replace: `        if False:`
+- M5 REQ-ORC-001.N6 skill/sdd/scripts/sdd.py
+  - find: `    if "->" in value:`
+  - replace: `    if False:`
+- M6 REQ-ORC-001.N4 skill/sdd/scripts/sdd.py
+  - find: `        if len(task["tiers"]) > 1:`
+  - replace: `        if len(task["tiers"]) > 2:`
+- M7 REQ-ORC-001.B2 skill/sdd/scripts/sdd.py
+  - find: `        if not task["tiers"]:`
+  - replace: `        if False:`
+- M8 REQ-ORC-002.S1 skill/sdd/scripts/sdd.py
+  - find: `    mode = f"subagent ({args.subagent})" if args.subagent else \`
+  - replace: `    mode = "same session" if args.subagent else \`
+- M9 REQ-ORC-002.N1 skill/sdd/scripts/sdd.py
+  - find: `runner.add_argument("--subagent", choices=TIERS,`
+  - replace: `runner.add_argument("--subagent",`
+- M10 REQ-ORC-002.N2 skill/sdd/scripts/sdd.py
+  - find: `    runner = p.add_mutually_exclusive_group()`
+  - replace: `    runner = p.add_argument_group()`
+- M11 REQ-ORC-002.S2 skill/sdd/scripts/sdd.py
+  - find: `INDEPENDENT_RUNNERS = ("fresh session", "subagent (strong)")`
+  - replace: `INDEPENDENT_RUNNERS = ("fresh session",)`
+- M12 REQ-ORC-002.N4 skill/sdd/scripts/sdd.py
+  - find: `        if last["mode"].startswith("subagent"):`
+  - replace: `        if False:`
+- M13 REQ-ORC-003.N1 skill/sdd/scripts/sdd.py
+  - find: `        if LEVELS.index(level) >= LEVELS.index("production") and not " ".join(`
+  - replace: `        if False and not " ".join(`
+- M14 REQ-ORC-003.B1 skill/sdd/scripts/sdd.py
+  - find: `LEVELS.index(level) >= LEVELS.index("production") and not " ".join(`
+  - replace: `True and not " ".join(`
+- M15 REQ-ORC-003.B3 skill/sdd/scripts/sdd.py
+  - find: `        if in_fence:`
+  - replace: `        if False:`
+- M16 REQ-EVD-002.N1 skill/sdd/scripts/sdd.py
+  - find: `            if field not in m:`
+  - replace: `            if False:`
+- M17 REQ-EVD-002.N3 skill/sdd/scripts/sdd.py
+  - find: `        if not m["file"]:`
+  - replace: `        if False:`
+- M18 REQ-EVD-002.N7 skill/sdd/scripts/sdd.py
+  - find: `            elif m[field] is None:`
+  - replace: `            elif False:`
+- M19 REQ-EVD-002.N2 skill/sdd/scripts/sdd.py
+  - find: `        if m["scenario"] not in scenario_refs:`
+  - replace: `        if False:`
+- M20 REQ-EVD-002.N4 skill/sdd/scripts/sdd.py
+  - find: `        if m["id"] in seen:`
+  - replace: `        if False:`
+- M21 REQ-EVD-002.N5 skill/sdd/scripts/sdd.py
+  - find: `    return posixpath.normpath(path).split("/")[0] == ".."`
+  - replace: `    return False`
+- M22 REQ-EVD-002.N6 skill/sdd/scripts/sdd.py
+  - find: `    if path.startswith("/") or re.match(r"^[A-Za-z]:", path):`
+  - replace: `    if False:`
+- M23 REQ-EVD-002.B2 skill/sdd/scripts/sdd.py
+  - find: `        if m.get("find") is not None and m.get("find") == m.get("replace"):`
+  - replace: `        if False:`
+- M24 REQ-EVD-002.B4 skill/sdd/scripts/sdd.py
+  - find: `"Tasks", "Mutations", "Verification"`
+  - replace: `"Tasks", "Verification"`
+- M25 REQ-EVD-001.N1 skill/sdd/scripts/sdd.py
+  - find: `            elif claims_red and at_base:`
+  - replace: `            elif False:`
+- M26 REQ-EVD-001.N3 skill/sdd/scripts/sdd.py
+  - find: `            if not now:`
+  - replace: `            if False:`
+- M27 REQ-EVD-001.S2 skill/sdd/scripts/sdd.py
+  - find: `            claims_red = not task["red"].lower().startswith("pre-existing")`
+  - replace: `            claims_red = True`
+- M28 REQ-EVD-001.N2 skill/sdd/scripts/sdd.py
+  - find: `            elif not claims_red and not at_base:`
+  - replace: `            elif False:`
+- M29 REQ-EVD-001.N4 skill/sdd/scripts/sdd.py
+  - find: `    if not template:`
+  - replace: `    if False:`
+- M30 REQ-EVD-001.N5 skill/sdd/scripts/sdd.py
+  - find: `    if known.returncode != 0:`
+  - replace: `    if False:`
+- M31 REQ-EVD-001.N6 skill/sdd/scripts/sdd.py
+  - find: `    require_git(project, "replay")`
+  - replace: `    pass`
+- M32 REQ-EVD-001.N8 skill/sdd/scripts/sdd.py
+  - find: `            if not evidence_present(task["test"]):`
+  - replace: `            if False:`
+- M33 REQ-EVD-001.N9 skill/sdd/scripts/sdd.py
+  - find: `    if not sep and ("{file}" in template or "{name}" in template):`
+  - replace: `    if False:`
+- M34 REQ-EVD-001.B1 skill/sdd/scripts/sdd.py
+  - find: `                print(f"{task['id']} skipped (not ticked)")`
+  - replace: `                pass`
+- M35 REQ-EVD-001.B2 skill/sdd/scripts/sdd.py
+  - find: `        print("nothing to replay: no ticked task")`
+  - replace: `        print("done")`
+- M36 REQ-EVD-001.B3 skill/sdd/scripts/sdd.py
+  - find: `            print(f"run: {' '.join(shlex.quote(a) for a in argv)}")`
+  - replace: `            pass`
+- M37 REQ-EVD-001.B4 skill/sdd/scripts/sdd.py
+  - find: `        overlay_tests(project, base_root)`
+  - replace: `        pass`
+- M38 REQ-EVD-003.N1 skill/sdd/scripts/sdd.py
+  - find: `    return "survived" if all(after) else "caught"`
+  - replace: `    return "caught"`
+- M39 REQ-EVD-003.N2 skill/sdd/scripts/sdd.py
+  - find: `        if not all(run_test(argv, folder) for argv in commands):`
+  - replace: `        if False:`
+- M40 REQ-EVD-003.N3 skill/sdd/scripts/sdd.py
+  - find: `    if occurrences == 0:`
+  - replace: `    if False:`
+- M41 REQ-EVD-003.N4 skill/sdd/scripts/sdd.py
+  - find: `    if occurrences > 1:`
+  - replace: `    if False:`
+- M42 REQ-EVD-003.N5 skill/sdd/scripts/sdd.py
+  - find: `    if not template:`
+  - replace: `    if False:`
+- M43 REQ-EVD-003.N6 skill/sdd/scripts/sdd.py
+  - find: `    if not (project.root / m["file"]).is_file():`
+  - replace: `    if False:`
+- M44 REQ-EVD-003.N7 skill/sdd/scripts/sdd.py
+  - find: `    if not tests:`
+  - replace: `    if False:`
+- M45 REQ-EVD-003.N8 skill/sdd/scripts/sdd.py
+  - find: `    require_git(project, "mutate")`
+  - replace: `    pass`
+- M46 REQ-EVD-003.B1 skill/sdd/scripts/sdd.py
+  - find: `        print("no mutations are planned: nothing to run")`
+  - replace: `        print("done")`
+- M47 REQ-EVD-001.S3 skill/sdd/scripts/sdd.py
+  - find: `            depends = depends.group(1) if depends and depends.group(1) in earlier else None`
+  - replace: `            depends = None`
+- M48 REQ-EVD-001.N11 skill/sdd/scripts/sdd.py
+  - find: `                if run_test(argv, project.root):`
+  - replace: `                if True:`
+- M49 REQ-EVD-001.B5 skill/sdd/scripts/sdd.py
+  - find: `if depends and depends.group(1) in earlier else None`
+  - replace: `if depends else None`

@@ -4,11 +4,15 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import re
+import shlex
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.dont_write_bytecode = True  # keep skill/ free of __pycache__
 SCRIPT = Path(__file__).resolve().parents[1] / "skill" / "sdd" / "scripts" / "sdd.py"
@@ -2069,6 +2073,752 @@ class ApprovedLevelTests(ConstitutionTests):
         self.assertIsNotNone(fingerprint_in(text))
         self.assertIn("approved_level: prototype", text)
         self.assertNotIn("lowered", last_approval_row(text))
+
+
+# ---------------------------------------------------------------- change 0002-subagent-fanout (ORC, EVD)
+
+def snapshot(root):
+    """Every file under root with its bytes: 'no file is changed' compares two snapshots."""
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(Path(root).rglob("*")) if p.is_file()}
+
+
+def tier_tasks(*tiers):
+    """A design line plus one task per entry; an entry is a tier value, a list of values, or None."""
+    lines = ["- Test command: `python3 -m unittest`", "", "## Tasks"]
+    for n, tier in enumerate(tiers, 1):
+        ref = "REQ-DUR-001.S1" if n != 2 else "REQ-DUR-001.N1"
+        lines.append(f"- [ ] T{n} {ref} Task {n}")
+        for value in ([] if tier is None else [tier] if isinstance(tier, str) else tier):
+            lines.append(f"  - tier: {value}")
+        lines += ["  - test:", "  - red:", "  - green:"]
+    if len(tiers) < 2:  # every scenario needs a task
+        lines += ["- [ ] T9 REQ-DUR-001.N1 Reject", "  - tier: light", "  - test:", "  - red:", "  - green:"]
+    return "\n".join(lines) + "\n"
+
+
+class TierTests(Base):
+    """REQ-ORC-001: tasks carry a model tier."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.cid = self.new()
+
+    def plan(self, *tiers):
+        self.repo.fill(self.cid, design_and_tasks=tier_tasks(*tiers))
+        return snapshot(self.repo.root)
+
+    def check(self):
+        return self.repo.run("check")
+
+    def test_REQ_ORC_001_S1_three_tiers_pass_and_status_counts_them(self):
+        self.plan("light", "mid", "strong")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("tier", out.lower())
+        self.assertIn("tiers: 1 light, 1 mid, 1 strong", self.repo.ok("status"))
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertEqual(data["change"]["tiers"], {"light": 1, "mid": 1, "strong": 1})
+
+    def test_REQ_ORC_001_S2_escalation_counts_as_the_higher_tier(self):
+        self.plan("light → mid", "light")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertEqual(data["change"]["tiers"], {"light": 1, "mid": 1})
+
+    def test_REQ_ORC_001_S3_chain_counts_as_its_last_tier(self):
+        self.plan("light → mid → strong", "light")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        data = json.loads(self.repo.ok("status", "--json"))
+        self.assertEqual(data["change"]["tiers"], {"light": 1, "strong": 1})
+
+    def assert_refused(self, *needles):
+        before = snapshot(self.repo.root)
+        code, out = self.check()
+        self.assertEqual(code, 1, out)
+        errors = out.split("errors", 1)[1].split("coverage:")[0] if "errors" in out else ""
+        for needle in needles:
+            self.assertIn(needle, errors)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return errors
+
+    def test_REQ_ORC_001_N1_unknown_tier_refused(self):
+        self.plan("cheap", "light")
+        self.assert_refused("T1", "light, mid, strong")
+
+    def test_REQ_ORC_001_N3_capitalised_tier_refused(self):
+        self.plan("Light", "light")
+        self.assert_refused("T1", "light, mid, strong")
+
+    def test_REQ_ORC_001_N2_downward_escalation_refused(self):
+        self.plan("strong → light", "light")
+        self.assert_refused("T1", "each step must go up exactly one tier")
+
+    def test_REQ_ORC_001_N5_two_tier_jump_refused(self):
+        self.plan("light → strong", "light")
+        self.assert_refused("T1", "each step must go up exactly one tier")
+
+    def test_REQ_ORC_001_B1_same_tier_escalation_refused(self):
+        self.plan("mid → mid", "light")
+        self.assert_refused("T1", "each step must go up exactly one tier")
+
+    def test_REQ_ORC_001_N6_ascii_arrow_refused(self):
+        self.plan("light -> mid", "light")
+        self.assert_refused("T1", 'an escalation is written with "→"')
+
+    def test_REQ_ORC_001_N4_two_tier_lines_refused(self):
+        self.plan(["light", "mid"], "light")
+        self.assert_refused("T1 has more than one tier")
+
+    def test_REQ_ORC_001_B2_missing_tier_warns(self):
+        before = self.plan(None, "light")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        warnings = out.split("warnings", 1)[1] if "warnings" in out else ""
+        self.assertIn("T1: no tier", warnings)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_001_B3_status_counts_untiered_tasks(self):
+        before = self.plan("light", None)
+        self.assertIn("tiers: 1 light, 1 untiered", self.repo.ok("status"))
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_001_B4_no_tiers_line_without_tasks(self):
+        self.repo.fill(self.cid, design_and_tasks="- Test command: `python3 -m unittest`\n\n## Tasks\n")
+        self.assertNotIn("tiers", self.repo.ok("status"))
+        self.assertNotIn("tiers", json.loads(self.repo.ok("status", "--json"))["change"])
+
+
+PROD_REQS = VALID_REQS.replace("- N/A state:", "- N/A boundary: the parser accepts any length of input\n"
+                               "- N/A access: the parser is a local pure function\n- N/A state:")
+
+
+def round_headed(runner, number=1):
+    return ROUND_DONE.replace("### Round 1 — 2026-10-08 · Critic: same session",
+                              f"### Round {number} — 2026-10-08 · Critic: {runner}")
+
+
+class CriticRunnerTests(Base):
+    """REQ-ORC-002: Critic rounds record a subagent runner."""
+
+    def standard(self, level="production"):
+        self.init(level)
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--size", "standard",
+                     "--capability", "duration=DUR")
+        self.dir = self.repo.root / "specs/changes/0001-durations"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", PROD_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+
+    def clarifications(self):
+        return (self.dir / "clarifications.md").read_text()
+
+    def test_REQ_ORC_002_S1_round_subagent_heads_the_round(self):
+        self.standard()
+        code, out = self.repo.run("round", "--subagent", "strong")
+        self.assertEqual(code, 0, out)
+        self.assertIn("· Critic: subagent (strong)", self.clarifications())
+        self.assertIn("status: clarifying", (self.dir / "proposal.md").read_text())
+
+    def assert_round_refused(self, code_expected, args, needles):
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("round", *args)
+        self.assertEqual(code, code_expected, out)
+        for needle in needles:
+            self.assertIn(needle, out)
+        self.assertNotIn("### Round", self.clarifications())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_002_N1_unknown_subagent_tier_is_a_usage_error(self):
+        self.standard()
+        self.assert_round_refused(2, ["--subagent", "cheap"], ["'light', 'mid', 'strong'"])
+
+    def test_REQ_ORC_002_N2_subagent_with_fresh_is_a_usage_error(self):
+        self.standard()
+        self.assert_round_refused(2, ["--subagent", "strong", "--fresh"],
+                                  ["--subagent", "--fresh", "not allowed with"])
+
+    def test_REQ_ORC_002_N3_round_after_spec_gate_points_to_amend(self):
+        self.standard()
+        set_file_section(self.dir / "clarifications.md", "Clarifications",
+                         round_headed("fresh session"))
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("round", "--subagent", "strong")
+        self.assertEqual(code, 1, out)
+        self.assertIn("sdd amend", out)
+        self.assertNotIn("### Round 2", self.clarifications())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def runner_warnings(self, clarifications, level="production"):
+        """The check's warnings about the Critic's runner, with the files unchanged."""
+        self.standard(level)
+        set_file_section(self.dir / "clarifications.md", "Clarifications", clarifications)
+        before = snapshot(self.repo.root)
+        _, out = self.repo.run("check")
+        self.assertEqual(snapshot(self.repo.root), before)
+        warnings = out.split("warnings", 1)[1].split("coverage:")[0] if "warnings (" in out else ""
+        return [w for w in warnings.splitlines() if "Round" in w]
+
+    def test_REQ_ORC_002_S2_strong_subagent_round_is_independent(self):
+        self.assertEqual(self.runner_warnings(round_headed("subagent (strong)")), [])
+
+    def assert_not_independent(self, runner):
+        warnings = self.runner_warnings(round_headed(runner))
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn("runner", warnings[0])
+        self.assertIn("is not independent", warnings[0])
+
+    def test_REQ_ORC_002_N4_hand_written_invalid_tier_not_independent(self):
+        self.assert_not_independent("subagent (cheap)")
+
+    def test_REQ_ORC_002_B2_subagent_without_tier_not_independent(self):
+        self.assert_not_independent("subagent")
+
+    def test_REQ_ORC_002_B3_mid_subagent_not_independent_at_production(self):
+        self.assert_not_independent("subagent (mid)")
+
+    def test_REQ_ORC_002_B1_later_same_session_round_warns(self):
+        rounds = round_headed("subagent (strong)") + "\n" + round_headed("same session", 2)
+        warnings = self.runner_warnings(rounds)
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn("Round 2 ran in the same session", warnings[0])
+
+    def test_REQ_ORC_002_B4_no_runner_warning_below_production(self):
+        self.assertEqual(self.runner_warnings(round_headed("subagent (light)"), level="internal"), [])
+
+
+VERIFIER_WARNING = "the Verifier should run in a fresh session or a strong subagent"
+
+
+class VerifierRunnerTests(Base):
+    """REQ-ORC-003: the Verifier's runner is recorded."""
+
+    def verifying(self, verification, level="production"):
+        """A mini change in verifying whose Verification section is `verification`."""
+        self.init(level)
+        cid = self.new()
+        self.repo.fill(cid, reqs=PROD_REQS, design_and_tasks=DONE_TASKS)
+        self.repo.set_section(cid, "Clarifications", round_headed("fresh session"))
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        self.repo.set_section(cid, "Verification", verification + "\nVerdict: PASS\n")
+        return cid
+
+    def verify_check(self, *args):
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", *args)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out
+
+    def test_REQ_ORC_003_N1_same_session_verifier_warns(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: same session (production)")
+        code, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+        self.assertEqual(code, 0, out)
+
+    def test_REQ_ORC_003_N2_missing_verifier_line_warns(self):
+        self.verifying("- Date: 2026-10-14 · ran the suite")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+    def assert_no_verifier_warning(self, *check_args):
+        code, out = self.verify_check(*check_args)
+        self.assertNotIn("Verifier", out)
+        return code, out
+
+    def test_REQ_ORC_003_S1_strong_subagent_verifier(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: subagent (strong)")
+        self.assert_no_verifier_warning("--stage", "verify")
+
+    def test_REQ_ORC_003_S2_fresh_session_verifier(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: fresh session (production)")
+        self.assert_no_verifier_warning("--stage", "verify")
+
+    def test_REQ_ORC_003_B4_verifier_line_in_any_case(self):
+        self.verifying("- Date: 2026-10-14 · verifier: Fresh Session")
+        self.assert_no_verifier_warning("--stage", "verify")
+
+    def test_REQ_ORC_003_N3_invalid_tier_verifier_warns(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: subagent (cheap)")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+    def test_REQ_ORC_003_N5_mid_subagent_verifier_warns(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: subagent (mid)")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+    def test_REQ_ORC_003_N4_no_verifier_warning_in_draft(self):
+        self.init("production")
+        cid = self.new()
+        self.repo.fill(cid, reqs=PROD_REQS, design_and_tasks=VALID_TASKS, verdict=None)
+        self.assert_no_verifier_warning()
+
+    def test_REQ_ORC_003_B1_no_verifier_warning_below_production(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: same session (internal)", level="internal")
+        self.assert_no_verifier_warning("--stage", "verify")
+
+    def test_REQ_ORC_003_B2_latest_verifier_line_counts(self):
+        self.verifying("- Date: 2026-10-12 · Verifier: fresh session (production)\n"
+                       "- Date: 2026-10-14 · Verifier: same session (production)")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+    def test_REQ_ORC_003_B3_verifier_line_in_comment_ignored(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: same session (production)\n"
+                       "<!-- Verifier: subagent (strong) -->")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+    def test_REQ_ORC_003_B3_verifier_line_in_fenced_code_ignored(self):
+        self.verifying("- Date: 2026-10-14 · Verifier: same session (production)\n"
+                       "```\nVerifier: subagent (strong)\n```")
+        _, out = self.verify_check("--stage", "verify")
+        self.assertIn(VERIFIER_WARNING, out)
+
+
+MUTATION_OK = """\
+- M1 REQ-DUR-001.N1 src/dur.py
+  - find: `return 0`
+  - replace: `return 1`
+"""
+
+
+class MutationsCheckTests(Base):
+    """REQ-EVD-002: the change lists its planned mutations."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.cid = self.new()
+
+    def mutations(self, body):
+        self.repo.fill(self.cid, design_and_tasks=VALID_TASKS + "\n## Mutations\n" + body)
+
+    def assert_mutation_error(self, body, *needles):
+        self.mutations(body)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 1, out)
+        errors = out.split("errors", 1)[1].split("coverage:")[0] if "errors (" in out else ""
+        line = next((l for l in errors.splitlines() if "M1" in l), "")
+        for needle in needles:
+            self.assertIn(needle, line, errors)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_002_N1_missing_replace_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("  - replace: `return 1`\n", ""), "M1", "replace")
+
+    def assert_no_mutation_error(self, body):
+        self.mutations(body)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("M1", out)
+
+    def test_REQ_EVD_002_S1_complete_entry_accepted(self):
+        self.assert_no_mutation_error(MUTATION_OK)
+
+    def test_REQ_EVD_002_B3_empty_replace_accepted(self):
+        self.assert_no_mutation_error(MUTATION_OK.replace("`return 1`", "``"))
+
+    def test_REQ_EVD_002_N3_missing_file_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace(" src/dur.py", ""), "M1", "file")
+
+    def test_REQ_EVD_002_N7_find_without_backticks_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("`return 0`", "return 0"), "M1", "find")
+
+    def test_REQ_EVD_002_N2_scenario_outside_the_change_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("REQ-DUR-001.N1", "REQ-DUR-001.N9"),
+                                   "M1", "REQ-DUR-001.N9")
+
+    def test_REQ_EVD_002_N4_duplicate_id_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK + MUTATION_OK.replace("return 1", "return 2"),
+                                   "M1", "duplicate")
+
+    def test_REQ_EVD_002_N5_path_leaving_the_project_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("src/dur.py", "../x.py"), "M1", "../x.py")
+
+    def test_REQ_EVD_002_N6_absolute_path_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("src/dur.py", "/src/dur.py"), "M1", "/src/dur.py")
+
+    def test_REQ_EVD_002_B2_replace_equal_to_find_is_an_error(self):
+        self.assert_mutation_error(MUTATION_OK.replace("`return 1`", "`return 0`"), "M1", "changes nothing")
+
+    def test_REQ_EVD_002_B1_no_mutations_section_no_error(self):
+        self.repo.fill(self.cid)
+        code, out = self.repo.run("check")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("M1", out)
+
+    def test_REQ_EVD_002_B4_mutations_not_counted_toward_the_size_cap(self):
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--size", "standard",
+                     "--capability", "duration=DUR")
+        tasks = self.repo.root / "specs/changes/0002-durations/tasks.md"
+        before = json.loads(self.repo.ok("status", "--json"))["change"]["lines"]
+        entries = "".join(MUTATION_OK.replace("M1", f"M{n}") for n in range(1, 11))  # 30 lines
+        tasks.write_text(tasks.read_text() + "\n## Mutations\n" + entries)
+        state = snapshot(self.repo.root)
+        self.assertEqual(json.loads(self.repo.ok("status", "--json"))["change"]["lines"], before)
+        self.assertEqual(snapshot(self.repo.root), state)
+
+
+
+# A test runner for the git fixtures: test NAME passes when src/dur.py contains NAME.
+CHECKER = """import sys
+from pathlib import Path
+source = Path("src/dur.py")
+sys.exit(0 if source.exists() and sys.argv[1] in source.read_text() else 1)
+"""
+GIT = ["git", "-c", "user.name=sdd-test", "-c", "user.email=test@example.invalid"]
+
+
+def git(root, *args):
+    return subprocess.run([*GIT, *args], cwd=root, capture_output=True, text=True, check=True).stdout
+
+
+def tree_state(root):
+    """git status plus every file outside .git: 'the working tree is unchanged' compares two."""
+    files = {str(p.relative_to(root)): p.read_bytes() for p in sorted(Path(root).rglob("*"))
+             if p.is_file() and ".git" not in p.relative_to(root).parts}
+    return git(root, "status", "--porcelain"), files
+
+
+class GitFixture(Base):
+    """A project in a git repository: base commit, then working-tree edits."""
+
+    TEST_ONE = f"{shlex.quote(sys.executable)} -B tests/check.py {{name}}"
+
+    def setUp(self):
+        super().setUp()
+        self.scratch = Path(tempfile.mkdtemp(prefix="sdd-test-scratch-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.scratch, ignore_errors=True))
+        patcher = mock.patch.object(tempfile, "tempdir", str(self.scratch))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        env = mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": str(self.repo.root.parent)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.init()
+        self.cid = self.new()
+
+    def project(self, tasks, base="", now=None, test_one=None, git_repo=True, mutations=None):
+        """tasks: (ticked, test_line, red) triples. src/dur.py holds `base` at the base commit
+        and `now` in the working tree. Returns the base revision."""
+        lines = ["- Test command: `python3 -m unittest`"]
+        if test_one is not False:
+            lines.append(f"- Test one: `{test_one or self.TEST_ONE}`")
+        lines += ["", "## Tasks"]
+        for n, (ticked, test_line, red, *ref) in enumerate(tasks, 1):
+            ref = ref[0] if ref else "REQ-DUR-001.S1" if n == 1 else "REQ-DUR-001.N1"
+            lines += [f"- [{'x' if ticked else ' '}] T{n} {ref} Task {n}", "  - tier: light",
+                      f"  - test: {test_line}", f"  - red: {red}", "  - green: 1 passed"]
+        if mutations is not None:
+            lines += ["", "## Mutations", mutations]
+        self.repo.fill(self.cid, design_and_tasks="\n".join(lines) + "\n")
+        self.repo.write("tests/check.py", CHECKER)
+        self.repo.write("src/dur.py", base)
+        rev = None
+        if git_repo:
+            git(self.repo.root, "init", "-q")
+            git(self.repo.root, "add", "-A")
+            git(self.repo.root, "commit", "-qm", "base")
+            rev = git(self.repo.root, "rev-parse", "HEAD").strip()
+        self.repo.write("src/dur.py", base if now is None else now)
+        return rev
+
+    def run_tool(self, *args):
+        """Run sdd with the tree state captured before and after; scratch must end empty."""
+        before = tree_state(self.repo.root) if (self.repo.root / ".git").exists() else None
+        code, out = self.repo.run(*args)
+        if before is not None:
+            self.assertEqual(tree_state(self.repo.root), before, "the working tree changed")
+        self.assertEqual(os.listdir(self.scratch), [], "a scratch copy was left")
+        return code, out
+
+
+RED = "AssertionError: rule missing"
+PRE = "pre-existing — the rule was already there"
+
+
+class ReplayTests(GitFixture):
+    """REQ-EVD-001: replay the tests against the base revision."""
+
+    def test_REQ_EVD_001_S1_red_task_confirmed(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED)], base="", now="rule_a")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T1 confirmed", out)
+
+    def test_REQ_EVD_001_N1_red_claimed_but_passes_at_base(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED)], base="rule_a", now="rule_a")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T1 mismatch: red claimed, but the test passes at the base", out)
+
+    def test_REQ_EVD_001_N3_test_fails_now(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED)], base="", now="")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T1 mismatch: the test fails now", out)
+
+    def test_REQ_EVD_001_S2_pre_existing_task_confirmed(self):
+        rev = self.project([(True, "tests/check.py::rule_a", PRE)], base="rule_a", now="rule_a")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T1 confirmed", out)
+
+    def test_REQ_EVD_001_N2_pre_existing_claimed_but_fails_at_base(self):
+        rev = self.project([(True, "tests/check.py::rule_a", PRE)], base="", now="rule_a")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T1 mismatch: pre-existing claimed, but the test fails at the base", out)
+
+    def refused_before_any_test(self, *args):
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool(*args)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(runner.call_count, 0, out)
+        return out
+
+    def test_REQ_EVD_001_N4_no_test_one_line(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a", test_one=False)
+        self.assertIn('"Test one:"', self.refused_before_any_test("replay", "--base", rev))
+
+    def test_REQ_EVD_001_N5_unknown_base_revision(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a")
+        out = self.refused_before_any_test("replay", "--base", "nosuchrev")
+        self.assertIn("nosuchrev", out)
+        self.assertNotIn("Traceback", out)
+
+    def test_REQ_EVD_001_N6_not_a_git_repository(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a", git_repo=False)
+        before = snapshot(self.repo.root)
+        out = self.refused_before_any_test("replay", "--base", "HEAD")
+        self.assertIn("replay needs a git repository", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_001_N7_missing_runner_fails_every_task(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED), (True, "tests/check.py::rule_b", RED)],
+                           now="rule_a rule_b", test_one="no-such-runner {test}")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T1 mismatch: the test fails now", out)
+        self.assertIn("T2 mismatch: the test fails now", out)
+
+    def mismatch_without_running(self, test_line, reason, test_one=None):
+        rev = self.project([(True, test_line, RED)], now="rule_a", test_one=test_one)
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"T1 mismatch: {reason}", out)
+        self.assertEqual(runner.call_count, 0, out)
+
+    def test_REQ_EVD_001_N8_ticked_task_without_test_line(self):
+        self.mismatch_without_running("", "no test to run")
+
+    def test_REQ_EVD_001_N9_test_line_without_separator(self):
+        self.mismatch_without_running("tests/t_x.py", 'the test line has no "::"',
+                                      test_one="runner {file} {name}")
+
+    def test_REQ_EVD_001_N10_replay_without_base_is_a_usage_error(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a")
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("replay")
+        self.assertEqual(code, 2, out)
+        self.assertIn("--base", out)
+        self.assertEqual(runner.call_count, 0, out)
+
+    def test_REQ_EVD_001_B1_unticked_task_skipped(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED), (False, "tests/check.py::rule_b", "")],
+                           now="rule_a")
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T2 skipped", out)
+        self.assertEqual(runner.call_count, 2, out)  # T1 at the base and now; T2 never
+
+    def test_REQ_EVD_001_B2_nothing_ticked(self):
+        rev = self.project([(False, "tests/check.py::rule_a", "")], now="rule_a")
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("nothing to replay", out)
+
+    def test_REQ_EVD_001_B3_file_and_name_substituted_and_printed(self):
+        rev = self.project([(True, "tests/t_x.py::Cases.test_a", RED)], now="rule_a",
+                           test_one="runner {file} {name}")
+        _, out = self.run_tool("replay", "--base", rev)
+        self.assertIn("runner tests/t_x.py Cases.test_a", out)
+
+    def test_REQ_EVD_001_B4_untracked_fixture_laid_over_base(self):
+        self.repo.write("tests/fixture_check.py", CHECKER.replace('"src/dur.py"', '"tests/fixtures/f.json"'))
+        rev = self.project([(True, "tests/fixture_check.py::rule_a", PRE)],
+                           test_one=f"{shlex.quote(sys.executable)} -B {{file}} {{name}}")
+        self.repo.write("tests/fixtures/f.json", '{"rule": "rule_a"}')  # untracked, not ignored
+        code, out = self.run_tool("replay", "--base", rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T1 confirmed", out)
+
+    def replay_recording(self, rev):
+        """Run replay; return (code, out, [(test name, ran at the base?)])."""
+        calls = []
+        real = sdd.run_test
+
+        def record(argv, cwd):
+            calls.append((argv[-1], Path(cwd).resolve() != self.repo.root.resolve()))
+            return real(argv, cwd)
+        with mock.patch.object(sdd, "run_test", side_effect=record):
+            code, out = self.run_tool("replay", "--base", rev)
+        return code, out, calls
+
+    def test_REQ_EVD_001_S3_pre_existing_after_earlier_task(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED),
+                            (True, "tests/check.py::rule_b", "pre-existing (after T1) — T1's code already does it")],
+                           now="rule_a rule_b")
+        code, out, calls = self.replay_recording(rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T2 confirmed now (depends on T1)", out)
+        self.assertNotIn(("rule_b", True), calls)
+
+    def test_REQ_EVD_001_N11_dependent_task_fails_now(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED),
+                            (True, "tests/check.py::rule_b", "AssertionError (after T1): warning shown")],
+                           now="rule_a")
+        code, out, _ = self.replay_recording(rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T2 mismatch: the test fails now", out)
+
+    def test_REQ_EVD_001_B5_later_task_is_not_a_dependency(self):
+        rev = self.project([(True, "tests/check.py::rule_a", "pre-existing (after T2) — see T2"),
+                            (True, "tests/check.py::rule_b", RED)],
+                           now="rule_a rule_b")
+        code, out, calls = self.replay_recording(rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T1 mismatch: pre-existing claimed, but the test fails at the base", out)
+        self.assertIn(("rule_a", True), calls)
+
+    def test_REQ_EVD_001_B6_task_id_without_marker_is_not_a_dependency(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED),
+                            (True, "tests/check.py::rule_b", "AssertionError: 'T1 skipped' not found")],
+                           base="rule_b", now="rule_a rule_b")
+        code, out, calls = self.replay_recording(rev)
+        self.assertEqual(code, 1, out)
+        self.assertIn("T2 mismatch: red claimed, but the test passes at the base", out)
+        self.assertIn(("rule_b", True), calls)
+
+    def test_REQ_EVD_001_S4_red_after_earlier_task(self):
+        rev = self.project([(True, "tests/check.py::rule_a", RED),
+                            (True, "tests/check.py::rule_b", "AssertionError (after T1): warning shown")],
+                           base="rule_b", now="rule_a rule_b")
+        code, out, calls = self.replay_recording(rev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("T2 confirmed now (depends on T1)", out)
+        self.assertNotIn(("rule_b", True), calls)
+
+
+
+def mutation(find="rule_a", replace="rule_x", scenario="REQ-DUR-001.S1", file="src/dur.py", mid="M1"):
+    return f"- {mid} {scenario} {file}\n  - find: `{find}`\n  - replace: `{replace}`\n"
+
+
+class MutateTests(GitFixture):
+    """REQ-EVD-003: run the planned mutations."""
+
+    def test_REQ_EVD_003_S1_mutation_caught(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a", mutations=mutation())
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 0, out)
+        self.assertIn("M1 caught", out)
+
+    def test_REQ_EVD_003_N1_mutation_survived(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a",
+                     mutations=mutation(replace="rule_a and more"))
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn("M1 survived", out)
+
+    def test_REQ_EVD_003_N2_test_fails_without_the_mutation(self):
+        self.project([(True, "tests/check.py::rule_b", RED)], now="rule_a", mutations=mutation())
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn("M1 invalid: the test fails without the mutation", out)
+
+    def invalid_without_running(self, reason, now="rule_a", tasks=None, **mutation_args):
+        self.project(tasks or [(True, "tests/check.py::rule_a", RED)], now=now,
+                     mutations=mutation(**mutation_args))
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"M1 invalid: {reason}", out)
+        self.assertEqual(runner.call_count, 0, out)
+
+    def test_REQ_EVD_003_N3_find_text_not_in_file(self):
+        self.invalid_without_running("the find text is not in the file", find="rule_z")
+
+    def test_REQ_EVD_003_N4_find_text_found_twice(self):
+        self.invalid_without_running("the find text occurs 2 times", now="rule_a\nrule_a\n")
+
+    def test_REQ_EVD_003_N5_no_test_one_line(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a", test_one=False,
+                     mutations=mutation())
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn('"Test one:"', out)
+        self.assertEqual(runner.call_count, 0, out)
+
+    def test_REQ_EVD_003_N6_file_does_not_exist(self):
+        self.invalid_without_running("the file doesn't exist", file="src/gone.py")
+
+    def test_REQ_EVD_003_N7_task_without_test_line(self):
+        self.invalid_without_running("no test to run", tasks=[(True, "", RED)])
+
+    def test_REQ_EVD_003_N9_scenario_no_task_plans(self):
+        self.invalid_without_running("no test to run", scenario="REQ-DUR-001.N1",
+                                     tasks=[(True, "tests/check.py::rule_a", RED)])
+
+    def test_REQ_EVD_003_N8_not_a_git_repository(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a", git_repo=False,
+                     mutations=mutation())
+        before = snapshot(self.repo.root)
+        with mock.patch.object(sdd, "run_test", wraps=sdd.run_test) as runner:
+            code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn("mutate needs a git repository", out)
+        self.assertEqual(runner.call_count, 0, out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_003_B1_no_mutations_section(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a")
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no mutations are planned", out)
+
+    def test_REQ_EVD_003_B2_one_caught_one_survived(self):
+        self.project([(True, "tests/check.py::rule_a", RED)], now="rule_a",
+                     mutations=mutation() + mutation(replace="rule_a and more", mid="M2"))
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 1, out)
+        self.assertIn("M1 caught", out)
+        self.assertIn("M2 survived", out)
+
+    def test_REQ_EVD_003_B3_leading_spaces_kept(self):
+        self.project([(True, "tests/check.py::x_marker", RED)], now="    x_marker\nx_mark\n",
+                     mutations=mutation(find="    x_mark", replace="    y_mark"))
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 0, out)
+        self.assertIn("M1 caught", out)
+
+    def test_REQ_EVD_003_B4_scenario_planned_by_two_tasks(self):
+        self.project([(True, "tests/check.py::rule_a", RED),
+                      (True, "tests/check.py::rule_b", RED, "REQ-DUR-001.S1")],
+                     now="rule_a rule_b", mutations=mutation())
+        code, out = self.run_tool("mutate")
+        self.assertEqual(code, 0, out)
+        self.assertIn("M1 caught", out)
 
 
 if __name__ == "__main__":

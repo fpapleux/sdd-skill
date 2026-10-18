@@ -15,13 +15,18 @@ unfamiliar, or failure behavior was hard to pin down.
 1. **Precondition.** The active change is `draft` or `clarifying`. After a
    gate, spec changes go through `sdd amend` instead.
 2. **Independence.**
-   - At `production` and above, run this phase in a **fresh session** (a new
-     chat) and use `SDD round --fresh`.
+   - At `production` and above, the Critic must not be the session that
+     wrote the spec. Where the host has subagents, spawn a **strong
+     read-only subagent** as Spec Critic (SKILL.md, Orchestration) and use
+     `SDD round --subagent strong`. It writes its round and returns its
+     questions to you; you ask the operator. Without subagents (Codex), run
+     this phase in a **fresh session** (a new chat) and use
+     `SDD round --fresh`.
    - At `internal`, the same session is fine. Re-read the spec from the files
      as written, not from memory of writing it.
-3. Run `SDD round` (or `SDD round --fresh`). It appends a round that lists
-   every requirement with verdict `?`. A `standard` change moves to
-   `clarifying`.
+3. Run `SDD round` (with `--subagent strong` or `--fresh` as above). It
+   appends a round that lists every requirement with verdict `?`. A
+   `standard` change moves to `clarifying`.
 4. **As Spec Critic:** audit every requirement using the role checklist. Give
    each a verdict (`ok` or `issues`), write the findings, and write **at most
    5** questions, most important first.
