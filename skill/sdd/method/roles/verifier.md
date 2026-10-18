@@ -1,5 +1,7 @@
 # Role: Verifier
 
+`Tier: strong · Effort: high · Read-only: yes (writes only Verification and gap tasks)`
+
 You check someone else's work against the spec, with fresh eyes. Trust
 nothing you haven't re-run or read.
 
@@ -17,28 +19,44 @@ evidence; accept a ticked checkbox as proof.
    Given, performs the When, and asserts **every** part of the Then. For
    failure scenarios, that includes "nothing else happened". Mark it `yes`,
    `weak` (some part not asserted) or `wrong` (it tests something else).
-4. **Red evidence:** for each task, check that the `red:` line looks like a
+4. **Scripted evidence** (when the design has a `Test one:` line and the
+   project uses git):
+   - `SDD replay --base <base>`, where `<base>` is the commit the change
+     started from (usually `git merge-base HEAD main`). It reruns each ticked
+     task's test at the base and now. Every task must be `confirmed`; a
+     task marked `(after T<n>)` is checked now only. Each mismatch is a
+     finding.
+   - `SDD mutate` runs the planned `## Mutations`. Every mutation must be
+     `caught`; a survivor is a `weak` finding on its scenario's test, an
+     invalid entry is a finding on the plan. If the constitution asks for a
+     mutation check and a new or changed rule has no entry, that is a
+     finding too.
+   - Quote both summary lines in Verification. These replace replaying and
+     mutating by hand; read the code only where they report a problem.
+5. **Red evidence:** for each task, check that the `red:` line looks like a
    real assertion failure about the behavior. For each `pre-existing` task,
    check that the reason holds: the behavior truly existed, and the test
    would fail if it were removed. You can check that by reading, or by
    temporarily reverting the code and rerunning. A sound pre-existing task is
    reported but doesn't block. An unsound one is a `weak` finding.
-5. **Coverage** (`internal` and up): if the project already has a coverage
+6. **Coverage** (`internal` and up): if the project already has a coverage
    tool or one is available (coverage.py / pytest-cov, c8 / nyc /
    `jest --coverage`, `go test -cover`), run it on the changed files. Record
    branch coverage and any uncovered error branches (`except`, `else`, error
    returns). Each uncovered error branch is either a missing scenario or dead
    code: say which. Don't install tools without asking. If none is available,
    write "coverage: not available".
-6. **Known gaps** (`prototype`): confirm that the list matches what the code
+7. **Known gaps** (`prototype`): confirm that the list matches what the code
    really doesn't handle.
 
 ## `## Verification` format
 
 ```markdown
-- Date: 2026-10-07 · Verifier: same session (internal)
+- Date: 2026-10-07 · Verifier: subagent (strong)
 - Tests: `python3 -m unittest` → 12 passed
 - Check: `sdd.py check --stage verify` → OK
+- Replay: `sdd.py replay --base main` → replay: 6 confirmed, 0 mismatch, 0 skipped
+- Mutate: `sdd.py mutate` → mutate: 3 caught, 0 survived or invalid
 - Coverage: 96% branches on changed files; uncovered: duration.py:41 (`except OverflowError`) → finding F1
 
 | Scenario | Test | Result | Then fully asserted |

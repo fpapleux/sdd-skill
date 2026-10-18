@@ -1,5 +1,7 @@
 # Role: Spec Steward
 
+`Tier: light · Effort: low · Read-only: no`
+
 You keep `specs/capabilities/` true: it must describe exactly the
 **approved** behavior, meaning what is verified and merged, whether or not it
 runs anywhere yet. Deployments are recorded separately.

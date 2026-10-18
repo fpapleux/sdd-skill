@@ -19,14 +19,20 @@ same way from Claude Code, Codex, a git hook or a terminal.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
+import io
 import json
 import os
+import posixpath
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -95,6 +101,8 @@ REQUIRED_APPROVALS = {
 }
 AMENDABLE = {"spec-approved", "designed", "planned", "implementing", "verifying"}
 STAGES = ["spec", "plan", "implement", "verify"]
+TIERS = ["light", "mid", "strong"]
+INDEPENDENT_RUNNERS = ("fresh session", "subagent (strong)")  # at production and above
 
 REQ_HEAD = re.compile(
     r"^### (REQ-([A-Z][A-Z0-9]{1,5})-(\d{3,}))(?:\s+\[(MODIFIED|REMOVED)\])?\s*(.*)$")
@@ -103,6 +111,7 @@ SCENARIO_REF = re.compile(r"REQ-[A-Z][A-Z0-9]{1,5}-\d{3,}\.[A-Z]\d+")
 TASK_LINE = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
 TASK_ID = re.compile(r"^(T\d+)\b(.*)$")
 EVIDENCE_LINE = re.compile(r"^\s+[-*]\s*(test|red|green)\s*:\s*(.*)$", re.I)
+TIER_LINE = re.compile(r"^\s+[-*]\s*tier\s*:\s*(.*)$", re.I)
 NA_LINE = re.compile(r"^\s*[-*]\s*N/A\s+([A-Za-z-]+)\s*(?::|—|–|\s-\s)\s*(.*)$", re.I)
 REASON_LINE = re.compile(r"^\s*Reason\s*:\s*(.+)$", re.I)
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -114,9 +123,11 @@ FAILURE_WORDS = re.compile(r"fail|error|assert|expected|exception|traceback|rais
                            r"not equal|!=|mismatch|undefined|cannot|missing|not found", re.I)
 SETUP_ERRORS = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|"
                           r"Cannot find module|command not found", re.I)
-UNCOUNTED_SECTIONS = ("Clarifications", "Tasks", "Verification", "Amendments", "Approvals")
+UNCOUNTED_SECTIONS = ("Clarifications", "Tasks", "Mutations", "Verification", "Amendments", "Approvals")
 FINDING_TYPES = ["ambiguity", "contradiction", "untestable", "coverage", "weak-negative",
                  "conflict", "scope"]
+MUTATION_LINE = re.compile(r"^\s*[-*]\s*(M\d+)\b\s*(.*)$")
+MUTATION_TEXT = re.compile(r"^\s+[-*]\s*(find|replace)\s*:(.*)$", re.I)
 ROUND_HEAD = re.compile(r"^### Round (\d+)\b(.*)$")
 FINDING_LINE = re.compile(r"^\s*[-*]\s*(F\d+)\s*\[([A-Za-z-]+)\]\s*(.*)$")
 QUESTION_LINE = re.compile(r"^\s*[-*]\s*(Q\d+)\b\s*(.*)$")
@@ -390,12 +401,63 @@ def parse_tasks(section_text: str) -> tuple:
                 continue
             tasks.append({"id": ident.group(1), "done": task.group(1).lower() == "x",
                           "refs": SCENARIO_REF.findall(ident.group(2)),
-                          "test": "", "red": "", "green": ""})
+                          "test": "", "red": "", "green": "", "tiers": []})
+            continue
+        tier = TIER_LINE.match(line)
+        if tier and tasks:
+            tasks[-1]["tiers"].append(tier.group(1).strip())
             continue
         evidence = EVIDENCE_LINE.match(line)
         if evidence and tasks:
             tasks[-1][evidence.group(1).lower()] = evidence.group(2).strip()
     return tasks, problems
+
+
+def parse_mutations(section_text: str) -> list:
+    """Planned mutations: '- M1 <scenario> <file>' with find: and replace: lines."""
+    mutations = []
+    for line in section_text.splitlines():
+        entry = MUTATION_LINE.match(line)
+        if entry:
+            words = entry.group(2).split()
+            mutations.append({"id": entry.group(1), "scenario": words[0] if words else "",
+                              "file": words[1] if len(words) > 1 else ""})
+            continue
+        text = MUTATION_TEXT.match(line)
+        if text and mutations:
+            raw = text.group(2)
+            first, last = raw.find("`"), raw.rfind("`")
+            mutations[-1][text.group(1).lower()] = raw[first + 1:last] if last > first else None
+    return mutations
+
+
+def unsafe_path(rel: str) -> bool:
+    """True when a mutation's file would lie outside the project."""
+    path = rel.replace("\\", "/")
+    if path.startswith("/") or re.match(r"^[A-Za-z]:", path):
+        return True
+    return posixpath.normpath(path).split("/")[0] == ".."
+
+
+def check_mutations(mutations, scenario_refs, err):
+    seen = set()
+    for m in mutations:
+        if m["id"] in seen:
+            err(f"{m['id']}: duplicate mutation ID")
+        seen.add(m["id"])
+        if m["scenario"] not in scenario_refs:
+            err(f"{m['id']}: {m['scenario'] or 'no scenario'} is not a scenario of this change")
+        if not m["file"]:
+            err(f"{m['id']}: missing file (write '- {m['id']} REQ-….S1 path/to/file')")
+        elif unsafe_path(m["file"]):
+            err(f"{m['id']}: file {m['file']} is outside the project (use a path relative to its root)")
+        for field in ("find", "replace"):
+            if field not in m:
+                err(f"{m['id']}: missing {field} (write '  - {field}: `text`')")
+            elif m[field] is None:
+                err(f"{m['id']}: the {field} text must be written between backticks")
+        if m.get("find") is not None and m.get("find") == m.get("replace"):
+            err(f"{m['id']} changes nothing: its replace text equals its find text")
 
 
 def parse_rounds(section_text: str) -> list:
@@ -404,8 +466,10 @@ def parse_rounds(section_text: str) -> list:
     for line in section_text.splitlines():
         head = ROUND_HEAD.match(line)
         if head:
-            mode = re.search(r"Critic:\s*(same session|fresh session)", head.group(2), re.I)
-            current = {"number": int(head.group(1)), "mode": mode.group(1).lower() if mode else "",
+            mode = re.search(r"Critic:\s*(same session|fresh session|subagent(?:\s*\([^)]*\))?)",
+                             head.group(2), re.I)
+            current = {"number": int(head.group(1)),
+                       "mode": " ".join(mode.group(1).lower().split()) if mode else "",
                        "audit": {}, "findings": [], "questions": []}
             rounds.append(current)
             in_table = False
@@ -490,9 +554,14 @@ def check_rounds(rounds: list, level: str, req_ids: set, err, warn) -> int:
                 err(f"{name}: {f['id']} is open: end it with → fixed: … / accepted: … / "
                     "rejected: <reason>, or → Q<n> for a question")
     if rounds and LEVELS.index(level) >= LEVELS.index("production") \
-            and rounds[-1]["mode"] != "fresh session":
-        warn(f"Round {rounds[-1]['number']} ran in the same session; at production and above the "
-             "Critic should run in a fresh session (enforced in a later version)")
+            and rounds[-1]["mode"] not in INDEPENDENT_RUNNERS:
+        last = rounds[-1]
+        if last["mode"].startswith("subagent"):
+            warn(f"Round {last['number']}'s runner ({last['mode']}) is not independent: at production "
+                 "and above the Critic runs as a strong subagent or in a fresh session")
+        else:
+            warn(f"Round {last['number']} ran in the same session; at production and above the "
+                 "Critic should run in a fresh session or a strong subagent (enforced in a later version)")
     return unanswered
 
 
@@ -509,6 +578,21 @@ def latest_verdict(section_text: str):
         match = VERDICT_LINE.match(line)
         if match:
             found = (match.group(1), match.group(2).rstrip())
+    return found
+
+
+def latest_verifier(section_text: str):
+    """The text after 'Verifier:' on the last line that has it, ignoring comments and fenced code."""
+    found, in_fence = None, False
+    for line in strip_comments(section_text).splitlines():
+        if line.strip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = re.search(r"verifier\s*:\s*(.*)$", line, re.I)
+        if match:
+            found = match.group(1).strip()
     return found
 
 
@@ -841,6 +925,13 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     # Tasks: every scenario is planned test-first, and done means proven.
     for problem in task_problems:
         err(problem)
+    for task in tasks:
+        if len(task["tiers"]) > 1:
+            err(f"{task['id']} has more than one tier line (write one line; escalate with →)")
+        for value in task["tiers"]:
+            problem = tier_problem(task["id"], value)
+            if problem:
+                err(problem)
     scenario_refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
     if STAGES.index(stage) >= STAGES.index("plan"):
         check_plan(clean, tasks, scenario_refs, err, warn)
@@ -851,6 +942,10 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
         for task in tasks:
             if not task["done"]:
                 err(f"{task['id']}: not done")
+        runner = latest_verifier(secs.get("Verification", ""))
+        if LEVELS.index(level) >= LEVELS.index("production") and not " ".join((runner or "").lower().split()).startswith(INDEPENDENT_RUNNERS):
+            warn(f"the Verifier should run in a fresh session or a strong subagent "
+                 f"(latest Verifier line: {runner or 'none'})")
         files = {rel: c for rel, c in project_text_files(project).items() if is_test_path(rel)}
         for ref in scenario_refs:
             pattern = scenario_pattern(ref)
@@ -863,6 +958,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if lines > cap:
         warn(f"size cap: {lines} lines > {cap} for {fm.get('size', 'mini')}; "
              "trim, or split into smaller changes")
+    check_mutations(parse_mutations(secs.get("Mutations", "")), set(scenario_refs), err)
     rounds = parse_rounds(secs.get("Clarifications", ""))
     unanswered = check_rounds(rounds, level, {r.id for r in reqs}, err, warn)
     report.open_questions = clean.count("[NEEDS CLARIFICATION") + unanswered
@@ -880,6 +976,8 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
         "lines": lines,
         "cap": cap,
     }
+    if tasks:
+        report.counts["tiers"] = tier_counts(tasks)
     return report
 
 
@@ -988,6 +1086,35 @@ def check_requirement(req, level, err, warn, report):
     report.coverage.append(f"{req.id}  " + " · ".join(cells))
 
 
+def task_tier(task) -> str:
+    """The tier a task runs on: the last step of its tier line, or 'untiered'."""
+    if not task["tiers"]:
+        return "untiered"
+    return task["tiers"][0].split("→")[-1].strip()
+
+
+def tier_problem(tid: str, value: str):
+    """Why a tier line is invalid, or None: one tier, or a chain of one-tier steps."""
+    if "->" in value:
+        return f"{tid}: tier '{value}': an escalation is written with \"→\""
+    parts = [part.strip() for part in value.split("→")]
+    for part in parts:
+        if part not in TIERS:
+            return f"{tid}: tier '{value}' is not one of: {', '.join(TIERS)}"
+    for low, high in zip(parts, parts[1:]):
+        if TIERS.index(high) != TIERS.index(low) + 1:
+            return f"{tid}: tier '{value}': each step must go up exactly one tier"
+    return None
+
+
+def tier_counts(tasks) -> dict:
+    counts = {}
+    for task in tasks:
+        tier = task_tier(task)
+        counts[tier] = counts.get(tier, 0) + 1
+    return {t: counts[t] for t in [*TIERS, "untiered"] if counts.get(t)}
+
+
 def check_evidence(task, err, warn):
     """A ticked task proves a real red → green, or declares pre-existing behavior."""
     tid, red = task["id"], task["red"].strip()
@@ -1023,6 +1150,8 @@ def check_plan(clean, tasks, scenario_refs, err, warn):
         if task["id"] in ids:
             err(f"{task['id']}: duplicate task ID")
         ids.add(task["id"])
+        if not task["tiers"]:
+            warn(f"{task['id']}: no tier (add '  - tier: light|mid|strong')")
         if not task["refs"]:
             err(f"{task['id']}: references no scenario (e.g. REQ-ABC-001.S1)")
         for ref in task["refs"]:
@@ -1283,6 +1412,8 @@ def cmd_status(project: Project, args) -> int:
         print(f"  {change['requirements']} requirements · scenarios: {sc['happy']} happy, "
               f"{sc['negative']} negative, {sc['boundary']} boundary · tasks {tk['done']}/{tk['total']}"
               f" · {change['known_gaps']} known gaps · {change['lines']}/{change['cap']} lines")
+        if change.get("tiers"):
+            print("  tiers: " + ", ".join(f"{n} {t}" for t, n in change["tiers"].items()))
         ck = change["check"]
         print(f"  check ({ck['stage']}): {ck['errors']} errors, {ck['warnings']} warnings"
               f" · {change['open_questions']} open questions")
@@ -1614,7 +1745,8 @@ def cmd_round(project: Project, args) -> int:
         raise SddError("no requirements to review yet: write them first (sdd specify)")
     rounds = parse_rounds(secs.get("Clarifications", ""))
     number = max([r["number"] for r in rounds] or [0]) + 1
-    mode = "fresh session" if args.fresh else "same session"
+    mode = f"subagent ({args.subagent})" if args.subagent else \
+        "fresh session" if args.fresh else "same session"
     block = [f"### Round {number} — {today()} · Critic: {mode}", "",
              "| REQ | Verdict | Notes |", "| --- | --- | --- |"]
     block += [f"| {rid} | ? | |" for rid in current]
@@ -1630,6 +1762,214 @@ def cmd_round(project: Project, args) -> int:
     print(f"added Round {number} ({mode}) to {target.relative_to(project.root)}: give each "
           "requirement a verdict (ok or issues), then findings and at most 5 questions")
     return 0
+
+
+# ---------------------------------------------------------------- scripted evidence (replay, mutate)
+
+def test_one(clean_text: str) -> str:
+    """The design's per-test command template; refuses when there is none."""
+    match = re.search(r"^\s*[-*]\s*Test one\s*:[ \t]*(.*)$", clean_text, re.M)
+    template = match.group(1).strip().strip("`").strip() if match else ""
+    if not template:
+        raise SddError('no "Test one:" line in the design: add one, e.g. '
+                       '"- Test one: `python3 -m unittest {name}`"')
+    return template
+
+
+def expand(template: str, test_line: str):
+    """The command for one test, or None when the template needs '::' and the line has none."""
+    file, sep, name = test_line.partition("::")
+    if not sep and ("{file}" in template or "{name}" in template):
+        return None
+    values = {"{test}": test_line, "{file}": file, "{name}": name}
+    argv = []
+    for token in shlex.split(template):
+        for key, value in values.items():
+            token = token.replace(key, value)
+        argv.append(token)
+    return argv
+
+
+def run_test(argv: list, cwd: Path) -> bool:
+    """Exit code 0 is a pass; anything else, or a runner that can't start, is a failure."""
+    try:
+        result = subprocess.run(argv, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+@contextlib.contextmanager
+def scratch(kind: str):
+    folder = Path(tempfile.mkdtemp(prefix=f"sdd-{kind}-"))
+    try:
+        yield folder
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def require_git(project: Project, command: str):
+    try:
+        inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=project.root,
+                                capture_output=True, text=True)
+    except OSError:
+        inside = None
+    if inside is None or inside.returncode != 0 or inside.stdout.strip() != "true":
+        raise SddError(f"{command} needs a git repository (git must be installed and the project "
+                       "under version control)")
+
+
+def git_output(project: Project, *args) -> str:
+    return subprocess.run(["git", *args], cwd=project.root, capture_output=True, text=True,
+                          check=True).stdout
+
+
+def base_copy(project: Project, rev: str, folder: Path) -> Path:
+    """Extract the base revision into folder; return the project root inside it."""
+    prefix = git_output(project, "rev-parse", "--show-prefix").strip()
+    archive = subprocess.run(["git", "archive", "--format=tar", rev], cwd=project.root,
+                             capture_output=True, check=True).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        if hasattr(tarfile, "data_filter"):  # Python 3.12+, and patched earlier releases
+            tar.extractall(folder, filter="data")
+        else:
+            tar.extractall(folder)
+    return folder / prefix
+
+
+def listed_files(project: Project) -> list:
+    """Tracked and untracked, not ignored, files that exist, relative to the project root."""
+    out = git_output(project, "ls-files", "--cached", "--others", "--exclude-standard")
+    return [rel for rel in out.splitlines() if rel and (project.root / rel).is_file()]
+
+
+def overlay_tests(project: Project, target: Path):
+    """Lay every current test file (outside specs/) over a copy of another revision."""
+    for rel in listed_files(project):
+        if is_test_path(rel) and Path(rel).parts[0] != "specs":
+            (target / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(project.root / rel, target / rel)
+
+
+def cmd_replay(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    clean = strip_comments(change_text(path))
+    template = test_one(clean)
+    require_git(project, "replay")
+    known = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{args.base}^{{commit}}"],
+                           cwd=project.root, capture_output=True)
+    if known.returncode != 0:
+        raise SddError(f"unknown base revision '{args.base}'")
+    tasks, _ = parse_tasks(sections(clean).get("Tasks", ""))
+    mismatches, earlier = 0, set()
+    with scratch("replay") as folder:
+        base_root = base_copy(project, args.base, folder)
+        overlay_tests(project, base_root)
+        for task in tasks:
+            depends = re.search(r"\(after (T\d+)\)", task["red"])
+            depends = depends.group(1) if depends and depends.group(1) in earlier else None
+            earlier.add(task["id"])
+            if not task["done"]:
+                print(f"{task['id']} skipped (not ticked)")
+                continue
+            if not evidence_present(task["test"]):
+                mismatches += 1
+                print(f"{task['id']} mismatch: no test to run")
+                continue
+            argv = expand(template, task["test"])
+            if argv is None:
+                mismatches += 1
+                print(f'{task["id"]} mismatch: the test line has no "::"')
+                continue
+            print(f"run: {' '.join(shlex.quote(a) for a in argv)}")
+            if depends:
+                if run_test(argv, project.root):
+                    print(f"{task['id']} confirmed now (depends on {depends})")
+                else:
+                    mismatches += 1
+                    print(f"{task['id']} mismatch: the test fails now")
+                continue
+            at_base, now = run_test(argv, base_root), run_test(argv, project.root)
+            claims_red = not task["red"].lower().startswith("pre-existing")
+            if not now:
+                problem = "the test fails now"
+            elif claims_red and at_base:
+                problem = "red claimed, but the test passes at the base"
+            elif not claims_red and not at_base:
+                problem = "pre-existing claimed, but the test fails at the base"
+            else:
+                problem = None
+            if problem:
+                mismatches += 1
+                print(f"{task['id']} mismatch: {problem}")
+            else:
+                print(f"{task['id']} confirmed")
+    ticked = sum(1 for task in tasks if task["done"])
+    if not ticked:
+        print("nothing to replay: no ticked task")
+    else:
+        print(f"replay: {ticked - mismatches} confirmed, {mismatches} mismatch, "
+              f"{len(tasks) - ticked} skipped")
+    return 1 if mismatches else 0
+
+
+def tree_copy(project: Project, target: Path):
+    for rel in listed_files(project):
+        (target / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(project.root / rel, target / rel)
+
+
+def run_mutation(project: Project, m: dict, tasks: list, template: str) -> str:
+    """'caught', 'survived' or 'invalid: <why>' for one planned mutation."""
+    if m.get("find") is None or m.get("replace") is None:
+        return "invalid: the entry is incomplete (run sdd check)"
+    tests = [task["test"] for task in tasks
+             if m["scenario"] in task["refs"] and evidence_present(task["test"])]
+    if not tests:
+        return "invalid: no test to run"
+    commands = [expand(template, test) for test in tests]
+    if None in commands:
+        return 'invalid: the test line has no "::"'
+    if not m["file"] or unsafe_path(m["file"]):
+        return "invalid: the file is missing or outside the project"
+    if not (project.root / m["file"]).is_file():
+        return "invalid: the file doesn't exist"
+    occurrences = (project.root / m["file"]).read_text().count(m["find"])
+    if occurrences == 0:
+        return "invalid: the find text is not in the file"
+    if occurrences > 1:
+        return f"invalid: the find text occurs {occurrences} times"
+    with scratch("mutate") as folder:
+        tree_copy(project, folder)
+        if not all(run_test(argv, folder) for argv in commands):
+            return "invalid: the test fails without the mutation"
+        target = (folder / m["file"]).resolve()
+        if folder.resolve() not in target.parents:
+            return "invalid: the file is missing or outside the project"
+        target.write_text(target.read_text().replace(m["find"], m["replace"], 1))
+        after = [run_test(argv, folder) for argv in commands]
+    return "survived" if all(after) else "caught"
+
+
+def cmd_mutate(project: Project, args) -> int:
+    project.require_init()
+    clean = strip_comments(change_text(project.current(args.change)))
+    secs = sections(clean)
+    mutations = parse_mutations(secs.get("Mutations", ""))
+    if not mutations:
+        print("no mutations are planned: nothing to run")
+        return 0
+    template = test_one(clean)
+    require_git(project, "mutate")
+    tasks, _ = parse_tasks(secs.get("Tasks", ""))
+    failed = 0
+    for m in mutations:
+        result = run_mutation(project, m, tasks, template)
+        failed += result != "caught"
+        print(f"{m['id']} {result}")
+    print(f"mutate: {len(mutations) - failed} caught, {failed} survived or invalid")
+    return 1 if failed else 0
 
 
 def cmd_next_req(project: Project, args) -> int:
@@ -1702,9 +2042,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_archive)
 
     p = sub.add_parser("round", help="start a Spec Critic review round on the active change")
-    p.add_argument("--fresh", action="store_true", help="the Critic runs in a fresh session")
+    runner = p.add_mutually_exclusive_group()
+    runner.add_argument("--fresh", action="store_true", help="the Critic runs in a fresh session")
+    runner.add_argument("--subagent", choices=TIERS, help="the Critic runs as a subagent on this tier")
     p.add_argument("--change")
     p.set_defaults(func=cmd_round)
+
+    p = sub.add_parser("replay", help="rerun each ticked task's test at a base revision and now")
+    p.add_argument("--base", required=True, help="the revision before the change (e.g. main)")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_replay)
+
+    p = sub.add_parser("mutate", help="run the change's planned mutations against their tests")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_mutate)
 
     p = sub.add_parser("next-req", help="next free requirement ID for a prefix")
     p.add_argument("prefix")

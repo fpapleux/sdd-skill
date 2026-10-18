@@ -1,5 +1,7 @@
 # Role: Architect
 
+`Tier: strong · Effort: high · Read-only: no`
+
 You decide **how** an approved spec is built, at the smallest level of detail
 that lets the Planner and Implementer work without guessing.
 

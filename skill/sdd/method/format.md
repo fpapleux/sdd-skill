@@ -9,8 +9,8 @@ sections**, spread over a folder and read as one document:
 | --- | --- |
 | `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
 | `spec-delta.md` | Requirements, Known gaps |
-| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`) |
-| `tasks.md` | Tasks |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:` and `- Test one:`) |
+| `tasks.md` | Tasks, Mutations |
 | `verification.md` | Verification |
 
 ## Front matter (written by the script)
@@ -163,6 +163,10 @@ every requirement:
   unanswered question counts as an open question and blocks the gate.
 - **The gate:** when a Critic round is required, the **latest** round must
   audit every current requirement.
+- **Runner:** the heading says who reviewed: `Critic: same session`,
+  `Critic: fresh session` or `Critic: subagent (<tier>)` (from `SDD round`,
+  `--fresh` or `--subagent <tier>`). At `production` and above, check warns
+  unless the latest round ran in a fresh session or on a strong subagent.
 
 Clarifications are review history. They aren't locked and don't count toward
 the size cap.
@@ -177,20 +181,30 @@ other levels it's optional, and useful for things out of scope.
 
 `## Design notes`: just enough "how" for a small change: files or modules
 touched, approach, test strategy. It must keep a line such as
-``- Test command: `python3 -m unittest` ``.
+``- Test command: `python3 -m unittest` ``. For `SDD replay` and `SDD mutate`,
+add the command that runs **one** test: ``- Test one: `python3 -m unittest
+{name}` ``, where `{test}` is a task's whole test line, and `{file}` and
+`{name}` are its parts before and after `::`.
 
 ## Tasks
 
 ```markdown
 - [ ] T1 REQ-DUR-001.S1 Parse "1h30m"
+  - tier: light
   - test: tests/test_duration.py::test_REQ_DUR_001_S1_parses_hours_minutes
   - red: AssertionError: None != 90
   - green: 1 passed in 0.01s
 - [ ] T2 REQ-DUR-001.N1 Reject "abc"
+  - tier: mid
   - test:
   - red:
   - green:
 ```
+
+- **Tier** (optional; check warns when a task has none): `light`, `mid` or
+  `strong`, the model the Implementer runs on. A task escalated after two
+  failed attempts keeps its history, one tier per step: `light → mid`,
+  `light → mid → strong`.
 
 - One task per scenario, normally. Group scenarios into one task when the
   same minimal code satisfies all of them: several happy or boundary
@@ -205,7 +219,33 @@ touched, approach, test strategy. It must keep a line such as
   - `red: pre-existing — <reason>` is for behavior that already existed when
     the test was written. It is accepted, reported, and reviewed by the
     Verifier.
+  - `(after T<n>)` in a red line (`red: pre-existing (after T3) — …`,
+    `red: AssertionError (after T3): …`) says the claim holds only after an
+    earlier task's code. `SDD replay` then checks it in the working tree
+    only.
   - `green:` is the passing run.
+
+## Mutations
+
+`## Mutations` (in `tasks.md` for a `standard` change) lists the rules to
+break on purpose. `SDD mutate` runs them; it doesn't count toward the size
+cap.
+
+```markdown
+- M1 REQ-DUR-001.N1 src/duration.py
+  - find: `if not text:`
+  - replace: `if False:`
+```
+
+- One entry per mutation: an ID, the scenario whose test should catch it, and
+  a file relative to the project root (not absolute, never `..`).
+- The texts are everything between the line's first and last backtick, so
+  leading spaces and inner backticks are kept. A replace line with two
+  backticks and nothing between them deletes the find text. The find text
+  must occur exactly once in the file, and the replace text must differ.
+- `SDD mutate` runs the tests of the tasks that plan the scenario: before the
+  mutation (they must pass), then after (at least one must fail). The result
+  is `caught`, `survived` or `invalid`.
 
 ## Test naming
 

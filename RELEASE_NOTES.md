@@ -8,6 +8,50 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.16.0 — 2026-10-18
+
+Change 0002-subagent-fanout (v1 increment 4) passed verification and was
+archived. Living specs:
+[`orchestration`](specs/capabilities/orchestration/spec.md) (3 requirements)
+and [`evidence`](specs/capabilities/evidence/spec.md) (3 requirements).
+It has 6 requirements, 81 scenarios and 68 tasks. The suite is now 290 tests,
+and all 49 planned mutations are caught.
+
+- **Behavior:** a task may carry `  - tier: light|mid|strong`, or an escalation
+  such as `light → mid`. `check` rejects other values, and warns about a task
+  without a tier from the plan stage on. `status` and `status --json` count
+  tasks per tier.
+- **Behavior:** `sdd.py round --subagent <tier>` heads a Critic round with its
+  runner. At `production` and above, `check` warns unless the latest round ran
+  in a fresh session or as a strong subagent.
+- **Behavior:** at `production` and above, `check --stage verify` warns unless
+  the latest `Verifier:` line names a fresh session or a strong subagent.
+- **Behavior:** new `sdd.py replay --base <rev>`: reruns each ticked task's
+  test at the base revision and in the working tree, and reports each task
+  as confirmed or a mismatch. A red line marked `(after T<n>)` is checked in
+  the working tree only.
+- **Behavior:** new `sdd.py mutate`, with a `## Mutations` section (not counted
+  toward the size cap) that `check` validates. Each mutation is run in a
+  scratch copy and reported as caught, survived or invalid.
+- **Behavior:** a design may name its single-test command with
+  `- Test one:`, which `replay` and `mutate` need. Both need git, and neither
+  changes your working tree.
+- Method: `SKILL.md` gains an Orchestration section (prime model, subagent
+  hand-off, tier → model, escalation after two failed attempts, Codex
+  fallback). Every role file starts with its tier, effort and read-only rule.
+  The Planner assigns tiers and mutations; the Verifier runs `replay` and
+  `mutate`.
+- Upgrade: no spec needs editing. Existing specs now show the new warnings
+  (no tier, and a `production` change's Verifier or Critic runner) but still
+  pass `check`.
+- Known gaps carried into the living specs: runner and tier records are written
+  by the agent and not verified; read-only subagents are an instruction, not
+  enforced; `replay` and `mutate` have no time limit; a mutation is a
+  single-line find and replace.
+- Not yet exercised live: spawning a Critic or Verifier subagent. The method
+  half was verified by review.
+- Merged into `main` from the `v1` branch, together with 0.14.0 and 0.15.0.
+
 ## 0.15.0 — 2026-10-14
 
 - These release notes, listing every version since v0.

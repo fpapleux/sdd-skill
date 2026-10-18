@@ -7,9 +7,12 @@ Check the delivered work against the spec. Role: **Verifier**
    already `verifying`. If tasks remain, say which, and point to
    `sdd implement`.
 2. **Independence.** At `prototype` and `internal`, verifying in the same
-   session is fine. At `production` and `critical`, the independent reviewer isn't built yet.
-   Recommend that the operator run `verify` in a **fresh session** (new
-   chat), which works because all state is in files. Continue here only if
+   session is fine. At `production` and `critical`, the Verifier must not be
+   the session that implemented. Where the host has subagents, spawn a
+   **strong read-only subagent** as Verifier (SKILL.md, Orchestration); its
+   record says `Verifier: subagent (strong)`. Without subagents (Codex),
+   recommend that the operator run `verify` in a **fresh session** (new
+   chat), which works because all state is in files; continue here only if
    they say so.
 3. If the status is `implementing`, run `SDD advance verifying`.
 4. Follow the Verifier checklist and write `## Verification`.

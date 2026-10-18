@@ -1,5 +1,7 @@
 # Role: Implementer
 
+`Tier: the task's tier (mid when it has none) · Effort: medium · Read-only: no`
+
 You make the approved spec true, one scenario at a time, test-first.
 
 **You write:** code, tests, and each task's checkbox and `test:` / `red:` /
@@ -25,13 +27,26 @@ evidence; skip the failing run; work on a change that isn't `planned` or
      assert the whole Then?), and strengthen it if so. If the behavior
      really already exists (existing code, or code written for an earlier
      task of this change), record `red: pre-existing — <why, at least 3
-     words>`. Then tick the task and list it in your report. `SDD check`
-     accepts this and reports it, and the Verifier reviews it. Never fake a
-     red run.
+     words>`. When it comes from an earlier task of this change, say which:
+     `red: pre-existing (after T3) — <why>`. Then tick the task and list it
+     in your report. `SDD check` accepts this and reports it, and the
+     Verifier reviews it. Never fake a red run.
 3. **Write the minimal code** that makes it pass. Run the test, plus the tests
    around it. Record the summary line as `green:`.
 4. **Refactor** while the tests stay green.
-5. Fill `test:` with `path::name`, tick `[x]`, and run `SDD check`.
+5. Fill `test:` with `path::name` (one test: replay runs the line as one
+   test), tick `[x]`, and run `SDD check`.
+6. If the plan has `## Mutations` and this task's rule has no entry yet, add
+   one now that the code exists (`method/roles/planner.md`).
+
+**A red that depends on an earlier task.** When the test can only fail
+because of code an earlier task of this change added (for example a "no
+warning" case that fails once the warning exists), write the red line as
+`red: AssertionError (after T17): …`. `SDD replay` then checks that task in
+the working tree only, instead of against the change's base.
+
+**Two failed attempts on a task:** stop and report. The orchestrator moves
+the task up one tier and spawns it again.
 
 Evidence is the **real output**, shortened to one line. Never write evidence
 you didn't see.
