@@ -1,0 +1,1253 @@
+<!-- Planner: one task per scenario (group triangulating happy/boundary
+examples of one rule), each negative right after its happy path. -->
+
+## Tasks
+<!-- Tiers dogfood REQ-ORC-001; the pinned tool ignores tier lines. Where a
+"no warning" or "no error" scenario passes before the rule exists, its task comes
+after the first negative so that its red run is real (so REQ-ANL-001.S2, N6 and B2
+follow the first REQ-ANL-002 tasks, and REQ-ANL-002.N6 follows REQ-ANL-003.N2).
+Tests go in the classes the design names; the test: lines are filled by the
+Implementer. -->
+
+- [x] T1 REQ-ANL-001.S1 analyze prints its header, the scenarios line and the result
+  - tier: strong
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_S1_analyze_prints_header_scenarios_and_result
+  - red: AssertionError: False is not true : check 0003-x (stage: plan, assurance: production)
+  - green: Ran 1 test in 0.110s OK
+- [x] T2 REQ-ANL-001.S3 --change analyzes another change and leaves the active one
+  - tier: mid
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_S3_change_option_analyzes_another_change
+  - red: AssertionError: False is not true : usage: sdd.py [-h] ... error: unrecognized arguments: --change 0004-other
+  - green: Ran 2 tests in 0.194s OK (full suite: Ran 292 tests OK)
+- [x] T3 REQ-ANL-001.N1 unknown change ID refused
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N1_unknown_change_refused
+  - red: pre-existing (after T2) — project.current already refuses unknown IDs
+  - green: Ran 1 test in 0.102s OK
+- [x] T4 REQ-ANL-001.N3 uninitialized repository refused
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N3_uninitialized_repository_refused
+  - red: AssertionError: 'error: this repository is not initialized' not found in 'error: no active change: start one with `sdd quick ...`'
+  - green: Ran 1 test in 0.006s OK
+- [x] T5 REQ-ANL-001.N4 no active change refused
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N4_no_active_change_refused
+  - red: pre-existing (after T1) — project.current already refuses no active change
+  - green: Ran 1 test in 0.073s OK
+- [x] T6 REQ-ANL-001.N2 unknown option is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N2_unknown_option_is_usage_error
+  - red: pre-existing (after T1) — argparse rejects options analyze does not define
+  - green: Ran 1 test in 0.102s OK
+- [x] T7 REQ-ANL-001.N5 a scenario without a task fails analyze like check
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N5_scenario_without_task_fails_like_check
+  - red: pre-existing (after T1) — check already reports scenarios without a task
+  - green: Ran 1 test in 0.094s OK
+- [x] T8 REQ-ANL-001.B1 a draft with no tasks fails analyze
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_B1_draft_without_tasks_fails_analyze
+  - red: pre-existing (after T1) — check already reports a draft with no tasks
+  - green: Ran 1 test in 0.041s OK
+- [x] T9 REQ-ANL-002.N1 design naming a nonexistent requirement is an error
+  - tier: strong
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N1_design_naming_nonexistent_requirement_is_error
+  - red: AssertionError: 0 != 1 : analyze 0003-x (assurance: production) ... result: OK
+  - green: Ran 1 test in 0.091s OK
+- [x] T10 REQ-ANL-002.S1 a design naming every requirement raises no trace finding
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_S1_design_naming_every_requirement_raises_no_finding
+  - red: pre-existing (after T9) — design_findings already ignores named, existing requirements
+  - green: Ran 1 test in 0.148s OK
+- [x] T11 REQ-ANL-002.N2 a requirement the design never names is a warning
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N2_requirement_the_design_never_names_is_a_warning
+  - red: AssertionError: '  - REQ-ANL-002 is not named in design.md: trace each component to its requirements' not found in ['analyze 0003-x (assurance: production)', 'coverage:', ... 'result: OK']
+  - green: Ran 1 test in 0.105s OK
+- [x] T12 REQ-ANL-001.S2 analyze --json merges the trace warning into check's keys
+  - tier: mid
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_S2_json_merges_trace_warning_into_checks_keys
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] ... error: unrecognized arguments: --json
+  - green: Ran 1 test in 0.121s OK
+- [x] T13 REQ-ANL-001.N6 analyze --json with a trace error is not ok
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_N6_json_with_trace_error_is_not_ok
+  - red: pre-existing (after T12) — analyze --json already reports the trace error
+  - green: Ran 1 test in 0.126s OK
+- [x] T14 REQ-ANL-001.B2 a mini change has no design finding
+  - tier: light
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_B2_mini_change_has_no_design_finding
+  - red: pre-existing (after T9) — design_rules_apply skips mini changes
+  - green: Ran 1 test in 0.092s OK
+- [x] T15 REQ-ANL-002.N3 no trace finding before designed
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N3_no_trace_finding_before_designed
+  - red: pre-existing (after T9) — design_rules_apply skips drafts before designed
+  - green: Ran 1 test in 0.076s OK
+- [x] T16 REQ-ANL-002.N4 a blocked change counts at the status it was blocked from
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N4_blocked_change_counts_at_the_status_it_was_blocked_from
+  - red: pre-existing (after T9) — design_rules_apply already reads blocked_from for a blocked change
+  - green: Ran 1 test in 0.117s OK
+- [x] T17 REQ-ANL-002.N5 an abandoned change gets no trace finding
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N5_abandoned_change_gets_no_trace_finding
+  - red: pre-existing (after T9) — design_rules_apply already returns False for abandoned
+  - green: Ran 1 test in 0.135s OK
+- [x] T18 REQ-ANL-002.B1 a removed requirement is not warned about
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B1_removed_requirement_is_not_warned_about
+  - red: pre-existing (after T11) — design_findings already skips removed requirements
+  - green: Ran 1 test in 0.106s OK
+- [x] T19 REQ-ANL-002.B2 a living-spec requirement is known
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B2_living_spec_requirement_is_known
+  - red: pre-existing (after T9) — known_ids already includes the living-spec registry
+  - green: Ran 1 test in 0.152s OK
+- [x] T20 REQ-ANL-002.B3 a mention inside an HTML comment does not count
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B3_mention_inside_html_comment_does_not_count
+  - red: pre-existing (after T11) — design_view already strips comments before the trace
+  - green: Ran 1 test in 0.087s OK
+- [x] T21 REQ-ANL-002.B6 a mention inside a fenced code block does not count
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B6_mention_inside_fenced_code_block_does_not_count
+  - red: pre-existing (after T9) — design_view already blanks fenced code lines
+  - green: Ran 1 test in 0.100s OK
+- [x] T22 REQ-ANL-002.B4 the underscore form does not count
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B4_underscore_form_does_not_count
+  - red: pre-existing (after T11) — REQ_TOKEN already matches the hyphen form only
+  - green: Ran 1 test in 0.101s OK
+- [x] T23 REQ-ANL-002.B5 a scenario reference names its requirement
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B5_scenario_reference_names_its_requirement
+  - red: pre-existing (after T11) — REQ_TOKEN already matches the requirement in a scenario reference
+  - green: Ran 1 test in 0.129s OK
+- [x] T24 REQ-ANL-002.B7 one error per distinct ID
+  - tier: light
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_B7_one_error_per_distinct_id
+  - red: pre-existing (after T9) — named already deduplicates IDs with dict.fromkeys
+  - green: Ran 1 test in 0.113s OK
+- [x] T25 REQ-ANL-003.N1 a failure mode with no arrow has no outcome
+  - tier: strong
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N1_failure_mode_without_arrow_has_no_outcome
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', ..., 'result: OK']
+  - green: Ran 1 test in 0.097s OK
+- [x] T26 REQ-ANL-003.S1 well-formed entries raise no finding
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_S1_well_formed_entries_with_na_raise_no_finding
+  - red: pre-existing (after T25) — FM_ENTRY and the arrow check already accept both forms
+  - green: Ran 1 test in 0.078s OK
+- [x] T27 REQ-ANL-003.N6 a bullet that is neither an entry nor a None line
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N6_bullet_that_is_neither_entry_nor_none_line
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.118s OK
+- [x] T28 REQ-ANL-003.S2 a lone None line with a reason is accepted
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_S2_lone_none_line_with_reason_is_accepted
+  - red: pre-existing (after T27) — a None line matches FM_ENTRY so it is not reported as malformed
+  - green: Ran 1 test in 0.091s OK
+- [x] T29 REQ-ANL-003.N4 a None line needs a reason of 3 words
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N4_none_line_needs_three_word_reason
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.106s OK
+- [x] T30 REQ-ANL-003.N15 a bare None line needs a reason
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N15_bare_none_line_needs_a_reason
+  - red: pre-existing (after T29) — the T29 reason check already covers a bare None
+  - green: Ran 1 test in 0.148s OK
+- [x] T31 REQ-ANL-003.N7 a None line next to an entry
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N7_none_line_next_to_an_entry
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.150s OK
+- [x] T32 REQ-ANL-003.N13 a second None line
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N13_second_none_line_is_refused
+  - red: pre-existing (after T31) — the T31 check already refuses a second None line
+  - green: Ran 1 test in 0.101s OK
+- [x] T33 REQ-ANL-003.N3 an N/A outcome needs a 3-word reason
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N3_na_outcome_needs_three_word_reason
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.098s OK
+- [x] T34 REQ-ANL-003.B3 an N/A reason of exactly 3 words is accepted
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B3_na_reason_of_three_words_is_accepted
+  - red: pre-existing (after T33) — the N/A check accepts exactly three words
+  - green: Ran 1 test in 0.116s OK
+- [x] T35 REQ-ANL-003.N8 an outcome that is neither references nor N/A
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N8_outcome_neither_references_nor_na
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.110s OK
+- [x] T36 REQ-ANL-003.N14 an N/A without a separator
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N14_na_without_separator_is_refused
+  - red: pre-existing (after T35) — the outcome check already refuses an N/A without separator
+  - green: Ran 1 test in 0.130s OK
+- [x] T37 REQ-ANL-003.N10 an entry wrapped over two lines has no outcome
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N10_wrapped_entry_has_no_outcome
+  - red: pre-existing (after T25) — check_fm_entry already reports an arrowless first line
+  - green: Ran 1 test in 0.172s OK
+- [x] T38 REQ-ANL-003.N5 a repeated FM number
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N5_repeated_fm_number
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.089s OK
+- [x] T39 REQ-ANL-003.N11 FM1 and FM01 are the same number
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N11_fm1_and_fm01_are_the_same_number
+  - red: pre-existing (after T38) — int() already makes FM01 equal FM1
+  - green: Ran 1 test in 0.102s OK
+- [x] T40 REQ-ANL-003.N2 a scenario reference that doesn't exist needs an amendment
+  - tier: strong
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N2_missing_scenario_reference_needs_an_amendment
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', ..., 'result: OK']
+  - green: Ran 1 test in 0.120s OK
+- [x] T41 REQ-ANL-002.N6 a failure-mode outcome naming a missing requirement is one trace error
+  - tier: mid
+  - test: tests/test_sdd.py::DesignTraceTests.test_REQ_ANL_002_N6_failure_mode_outcome_naming_missing_requirement_is_one_error
+  - red: pre-existing (after T40) — check_fm_refs already skips references whose requirement is missing
+  - green: Ran 1 test in 0.145s OK
+- [x] T42 REQ-ANL-003.B1 several scenario references on one entry
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B1_several_scenario_references_on_one_entry
+  - red: pre-existing (after T35) — the comma split already accepts several references
+  - green: Ran 1 test in 0.139s OK
+- [x] T43 REQ-ANL-003.S3 a living-spec scenario counts
+  - tier: strong
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_S3_living_spec_scenario_counts
+  - red: pre-existing (after T40) — counting_scenarios already adds the living spec's scenarios
+  - green: Ran 1 test in 0.147s OK
+- [x] T44 REQ-ANL-003.N12 a scenario dropped by a MODIFIED restatement does not count
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N12_scenario_dropped_by_modified_restatement_does_not_count
+  - red: pre-existing (after T40) — counting_scenarios already skips living requirements the change modifies
+  - green: Ran 1 test in 0.188s OK
+- [x] T45 REQ-ANL-003.B2 a scenario of a removed requirement does not count
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B2_scenario_of_removed_requirement_does_not_count
+  - red: pre-existing (after T40) — counting_scenarios already skips removed living requirements
+  - green: Ran 1 test in 0.076s OK
+- [x] T46 REQ-ANL-003.B4 prose lines are ignored and an indented sub-bullet is checked
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B4_prose_ignored_and_indented_sub_bullet_checked
+  - red: pre-existing (after T27) — the T27 check already reports the indented sub-bullet
+  - green: Ran 1 test in 0.054s OK
+- [x] T47 REQ-ANL-003.B5 an entry inside a fenced code block is ignored
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B5_entry_inside_fenced_code_block_is_ignored
+  - red: pre-existing (after T9) — design_view already blanks fenced code lines
+  - green: Ran 1 test in 0.053s OK
+- [x] T48 REQ-ANL-003.B6 an entry inside an HTML comment is ignored
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_B6_entry_inside_html_comment_is_ignored
+  - red: pre-existing (after T11) — design_view already strips comments before the checks
+  - green: Ran 1 test in 0.051s OK
+- [x] T49 REQ-ANL-003.N9 no failure-mode finding before designed
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N9_no_failure_mode_finding_before_designed
+  - red: pre-existing (after T9) — design_rules_apply skips drafts before designed
+  - green: Ran 1 test in 0.071s OK
+- [x] T50 REQ-ANL-004.N1 a production design with no Failure modes section is an error
+  - tier: strong
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_N1_production_design_without_failure_modes_section_is_error
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', ..., 'result: OK']
+  - green: Ran 1 test in 0.092s OK
+- [x] T51 REQ-ANL-004.S1 one entry satisfies the presence rule
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_S1_one_failure_mode_entry_satisfies_presence_rule
+  - red: pre-existing (after T50) — failure_mode_entries already counts FM and None entries
+  - green: Ran 1 test in 0.066s OK
+- [x] T52 REQ-ANL-004.N3 a section holding only a malformed bullet still lacks an entry
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_N3_section_with_only_a_malformed_bullet_still_lacks_an_entry
+  - red: pre-existing (after T50) — failure_mode_entries only counts bullets matching FM_ENTRY
+  - green: Ran 1 test in 0.202s OK
+- [x] T53 REQ-ANL-004.B3 a bullet starting with None... but not a None line is no entry
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_B3_bullet_starting_with_none_but_not_a_none_line_is_no_entry
+  - red: pre-existing (after T25) — FM_ENTRY lookahead already rejects Nonetheless as a None line
+  - green: Ran 1 test in 0.116s OK
+- [x] T54 REQ-ANL-004.B2 a section with no bullet lacks an entry
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_B2_section_with_no_bullet_lacks_an_entry
+  - red: pre-existing (after T50) — failure_mode_entries already finds no entry in an empty section
+  - green: Ran 1 test in 0.127s OK
+- [x] T55 REQ-ANL-004.B4 an entry inside a comment does not count
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_B4_entry_inside_a_comment_does_not_count
+  - red: pre-existing (after T11) — design_view already strips comments before the checks
+  - green: Ran 1 test in 0.143s OK
+- [x] T56 REQ-ANL-004.B1 below production the missing section is a warning
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_B1_below_production_missing_section_is_a_warning
+  - red: pre-existing (after T50) — check_failure_modes_present already picks warn below production
+  - green: Ran 1 test in 0.146s OK
+- [x] T57 REQ-ANL-004.N2 no presence finding before designed
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_N2_no_presence_finding_before_designed
+  - red: pre-existing (after T9) — design_rules_apply skips drafts before designed
+  - green: Ran 1 test in 0.087s OK
+- [x] T58 REQ-ANL-005.N1 a listed interface without a contract entry
+  - tier: strong
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N1_listed_interface_without_contract_entry
+  - red: AssertionError: 0 != 1 : ['check 0003-x (stage: plan, assurance: production)', ..., 'result: OK']
+  - green: Ran 1 test in 0.140s OK (full suite: Ran 350 tests OK)
+- [x] T59 REQ-ANL-005.S1 an interface with its contract entry
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_S1_interface_with_its_contract_entry
+  - red: pre-existing (after T58) — check_contracts already accepts an interface with its entry
+  - green: Ran 1 test in 0.149s OK
+- [x] T60 REQ-ANL-005.S2 backticks around the interface name are trimmed
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_S2_backticks_around_interface_name_are_trimmed
+  - red: pre-existing (after T58) — contract_name already trims surrounding backticks
+  - green: Ran 1 test in 0.120s OK
+- [x] T61 REQ-ANL-005.S3 no interface line and no Contracts section
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_S3_no_interface_line_and_no_contracts_section
+  - red: pre-existing (after T58) — check_contracts already ignores a design with no interface
+  - green: Ran 1 test in 0.197s OK
+- [x] T62 REQ-ANL-005.N2 an interface line with no name
+  - tier: mid
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N2_interface_line_with_no_name
+  - red: AssertionError: 0 != 1 : ['check 0003-x (stage: plan, assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.113s OK
+- [x] T63 REQ-ANL-005.N3 a repeated contract entry
+  - tier: mid
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N3_repeated_contract_entry
+  - red: AssertionError: 0 != 1 : ['check 0003-x (stage: plan, assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.136s OK
+- [x] T64 REQ-ANL-005.N5 a contract heading with no name
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N5_contract_heading_with_no_name
+  - red: AssertionError: 0 != 1 : ['check 0003-x (stage: plan, assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.132s OK
+- [x] T65 REQ-ANL-005.B1 two interfaces, one entry: one error for the second
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_B1_two_interfaces_one_entry_one_error_for_second
+  - red: pre-existing (after T58) — the per-interface loop already reports only the unentried one
+  - green: Ran 1 test in 0.157s OK
+- [x] T66 REQ-ANL-005.B3 an interface listed twice counts once
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_B3_interface_listed_twice_counts_once
+  - red: pre-existing (after T58) — dict.fromkeys already deduplicates interface names
+  - green: Ran 1 test in 0.192s OK
+- [x] T67 REQ-ANL-005.B2 an entry with no interface line is a warning
+  - tier: mid
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_B2_entry_with_no_interface_line_is_a_warning
+  - red: AssertionError: 'warnings (1):' not found in ['check 0003-x (stage: plan, assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.159s OK
+- [x] T68 REQ-ANL-005.N6 an interface line inside a fenced code block is ignored
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N6_interface_line_in_fenced_block_is_ignored
+  - red: pre-existing (after T9) — design_view already blanks fenced code lines
+  - green: Ran 1 test in 0.070s OK
+- [x] T69 REQ-ANL-005.N4 no contract finding at the spec stage
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_N4_no_contract_finding_at_the_spec_stage
+  - red: pre-existing (after T58) — the plan-stage gate already keeps contracts out of spec
+  - green: Ran 1 test in 0.064s OK
+- [x] T70 REQ-ANL-005.B4 the contract error shows at the implement stage
+  - tier: light
+  - test: tests/test_sdd.py::ContractTests.test_REQ_ANL_005_B4_missing_entry_error_shows_at_implement_stage
+  - red: pre-existing (after T58) — the plan-stage gate already runs contracts at implement
+  - green: Ran 1 test in 0.094s OK
+- [x] T71 REQ-ANL-006.N1 a clause no scenario exercises is a warning
+  - tier: strong
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_N1_clause_no_scenario_exercises_is_warning
+  - red: AssertionError: Lists differ: [] != ['  - REQ-ANL-001: no scenario exercises t[47 chars]ic)']
+  - green: Ran 1 test in 0.081s OK
+- [x] T72 REQ-ANL-006.S1 clauses all exercised raise no warning
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_S1_clauses_all_exercised_raise_no_warning
+  - red: pre-existing (after T71) — check_requirement_clauses already stays silent when all clauses are covered
+  - green: Ran 1 test in 0.238s OK
+- [x] T73 REQ-ANL-006.N2 one warning per uncovered clause
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_N2_one_warning_per_uncovered_clause
+  - red: pre-existing (after T71) — check_requirement_clauses already warns once for each uncovered clause
+  - green: Ran 1 test in 0.130s OK
+- [x] T74 REQ-ANL-006.N3 a removed requirement gets no clause warning
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_N3_removed_requirement_gets_no_clause_warning
+  - red: AssertionError: Lists differ: ['  - REQ-ORC-002: no scenario exercises t[227 chars]ic)'] != []
+  - green: Ran 1 test in 0.093s OK
+- [x] T75 REQ-ANL-006.N4 the category cell does not count as a mention
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_N4_category_cell_does_not_count_as_a_mention
+  - red: pre-existing (after T71) — scenario_words already ignores the category cell
+  - green: Ran 1 test in 0.145s OK
+- [x] T76 REQ-ANL-006.N5 only whole words match
+  - tier: mid
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_N5_only_whole_words_match
+  - red: pre-existing (after T71) — scenario_words and the set intersection already match whole words only
+  - green: Ran 1 test in 0.066s OK
+- [x] T77 REQ-ANL-006.B1 a one-clause statement is not checked
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_B1_one_clause_statement_is_not_checked
+  - red: pre-existing (after T71) — check_requirement_clauses already returns below two clauses
+  - green: Ran 1 test in 0.086s OK
+- [x] T78 REQ-ANL-006.B2 a clause with no distinctive word is skipped
+  - tier: mid
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_B2_clause_with_no_distinctive_word_is_skipped
+  - red: AssertionError: Lists differ: ['  - REQ-ANL-001: no scenario exercises t[124 chars]ic)'] != []
+  - green: Ran 1 test in 0.075s OK
+- [x] T79 REQ-ANL-006.B3 a trailing semicolon's empty clause is dropped
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_B3_one_clause_with_trailing_semicolon_is_not_checked
+  - red: pre-existing (after T71) — the split already drops empty clauses
+  - green: Ran 1 test in 0.093s OK (one-clause case; the two-clause scenario: Ran 1 test in 0.089s OK)
+- [x] T80 REQ-ANL-006.B4 one distinctive word is enough
+  - tier: light
+  - test: tests/test_sdd.py::ClauseTests.test_REQ_ANL_006_B4_one_distinctive_word_is_enough
+  - red: pre-existing (after T78) — the any-word guard already covers a clause with one mentioned word
+  - green: Ran 1 test in 0.120s OK
+- [x] T81 REQ-ANL-007.N1 a happy-heavy change warns with both counts
+  - tier: mid
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_N1_happy_heavy_change_warns_with_both_counts
+  - red: AssertionError: 'warnings (1):' not found in ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.081s OK
+- [x] T82 REQ-ANL-007.S1 a balanced change does not warn
+  - tier: light
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_S1_balanced_change_does_not_warn
+  - red: pre-existing (after T81) — check_balance already stays silent for balanced and boundary-heavy changes
+  - green: Ran 1 test in 0.083s OK
+- [x] T83 REQ-ANL-007.N2 no balance warning at prototype
+  - tier: light
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_N2_no_balance_warning_at_prototype
+  - red: pre-existing (after T81) — check_balance already skips the prototype level
+  - green: Ran 1 test in 0.055s OK
+- [x] T84 REQ-ANL-007.B2 no requirements, no balance warning
+  - tier: light
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_B2_no_requirements_no_balance_warning
+  - red: pre-existing (after T81) — check_balance already warns on nothing with zero counts
+  - green: Ran 1 test in 0.051s OK
+- [x] T85 REQ-ANL-008.N1 plan approval refused on an analyze error
+  - tier: strong
+  - test: tests/test_sdd.py::PlanGateAnalyzeTests.test_REQ_ANL_008_N1_plan_approval_refused_on_analyze_error
+  - red: AssertionError: 0 != 1 : 0003-x: plan approved → planned
+  - green: Ran 1 test in 0.069s OK (full suite: Ran 380 tests OK)
+- [x] T86 REQ-ANL-008.S1 a warning alone doesn't stop plan approval
+  - tier: light
+  - test: tests/test_sdd.py::PlanGateAnalyzeTests.test_REQ_ANL_008_S1_warning_alone_does_not_stop_plan_approval
+  - red: pre-existing (after T85) — the plan gate already refuses only on errors
+  - green: Ran 1 test in 0.064s OK
+- [x] T87 REQ-ANL-008.N2 a missing failure-mode entry at production blocks the plan gate
+  - tier: light
+  - test: tests/test_sdd.py::PlanGateAnalyzeTests.test_REQ_ANL_008_N2_missing_failure_mode_entry_blocks_plan_gate
+  - red: pre-existing (after T85) — the plan gate already refuses on the failure-mode error
+  - green: Ran 1 test in 0.070s OK
+- [x] T88 REQ-ANL-008.B1 an error check also reports is printed once
+  - tier: mid
+  - test: tests/test_sdd.py::PlanGateAnalyzeTests.test_REQ_ANL_008_B1_error_check_also_reports_is_printed_once
+  - red: pre-existing (after T85) — cross_artifact appends only its own findings to check's report
+  - green: Ran 1 test in 0.077s OK
+- [x] T89 REQ-ANL-008.N3 a mini plan approval is unchanged
+  - tier: light
+  - test: tests/test_sdd.py::PlanGateAnalyzeTests.test_REQ_ANL_008_N3_mini_plan_approval_is_unchanged
+  - red: pre-existing (after T85) — the plan gate already approves a clean mini change
+  - green: Ran 1 test in 0.046s OK
+- [x] T90 REQ-ORC-004.S2 next lists design, tasks, analyze and the plan gate
+  - tier: strong
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S2_spec_approved_lists_design_tasks_analyze_and_plan_gate
+  - red: AssertionError: 2 != 0 : ['usage: sdd.py [-h] [--root ROOT]', ..., "sdd.py: error: argument command: invalid choice: 'next' ..."]
+  - green: Ran 1 test in 0.058s OK (full suite: Ran 385 tests OK)
+- [x] T91 REQ-ORC-004.S3 designed with tasks: analyze then the plan gate
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S3_designed_with_tasks_lists_analyze_then_the_plan_gate
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "designed"']
+  - green: Ran 1 test in 0.063s OK
+- [x] T92 REQ-ORC-004.S1 a draft needing a Critic round lists clarify
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S1_draft_needing_a_critic_round_lists_clarify
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "draft"']
+  - green: Ran 1 test in 0.065s OK
+- [x] T93 REQ-ORC-004.S10 a round with ? verdicts keeps clarify
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S10_round_with_question_verdicts_keeps_clarify
+  - red: pre-existing (after T92) — clarify_applies already keeps clarify for an unaudited requirement
+  - green: Ran 1 test in 0.064s OK
+- [x] T94 REQ-ORC-004.N7 an open question with no finding keeps clarify
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N7_open_question_with_no_finding_keeps_clarify
+  - red: AssertionError: Lists differ: ['gate: the operator approves the spec (sdd approve spec)'] != ['1. sdd clarify', 'gate: the operator approves the spec (sdd approve spec)']
+  - green: Ran 1 test in 0.043s OK
+- [x] T95 REQ-ORC-004.N10 an open clarification marker keeps clarify at prototype
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N10_open_marker_keeps_clarify_at_prototype
+  - red: pre-existing (after T94) — clarify_applies already counts an open marker at prototype
+  - green: Ran 1 test in 0.064s OK
+- [x] T96 REQ-ORC-004.B2 REQ-ORC-004.B3 no clarify step when no round is required or the round is complete
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_B2_no_round_required_no_clarify_step
+  - red: pre-existing (after T92) — critic_required already skips the round at prototype
+  - green: Ran 1 test in 0.070s OK (B2); B3 also runs OK: Ran 1 test in 0.061s OK
+- [x] T97 REQ-ORC-004.N9 a round that predates an amendment adds no clarify step
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N9_round_predating_an_amendment_adds_no_clarify_step
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "planned"']
+  - green: Ran 1 test in 0.072s OK
+- [x] T98 REQ-ORC-004.S4 planned: implement, verify, results gate
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S4_planned_lists_implement_verify_and_the_results_gate
+  - red: pre-existing (after T97) — the planned branch already lists implement, verify and the results gate
+  - green: Ran 1 test in 0.083s OK
+- [x] T99 REQ-ORC-004.B1 all tasks ticked: verify only
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_B1_all_tasks_ticked_lists_verify_only
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "implementing"']
+  - green: Ran 1 test in 0.078s OK
+- [x] T100 REQ-ORC-004.S7 verifying with no verdict lists verify
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S7_verifying_with_no_verdict_lists_verify
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "verifying"']
+  - green: Ran 1 test in 0.091s OK
+- [x] T101 REQ-ORC-004.S8 verifying with a PASS verdict lists no step
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S8_verifying_with_pass_verdict_lists_no_step
+  - red: pre-existing (after T100) — verify_stage_steps already returns no step for a verdict
+  - green: Ran 1 test in 0.080s OK
+- [x] T102 REQ-ORC-004.S13 a GAPS verdict names the gaps gate
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S13_gaps_verdict_names_the_gaps_gate
+  - red: AssertionError: Lists differ: ['gate: the operator approves the results (sdd approve results)'] != ['gate: the operator decides on the gaps (amend or accept), then sdd verify']
+  - green: Ran 1 test in 0.090s OK
+- [x] T103 REQ-ORC-004.S5 verified standard change lists archive
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S5_verified_standard_change_lists_archive
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "verified"']
+  - green: Ran 1 test in 0.170s OK
+- [x] T104 REQ-ORC-004.S6 a mini change at planned ends at the review gate
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S6_mini_change_at_planned_ends_at_the_review_gate
+  - red: pre-existing (after T98) — the planned branch already ends a mini change at the review gate
+  - green: Ran 1 test in 0.044s OK
+- [x] T105 REQ-ORC-004.S9 a clean mini draft prints the plan gate alone
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S9_clean_mini_draft_prints_the_plan_gate_alone
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "draft"']
+  - green: Ran 1 test in 0.060s OK
+- [x] T106 REQ-ORC-004.S11 a mini change at verified prints the review gate alone
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S11_mini_change_at_verified_prints_review_gate_alone
+  - red: AssertionError: Lists differ: ['1. sdd archive', 'gate: none'] != ['gate: the operator reviews the verification, then sdd archive']
+  - green: Ran 1 test in 0.172s OK
+- [x] T107 REQ-ORC-004.N8 a changed constitution prints its line alone
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N8_changed_constitution_prints_its_line_alone
+  - red: AssertionError: Lists differ: ['1. sdd clarify', 'gate: the operator appr[29 chars]ec)'] != ['the constitution changed since approval: [39 chars]on)']
+  - green: Ran 1 test in 0.067s OK
+- [x] T108 REQ-ORC-004.N3 an edited spec lists amend then its gate
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N3_edited_spec_lists_amend_then_its_gate
+  - red: AssertionError: Lists differ: ['1. sdd implement', '2. sdd verify', 'gate: the o[47 chars]ts)'] != ['1. sdd amend', 'gate: the operator approves the [26 chars]nd)']
+  - green: Ran 1 test in 0.091s OK
+- [x] T109 REQ-ORC-004.N11 an edit already logged prints the amendment gate alone
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N11_logged_edit_prints_amendment_gate_alone
+  - red: AssertionError: Lists differ: ['1. sdd amend', 'gate: the operator approv[33 chars]nd)'] != ['gate: the operator approves the amendment[17 chars]nd)']
+  - green: Ran 1 test in 0.081s OK
+- [x] T110 REQ-ORC-004.N13 a blocked change with an unlogged edit lists amend
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N13_blocked_change_with_unlogged_edit_lists_amend
+  - red: pre-existing (after T108) — spec_edited_since_approval already counts a blocked change at blocked_from
+  - green: Ran 1 test in 0.080s OK
+- [x] T111 REQ-ORC-004.N12 a blocked change with a changed constitution
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N12_blocked_change_with_changed_constitution_prints_its_line
+  - red: pre-existing (after T107) — early_lines already returns the constitution line before any status check
+  - green: Ran 1 test in 0.085s OK
+- [x] T112 REQ-ORC-004.N1 blocked change
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N1_blocked_change_prints_its_blocker_line
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "blocked"']
+  - green: Ran 1 test in 0.095s OK
+- [x] T113 REQ-ORC-004.N2 abandoned change
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N2_abandoned_change_prints_nothing_to_run
+  - red: AssertionError: 1 != 0 : ['error: cannot list steps: unknown status "abandoned"']
+  - green: Ran 1 test in 0.063s OK
+- [x] T114 REQ-ORC-004.N14 an abandoned change beats a changed constitution
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N14_abandoned_change_beats_changed_constitution
+  - red: AssertionError: Lists differ: ['the constitution changed since approval: [39 chars]on)'] != ['nothing to run: the change is abandoned']
+  - green: Ran 1 test in 0.078s OK
+- [x] T115 REQ-ORC-004.N15 an unknown status is refused
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N15_unknown_status_is_refused
+  - red: pre-existing (after T91) — the next_plan raise already refuses an unknown status
+  - green: Ran 1 test in 0.050s OK
+- [x] T116 REQ-ORC-004.N4 no active change refused
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N4_no_active_change_refused
+  - red: pre-existing (after T91) — project.current already refuses when no change is active
+  - green: Ran 1 test in 0.049s OK
+- [x] T117 REQ-ORC-004.N5 uninitialized repository refused
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N5_uninitialized_repository_refused
+  - red: pre-existing (after T90) — cmd_next already calls require_init before anything else
+  - green: Ran 1 test in 0.007s OK
+- [x] T118 REQ-ORC-004.N6 an unknown change ID is refused
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N6_unknown_change_id_refused
+  - red: pre-existing (after T91) — project.current already refuses an unknown change ID
+  - green: Ran 1 test in 0.070s OK
+- [x] T119 REQ-ORC-005.S1 a draft with no requirements lists specify first
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_S1_draft_with_no_requirements_lists_specify_first
+  - red: AssertionError: Lists differ: ['1. sdd clarify', 'gate: the operator approves th[22 chars]ec)'] != ['1. sdd specify', '2. sdd clarify', 'gate: the op[40 chars]ec)']
+  - green: Ran 1 test in 0.059s OK
+- [x] T120 REQ-ORC-005.N1 a spec error puts specify before clarify
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N1_spec_error_puts_specify_before_clarify
+  - red: AssertionError: Lists differ: ['gate: the operator approves the spec (sdd approve spec)'] != ['1. sdd specify', 'gate: the operator approves the spec (sdd approve spec)']
+  - green: Ran 1 test in 0.060s OK
+- [x] T121 REQ-ORC-005.N5 ? verdicts alone do not add specify
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N5_question_verdicts_alone_do_not_add_specify
+  - red: pre-existing (after T120) — spec_errors_outside_rounds already leaves out the round errors
+  - green: Ran 1 test in 0.057s OK
+- [x] T122 REQ-ORC-005.S2 designed with no tasks lists tasks first
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_S2_designed_with_no_tasks_lists_tasks_first
+  - red: AssertionError: Lists differ: ['1. sdd analyze', 'gate: the operator approves th[22 chars]an)'] != ['1. sdd tasks', '2. sdd analyze', 'gate: the oper[38 chars]an)']
+  - green: Ran 1 test in 0.081s OK
+- [x] T123 REQ-ORC-005.S3 a design error puts design first
+  - tier: strong
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_S3_design_error_puts_design_first
+  - red: AssertionError: Lists differ: ['1. sdd analyze', 'gate: the operator approves th[22 chars]an)'] != ['1. sdd design', '2. sdd analyze', 'gate: the ope[39 chars]an)']
+  - green: Ran 1 test in 0.097s OK
+- [x] T124 REQ-ORC-005.N3 a design error and no tasks: design, then tasks
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N3_design_error_and_no_tasks_lists_design_then_tasks
+  - red: pre-existing (after T123) — the design and tasks conditions are independent in plan_stage_steps
+  - green: Ran 1 test in 0.076s OK
+- [x] T125 REQ-ORC-005.N6 a contract error puts design first
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N6_contract_error_puts_design_first
+  - red: pre-existing (after T123) — the contract error already counts as a design error
+  - green: Ran 1 test in 0.073s OK
+- [x] T126 REQ-ORC-005.B2 a failure-mode error puts design first
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_B2_failure_mode_error_puts_design_first
+  - red: pre-existing (after T123) — the failure-mode error already counts as a design error
+  - green: Ran 1 test in 0.083s OK
+- [x] T127 REQ-ORC-005.B1 warnings alone add no fixing step
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_B1_warnings_alone_add_no_fixing_step
+  - red: pre-existing (after T123) — plan_stage_steps already ignores warnings
+  - green: Ran 1 test in 0.078s OK
+- [x] T128 REQ-ORC-005.N4 a check error at planned adds no fixing step
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N4_check_error_at_planned_adds_no_fixing_step
+  - red: pre-existing (after T91) — planned lists the implement steps without checking the analysis
+  - green: Ran 1 test in 0.077s OK
+- [x] T129 REQ-ORC-005.S4 a mini draft lists specify, tasks, clarify
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_S4_mini_draft_lists_specify_tasks_clarify
+  - red: AssertionError: Lists differ: ['gate: the operator approves the plan (sdd approve plan)'] != ['1. sdd specify', '2. sdd tasks', '3. sdd [63 chars]an)']
+  - green: Ran 1 test in 0.046s OK
+- [x] T130 REQ-ORC-005.N2 a mini draft with no tasks lists tasks
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N2_mini_draft_with_no_tasks_lists_tasks
+  - red: pre-existing (after T129) — mini_draft_steps already lists tasks when none exist
+  - green: Ran 1 test in 0.041s OK
+- [x] T131 REQ-ORC-005.N7 a mini draft's missing-coverage error lists tasks
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N7_mini_draft_missing_coverage_lists_tasks
+  - red: AssertionError: Lists differ: ['gate: the operator approves the plan (sdd approve plan)'] != ['1. sdd tasks', 'gate: the operator approves the plan (sdd approve plan)']
+  - green: Ran 1 test in 0.050s OK
+- [x] T132 REQ-ORC-006.S1 REQ-ORC-006.S2 status points to analyze, in text and JSON
+  - tier: mid
+  - test: tests/test_sdd.py::StatusAnalyzeTests.test_REQ_ORC_006_S1_status_points_to_analyze_in_text
+  - red: AssertionError: 'next: awaiting operator approval of the plan: sdd approve' != 'next: sdd analyze, then ask for plan approval'
+  - green: Ran 1 test in 0.068s OK (S1); Ran 1 test in 0.076s OK (S2, test_REQ_ORC_006_S2_status_points_to_analyze_in_json)
+- [x] T133 REQ-ORC-006.N1 no tasks: next line unchanged
+  - tier: light
+  - test: tests/test_sdd.py::StatusAnalyzeTests.test_REQ_ORC_006_N1_no_tasks_keeps_the_next_line
+  - red: pre-existing (after T132) — the designed branch already returns sdd tasks with no tasks
+  - green: Ran 1 test in 0.084s OK
+- [x] T134 REQ-ORC-006.N2 a check error: next line unchanged
+  - tier: light
+  - test: tests/test_sdd.py::StatusAnalyzeTests.test_REQ_ORC_006_N2_check_error_keeps_the_next_line
+  - red: pre-existing (after T132) — the designed branch already returns the fix-the-check-errors line
+  - green: Ran 1 test in 0.076s OK
+- [x] T135 REQ-ORC-006.B1 planned: next line unchanged
+  - tier: light
+  - test: tests/test_sdd.py::StatusAnalyzeTests.test_REQ_ORC_006_B1_planned_keeps_the_next_line
+  - red: pre-existing (after T132) — the planned branch already returns sdd implement
+  - green: Ran 1 test in 0.070s OK
+- [x] T136 REQ-ORC-006.B2 warnings only: the new next line
+  - tier: light
+  - test: tests/test_sdd.py::StatusAnalyzeTests.test_REQ_ORC_006_B2_warnings_only_gives_the_new_next_line
+  - red: pre-existing (after T132) — the analyze line already ignores warnings-only reports
+  - green: Ran 1 test in 0.073s OK
+
+<!-- Amendment A2 (verification round 1): T137 to T140 are the new scenarios. Each is a
+real red: the code today accepts what the scenario refuses (F3, F4), omits the step (F5),
+or has no guard that a mini change past the plan gate needs (F2, a test of a mini change at
+planned, whose mutation of the size guard in design_rules_apply must now fail). -->
+
+- [x] T137 REQ-ANL-001.B3 a mini change past the plan gate has no design finding
+  - tier: mid
+  - test: tests/test_sdd.py::AnalyzeTests.test_REQ_ANL_001_B3_mini_change_past_the_plan_gate_has_no_design_finding
+  - red: pre-existing (after T14) — design_rules_apply already refuses a mini change by its size guard
+  - green: Ran 1 test in 0.051s OK
+- [x] T138 REQ-ANL-003.N16 a failure mode with no text before its arrow is refused
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N16_failure_mode_with_no_text_before_its_arrow_is_refused
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.110s OK
+- [x] T139 REQ-ANL-003.N17 a None line with no separator is refused
+  - tier: mid
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_N17_none_line_with_no_separator_is_refused
+  - red: AssertionError: 0 != 1 : ['analyze 0003-x (assurance: production)', 'coverage:', ..., 'result: OK']
+  - green: Ran 1 test in 0.083s OK
+- [x] T140 REQ-ORC-005.N8 a plan error at standard designed lists tasks
+  - tier: mid
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_005_N8_plan_error_at_designed_lists_tasks
+  - red: AssertionError: Lists differ: ['1. sdd analyze', 'gate: the operator approves th[22 chars]an)'] != ['1. sdd tasks', '2. sdd analyze', 'gate: the oper[38 chars]an)']
+  - green: Ran 1 test in 0.084s OK
+
+<!-- Finding F1 of verification round 1: tasks that split the grouped tasks T26, T51, T82, T106
+and T118, so that every scenario has its own task and its own test: line (sdd.py mutate runs the
+test of the task that plans the scenario). Each test exists and passed before the split. -->
+
+- [x] T141 REQ-ANL-003.S4 the colon separator raises no finding
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_003_S4_colon_separator_raises_no_finding
+  - red: pre-existing (after T26) — FM_ENTRY already accepts a colon after the label
+  - green: Ran 1 test in 0.109s OK
+- [x] T142 REQ-ANL-004.S2 a None line satisfies the presence rule
+  - tier: light
+  - test: tests/test_sdd.py::FailureModeTests.test_REQ_ANL_004_S2_none_line_satisfies_presence_rule
+  - red: pre-existing (after T51) — failure_mode_entries already counts None entries
+  - green: Ran 1 test in 0.073s OK
+- [x] T143 REQ-ANL-007.B1 equal happy and non-happy counts do not warn
+  - tier: light
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_B1_equal_happy_and_non_happy_does_not_warn
+  - red: pre-existing (after T82) — check_balance already stays silent for equal counts
+  - green: Ran 1 test in 0.095s OK
+- [x] T144 REQ-ANL-007.B3 boundary scenarios count as non-happy
+  - tier: light
+  - test: tests/test_sdd.py::BalanceTests.test_REQ_ANL_007_B3_boundary_counts_as_non_happy
+  - red: pre-existing (after T82) — check_balance already counts boundary as non-happy
+  - green: Ran 1 test in 0.085s OK
+- [x] T145 REQ-ORC-004.S12 a mini change at verifying with PASS prints the review gate alone
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_S12_mini_change_at_verifying_with_pass_prints_review_gate_alone
+  - red: pre-existing (after T106) — verify_stage_gate already gives the review gate for a mini PASS
+  - green: Ran 1 test in 0.074s OK
+- [x] T146 REQ-ORC-004.N6 an archived change ID is refused
+  - tier: light
+  - test: tests/test_sdd.py::NextTests.test_REQ_ORC_004_N6_archived_change_id_refused
+  - red: pre-existing (after T118) — project.current already refuses an archived change ID
+  - green: Ran 1 test in 0.065s OK
+
+Method work (project rule 1: design work, verified by review and dogfood run 3;
+no scenario, so no task). Done after the last task, listed in the implement report:
+- method/phases/design.md: Failure modes and Contracts sections; the failure-mode
+  review by a strong read-only subagent (a fresh session in Codex)
+- method/phases/analyze.md (new): run SDD analyze, route design errors to design
+  and plan errors to tasks, report warnings
+- method/phases/next.md (new): run SDD next, execute each step in turn, stop at the gate line
+- method/roles/architect.md: failure modes and contracts; format.md (both grammars);
+  overview.md (script table); SKILL.md (routing rows; analyze and next leave
+  "Not built yet"); templates/standard/design.md (both headings, examples only in comments)
+- Delivery (rule 9, at the end, not a task): README, RELEASE_NOTES and the version
+
+## Mutations
+<!-- One entry per new or changed rule in sdd.py. The code does not exist yet: every
+find text is the line the design implies, and the Implementer must align each find
+(and its replace) with the real line once the guarding task is green, adding any
+entry for a rule the plan missed. Two entries may mutate one line to be caught by
+different scenarios (ANL-002.N2/B1, ANL-003.N3/B3, ANL-003.N7/N13, ANL-007.*). Not
+mutated: markdown wording of messages, which the tests assert as text. -->
+<!-- Open for the Verifier and the operator: REQ-ANL-001.B2 (T14) has no mutation entry. No single-line break of the mini-skip guard in design_rules_apply survives as a failing test, because a mini draft never reaches the design checks anyway (found by the T14 Implementer). -->
+<!-- Open for the Verifier and the operator: no test catches dropping the em dash from the separator set of FM_ENTRY (found at T28). Every test has a space after the label, which the lookahead already accepts, and the spec has no scenario for "FM1— text"; closing it needs an amendment or an accepted gap. -->
+<!-- Open for the Verifier and the operator: check_failure_modes_present (T50) falls back to project.level() when report.level is not a valid level; no scenario covers that defensive line, so no test or mutation exercises it. -->
+<!-- Open for the Verifier: REQ-ORC-004.S13 says "standard or mini" but T102 tests only a standard change at verifying (a mini fixture was left to T104-T106), and a verdict word that is neither PASS nor GAPS also gets the gaps gate with no test. -->
+<!-- Open for the Verifier and the operator: REQ-ORC-004 says `sdd tasks` is listed for a standard change at designed that has no tasks or a plan error (one only the plan stage adds, other than a REQ-ANL-002 to REQ-ANL-005 error), but no scenario covers a plan error at standard designed (T131 covers the mini case), and plan_stage_steps adds `tasks` only when there are none (found at T123). -->
+<!-- Open for the Verifier and the operator (found while writing the method half): (1) REQ-ANL-003 requires non-empty text before a failure mode's arrow, but sdd.py accepts `- FM1 → REQ-ANL-001.N1`; (2) check_none_line accepts a None line with no `:` or `—` separator, which REQ-ANL-003 requires; (3) method/phases/tasks.md step 3 still says to run `SDD check` and doesn't mention `SDD analyze`, though `approve plan` now refuses on analyze errors. -->
+
+- M1 REQ-ANL-001.N5 skill/sdd/scripts/sdd.py
+  - find: `    return 1 if report.errors else 0`
+  - replace: `    return 0`
+- M2 REQ-ANL-001.S1 skill/sdd/scripts/sdd.py
+  - find: `    return report.render(head=f"analyze {report.change_id} (assurance: {report.level})", scenarios=True)`
+  - replace: `    return report.render(head=None, scenarios=True)`
+- M3 REQ-ANL-001.S3 skill/sdd/scripts/sdd.py
+  - find: `    report = full_analysis(project, project.current(args.change))`
+  - replace: `    report = full_analysis(project, project.current())`
+- M4 REQ-ANL-002.N1 skill/sdd/scripts/sdd.py
+  - find: `        if rid not in known_ids:`
+  - replace: `        if False:`
+- M5 REQ-ANL-002.N2 skill/sdd/scripts/sdd.py
+  - find: `        if req.id not in named and req.tag != "REMOVED":`
+  - replace: `        if False:`
+- M6 REQ-ANL-002.B1 skill/sdd/scripts/sdd.py
+  - find: `        if req.id not in named and req.tag != "REMOVED":`
+  - replace: `        if req.id not in named:`
+- M7 REQ-ANL-002.B3 skill/sdd/scripts/sdd.py
+  - find: `    text = strip_comments(path.read_text())`
+  - replace: `    text = path.read_text()`
+- M8 REQ-ANL-002.B6 skill/sdd/scripts/sdd.py
+  - find: `        if FENCE.match(line):`
+  - replace: `        if False:`
+- M9 REQ-ANL-002.N3 skill/sdd/scripts/sdd.py
+  - find: `    if not design_rules_apply(fm):`
+  - replace: `    if False:`
+- M10 REQ-ANL-002.N4 skill/sdd/scripts/sdd.py
+  - find: `    status = fm.get("blocked_from") if status == "blocked" else status`
+  - replace: `    status = status`
+- M11 REQ-ANL-002.N5 skill/sdd/scripts/sdd.py
+  - find: `    status = fm.get("blocked_from") if status == "blocked" else status`
+  - replace: `    status = "designed" if status == "abandoned" else (fm.get("blocked_from") if status == "blocked" else status)`
+- M12 REQ-ANL-002.B7 skill/sdd/scripts/sdd.py
+  - find: `    named = list(dict.fromkeys(m.group(0) for m in REQ_TOKEN.finditer(view)))`
+  - replace: `    named = [m.group(0) for m in REQ_TOKEN.finditer(view)]`
+- M13 REQ-ANL-003.N1 skill/sdd/scripts/sdd.py
+  - find: `    if "→" not in body:`
+  - replace: `    if False:`
+- M14 REQ-ANL-003.N3 skill/sdd/scripts/sdd.py
+  - find: `        if len(na_reason.split()) < 3:`
+  - replace: `        if False:`
+- M15 REQ-ANL-003.B3 skill/sdd/scripts/sdd.py
+  - find: `        if len(na_reason.split()) < 3:`
+  - replace: `        if len(na_reason.split()) < 4:`
+- M16 REQ-ANL-003.N4 skill/sdd/scripts/sdd.py
+  - find: `    if len(none_reason.split()) < 3:`
+  - replace: `    if False:`
+- M17 REQ-ANL-003.N11 skill/sdd/scripts/sdd.py
+  - find: `        number = int(m.group(2))`
+  - replace: `        number = m.group(2)`
+- M18 REQ-ANL-003.N5 skill/sdd/scripts/sdd.py
+  - find: `        if number in seen_numbers:`
+  - replace: `        if False:`
+- M19 REQ-ANL-003.N6 skill/sdd/scripts/sdd.py
+  - find: `            err(f'Failure modes: "{text}" is neither a failure-mode entry nor a None line')`
+  - replace: `            pass`
+- M20 REQ-ANL-003.N7 skill/sdd/scripts/sdd.py
+  - find: `    if nones and (entries or len(nones) > 1):`
+  - replace: `    if nones and len(nones) > 1:`
+- M21 REQ-ANL-003.N13 skill/sdd/scripts/sdd.py
+  - find: `    if nones and (entries or len(nones) > 1):`
+  - replace: `    if nones and entries:`
+- M22 REQ-ANL-003.N8 skill/sdd/scripts/sdd.py
+  - find: `        if not SCENARIO_REF.fullmatch(part):`
+  - replace: `        if not SCENARIO_REF.match(part):`
+- M23 REQ-ANL-003.N2 skill/sdd/scripts/sdd.py
+  - find: `        if ref not in scenario_ids:`
+  - replace: `        if False:`
+- M24 REQ-ANL-003.N12 skill/sdd/scripts/sdd.py
+  - find: `        if rid in modified_ids or rid in removed_ids:`
+  - replace: `        if False:`
+- M25 REQ-ANL-003.B4 skill/sdd/scripts/sdd.py
+  - find: `BULLET = re.compile(r"^\s*[-*] ")`
+  - replace: `BULLET = re.compile(r"^[-*] ")`
+- M26 REQ-ANL-004.N1 skill/sdd/scripts/sdd.py
+  - find: `    if failure_mode_entries(view):`
+  - replace: `    if True:`
+- M27 REQ-ANL-004.B1 skill/sdd/scripts/sdd.py
+  - find: `    emit = err if LEVELS.index(level) >= LEVELS.index("production") else warn`
+  - replace: `    emit = err`
+- M28 REQ-ANL-004.B3 skill/sdd/scripts/sdd.py
+  - find: `FM_ENTRY = re.compile(r"^(FM(\d+)|None)(?=[ :—]|$)")`
+  - replace: `FM_ENTRY = re.compile(r"^(FM(\d+)|None)")`
+- M29 REQ-ANL-005.N1 skill/sdd/scripts/sdd.py
+  - find: `        if name not in entries:`
+  - replace: `        if False:`
+- M30 REQ-ANL-005.S2 skill/sdd/scripts/sdd.py
+  - find: `    return name.strip().strip("`")`
+  - replace: `    return name.strip()`
+- M31 REQ-ANL-005.N3 skill/sdd/scripts/sdd.py
+  - find: `        if name in seen_entries:`
+  - replace: `        if False:`
+- M32 REQ-ANL-005.N4 skill/sdd/scripts/sdd.py
+  - find: `    if STAGES.index(stage) >= STAGES.index("plan"):`
+  - replace: `    if True:`
+- M33 REQ-ANL-005.B3 skill/sdd/scripts/sdd.py
+  - find: `        if name not in entries:`
+  - replace: `        if name not in entries or interfaces.count(name) > 1:`
+- M34 REQ-ANL-006.N1 skill/sdd/scripts/sdd.py
+  - find: `        if distinct and not distinct & mentioned:`
+  - replace: `        if False:`
+- M35 REQ-ANL-006.B3 skill/sdd/scripts/sdd.py
+  - find: `    clauses = [c.strip() for c in req.text.split(";") if c.strip()]`
+  - replace: `    clauses = [c.strip() for c in req.text.split(";")]`
+- M36 REQ-ANL-006.B2 skill/sdd/scripts/sdd.py
+  - find: `        if distinct and not distinct & mentioned:`
+  - replace: `        if not distinct & mentioned:`
+- M37 REQ-ANL-006.B1 skill/sdd/scripts/sdd.py
+  - find: `    if len(clauses) < 2:`
+  - replace: `    if len(clauses) < 1:`
+- M38 REQ-ANL-006.N3 skill/sdd/scripts/sdd.py
+  - find: `    for req in (r for r in report.reqs if r.tag != "REMOVED"):`
+  - replace: `    for req in report.reqs:`
+- M39 REQ-ANL-007.N1 skill/sdd/scripts/sdd.py
+  - find: `    if happy > negative + boundary and level != "prototype":`
+  - replace: `    if False:`
+- M40 REQ-ANL-007.B3 skill/sdd/scripts/sdd.py
+  - find: `    if happy > negative + boundary and level != "prototype":`
+  - replace: `    if happy > negative and level != "prototype":`
+- M41 REQ-ANL-007.B1 skill/sdd/scripts/sdd.py
+  - find: `    if happy > negative + boundary and level != "prototype":`
+  - replace: `    if happy >= negative + boundary and level != "prototype":`
+- M42 REQ-ANL-007.N2 skill/sdd/scripts/sdd.py
+  - find: `    if happy > negative + boundary and level != "prototype":`
+  - replace: `    if happy > negative + boundary:`
+- M43 REQ-ANL-008.N1 skill/sdd/scripts/sdd.py
+  - find: `        if report.errors:`
+  - replace: `        if False:`
+- M44 REQ-ORC-004.N2 skill/sdd/scripts/sdd.py
+  - find: `        return ["nothing to run: the change is abandoned"]`
+  - replace: `        return []`
+- M45 REQ-ORC-004.N1 skill/sdd/scripts/sdd.py
+  - find: `        return ["blocked: resolve the blocker, then sdd status"]`
+  - replace: `        return []`
+- M46 REQ-ORC-004.N8 skill/sdd/scripts/sdd.py
+  - find: `    changed = project.constitution_state()["changed"]`
+  - replace: `    changed = False`
+- M47 REQ-ORC-004.N11 skill/sdd/scripts/sdd.py
+  - find: `        if not amendment_logged(whole):`
+  - replace: `        if True:`
+- M48 REQ-ORC-004.N15 skill/sdd/scripts/sdd.py
+  - find: `    raise SddError(f'cannot list steps: unknown status "{status}"')`
+  - replace: `    return [], "none"`
+- M49 REQ-ORC-004.N7 skill/sdd/scripts/sdd.py
+  - find: `    return bool(report.critic or report.open_questions)`
+  - replace: `    return bool(report.critic)`
+- M50 REQ-ORC-004.B1 skill/sdd/scripts/sdd.py
+  - find: `    steps = ["implement"] if status == "planned" or unticked else []`
+  - replace: `    steps = ["implement"]`
+- M51 REQ-ORC-005.N1 skill/sdd/scripts/sdd.py
+  - find: `    return report.counts["requirements"] == 0 or bool(spec_errors_outside_rounds(report))`
+  - replace: `    return report.counts["requirements"] == 0`
+- M52 REQ-ORC-005.S3 skill/sdd/scripts/sdd.py
+  - find: `    if report.design_errors:`
+  - replace: `    if False:`
+- M53 REQ-ORC-006.S1 skill/sdd/scripts/sdd.py
+  - find: `        return "sdd analyze, then ask for plan approval"`
+  - replace: `        return "awaiting operator approval of the plan: sdd approve"`
+- M54 REQ-ORC-006.N2 skill/sdd/scripts/sdd.py
+  - find: `            return "fix the check errors (sdd.py check), then ask for plan approval"`
+  - replace: `            return "sdd analyze, then ask for plan approval"`
+- M55 REQ-ANL-001.N1 skill/sdd/scripts/sdd.py
+  - find: `            raise SddError(f"no change '{change_id}' in specs/changes/")`
+  - replace: `            pass`
+- M56 REQ-ANL-001.N3 skill/sdd/scripts/sdd.py
+  - find: `            raise SddError("this repository is not initialized: run `sdd init` first")`
+  - replace: `            pass`
+- M57 REQ-ANL-001.N4 skill/sdd/scripts/sdd.py
+  - find: `        if not change_id:`
+  - replace: `        if False:`
+- M58 REQ-ANL-001.N2 skill/sdd/scripts/sdd.py
+  - find: `    p.set_defaults(func=cmd_analyze)`
+  - replace: `    p.set_defaults(func=cmd_analyze); p.add_argument("--bogus")`
+- M59 REQ-ANL-001.B1 skill/sdd/scripts/sdd.py
+  - find: `        err("no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario")`
+  - replace: `        pass`
+- M61 REQ-ANL-001.S2 skill/sdd/scripts/sdd.py
+  - find: `            "warnings": report.warnings, "coverage": report.coverage,`
+  - replace: `            "warnings": [], "coverage": report.coverage,`
+- M63 REQ-ANL-002.B2 skill/sdd/scripts/sdd.py
+  - find: `    return {r.id for r in reqs} | {rid for info in project.registry().values() for rid in info["reqs"]}`
+  - replace: `    return {r.id for r in reqs}`
+- M60 REQ-ANL-002.S1 skill/sdd/scripts/sdd.py
+  - find: `        if rid not in known_ids:`
+  - replace: `        if True:`
+- M62 REQ-ANL-001.N6 skill/sdd/scripts/sdd.py
+  - find: `    return {"ok": report.ok, "stage": report.stage, "errors": report.errors,`
+  - replace: `    return {"ok": True, "stage": report.stage, "errors": report.errors,`
+- M64 REQ-ANL-002.B4 skill/sdd/scripts/sdd.py
+  - find: `    named = list(dict.fromkeys(m.group(0) for m in REQ_TOKEN.finditer(view)))`
+  - replace: `    named = list(dict.fromkeys(m.group(0).replace("_", "-") for m in re.finditer(r"REQ[-_]([A-Z][A-Z0-9]{1,5})[-_](\d{3,})", view)))`
+- M65 REQ-ANL-002.B5 skill/sdd/scripts/sdd.py
+  - find: `REQ_TOKEN = re.compile(r"REQ-([A-Z][A-Z0-9]{1,5})-(\d{3,})")`
+  - replace: `REQ_TOKEN = re.compile(r"REQ-([A-Z][A-Z0-9]{1,5})-(\d{3,})(?!\.)")`
+- M66 REQ-ANL-003.S1 skill/sdd/scripts/sdd.py
+  - find: `    if "→" not in body:`
+  - replace: `    if "→" not in body or "N/A" in body:`
+- M67 REQ-ANL-003.S4 skill/sdd/scripts/sdd.py
+  - find: `    if "→" not in body:`
+  - replace: `    if "→" not in body or body.startswith(":"):`
+- M68 REQ-ANL-003.S2 skill/sdd/scripts/sdd.py
+  - find: `FM_ENTRY = re.compile(r"^(FM(\d+)|None)(?=[ :—]|$)")`
+  - replace: `FM_ENTRY = re.compile(r"^(FM(\d+))(?=[ :—]|$)")`
+- M69 REQ-ANL-003.N15 skill/sdd/scripts/sdd.py
+  - find: `    if len(none_reason.split()) < 3:`
+  - replace: `    if none_reason and len(none_reason.split()) < 3:`
+- M70 REQ-ANL-003.N14 skill/sdd/scripts/sdd.py
+  - find: `NA_OUTCOME = re.compile(r"^N/A\s*[:—]\s*(.*)$", re.I)`
+  - replace: `NA_OUTCOME = re.compile(r"^N/A\s*[:—]?\s*(.*)$", re.I)`
+- M71 REQ-ANL-003.N10 skill/sdd/scripts/sdd.py
+  - find: `    body = sections(view).get("Failure modes", "")`
+  - replace: `    body = sections(view).get("Failure modes", "").replace("\n  ", " ")`
+- M72 REQ-ANL-002.N6 skill/sdd/scripts/sdd.py
+  - find: `        if ref.split(".")[0] not in known_ids:`
+  - replace: `        if False:`
+- M73 REQ-ANL-003.B1 skill/sdd/scripts/sdd.py
+  - find: `    refs = [part.strip() for part in outcome.split(",")]`
+  - replace: `    refs = [part.strip() for part in outcome.split(";")]`
+- M74 REQ-ANL-003.S3 skill/sdd/scripts/sdd.py
+  - find: `        result |= {f"{rid}.{i}" for i in ids}`
+  - replace: `        result |= set()`
+- M75 REQ-ANL-003.B2 skill/sdd/scripts/sdd.py
+  - find: `        if rid in modified_ids or rid in removed_ids:`
+  - replace: `        if False:`
+- M76 REQ-ANL-003.B5 skill/sdd/scripts/sdd.py
+  - find: `        if FENCE.match(line):`
+  - replace: `        if False:`
+- M77 REQ-ANL-003.B6 skill/sdd/scripts/sdd.py
+  - find: `    text = strip_comments(path.read_text())`
+  - replace: `    text = path.read_text()`
+- M78 REQ-ANL-003.N9 skill/sdd/scripts/sdd.py
+  - find: `    if not design_rules_apply(fm):`
+  - replace: `    if False:`
+- M79 REQ-ANL-004.S1 skill/sdd/scripts/sdd.py
+  - find: `    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text)]`
+  - replace: `    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text) and text.startswith("None")]`
+- M80 REQ-ANL-004.S2 skill/sdd/scripts/sdd.py
+  - find: `    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text)]`
+  - replace: `    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text) and text.startswith("FM")]`
+- M81 REQ-ANL-004.N3 skill/sdd/scripts/sdd.py
+  - find: `    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text)]`
+  - replace: `    return failure_mode_bullets(view)`
+- M82 REQ-ANL-004.B2 skill/sdd/scripts/sdd.py
+  - find: `    if failure_mode_entries(view):`
+  - replace: `    if "Failure modes" in sections(view):`
+- M83 REQ-ANL-004.B4 skill/sdd/scripts/sdd.py
+  - find: `    text = strip_comments(path.read_text())`
+  - replace: `    text = path.read_text()`
+- M84 REQ-ANL-004.N2 skill/sdd/scripts/sdd.py
+  - find: `    if not design_rules_apply(fm):`
+  - replace: `    if False:`
+- M85 REQ-ANL-005.S1 skill/sdd/scripts/sdd.py
+  - find: `    outside, inside = split_contracts(view)`
+  - replace: `    outside, inside = split_contracts(view); inside = []`
+- M86 REQ-ANL-005.S3 skill/sdd/scripts/sdd.py
+  - find: `    for name in dict.fromkeys(n for n in interfaces if n):`
+  - replace: `    for name in dict.fromkeys(n for n in interfaces + ["unlisted"] if n):`
+- M87 REQ-ANL-005.N2 skill/sdd/scripts/sdd.py
+  - find: `            err("an interface line has no name")`
+  - replace: `            pass`
+- M88 REQ-ANL-005.N5 skill/sdd/scripts/sdd.py
+  - find: `            err("a contract entry under ## Contracts has no name")`
+  - replace: `            pass`
+- M89 REQ-ANL-005.B1 skill/sdd/scripts/sdd.py
+  - find: `    for name in dict.fromkeys(n for n in interfaces if n):`
+  - replace: `    for name in list(dict.fromkeys(n for n in interfaces if n))[:1]:`
+- M90 REQ-ANL-005.B2 skill/sdd/scripts/sdd.py
+  - find: `        if name not in listed:`
+  - replace: `        if False:`
+- M91 REQ-ANL-005.N6 skill/sdd/scripts/sdd.py
+  - find: `        if FENCE.match(line):`
+  - replace: `        if False:`
+- M92 REQ-ANL-005.B4 skill/sdd/scripts/sdd.py
+  - find: `        if view is not None:  # a standard change`
+  - replace: `        if view is not None and stage == "plan":  # a standard change`
+- M93 REQ-ANL-006.N1 skill/sdd/scripts/sdd.py
+  - find: `            shown = clause[:-1] if clause.endswith(".") else clause`
+  - replace: `            shown = clause`
+- M94 REQ-ANL-006.N2 skill/sdd/scripts/sdd.py
+  - find: `            warn(f'{req.id}: no scenario exercises the clause "{shown}" (heuristic)')`
+  - replace: `            warn(f'{req.id}: no scenario exercises the clause "{shown}" (heuristic)'); break`
+- M95 REQ-ANL-006.N4 skill/sdd/scripts/sdd.py
+  - find: `(s["given"], s["when"], s["then"])`
+  - replace: `(s["given"], s["when"], s["then"], s["category"])`
+- M96 REQ-ANL-006.S1 skill/sdd/scripts/sdd.py
+  - find: `        if distinct and not distinct & mentioned:`
+  - replace: `        if True:`
+- M97 REQ-ANL-006.N5 skill/sdd/scripts/sdd.py
+  - find: `        if distinct and not distinct & mentioned:`
+  - replace: `        if distinct and not any(d in m for d in distinct for m in mentioned):`
+- M98 REQ-ANL-006.B2 skill/sdd/scripts/sdd.py
+  - find: `CLAUSE_WORD = re.compile(r"[A-Za-z]{5,}")`
+  - replace: `CLAUSE_WORD = re.compile(r"[A-Za-z]{3,}")`
+- M99 REQ-ANL-006.B4 skill/sdd/scripts/sdd.py
+  - find: `        if distinct and not distinct & mentioned:`
+  - replace: `        if distinct and not distinct <= mentioned:`
+- M100 REQ-ANL-007.B2 skill/sdd/scripts/sdd.py
+  - find: `    if happy > negative + boundary and level != "prototype":`
+  - replace: `    if level != "prototype":`
+- M101 REQ-ANL-008.N1 skill/sdd/scripts/sdd.py
+  - find: `        report = full_analysis(project, path)`
+  - replace: `        report = analyze(project, path, "plan")`
+- M102 REQ-ANL-008.S1 skill/sdd/scripts/sdd.py
+  - find: `        if report.errors:`
+  - replace: `        if report.errors or report.warnings:`
+- M103 REQ-ANL-008.B1 skill/sdd/scripts/sdd.py
+  - find: `    design_findings(project, path, report, report.design_error, report.warnings.append)`
+  - replace: `    design_findings(project, path, report, report.design_error, report.warnings.append); report.errors.extend(report.errors)`
+- M104 REQ-ANL-008.N3 skill/sdd/scripts/sdd.py
+  - find: `        if report.errors:`
+  - replace: `        if report.errors or size != "standard":`
+- M105 REQ-ORC-004.S2 skill/sdd/scripts/sdd.py
+  - find: `        return ["design", "tasks", "analyze"]`
+  - replace: `        return ["design", "analyze"]`
+- M106 REQ-ORC-004.S2 skill/sdd/scripts/sdd.py
+  - find: `    return [f"{n}. sdd {step}" for n, step in enumerate(steps, 1)] + [GATE_LINES[gate]]`
+  - replace: `    return [f"{n}. sdd {step}" for n, step in enumerate(steps)] + [GATE_LINES[gate]]`
+- M107 REQ-ORC-004.S3 skill/sdd/scripts/sdd.py
+  - find: `    if size == "standard" and status in ("spec-approved", "designed"):`
+  - replace: `    if size == "standard" and status in ("spec-approved",):`
+- M108 REQ-ORC-004.S3 skill/sdd/scripts/sdd.py
+  - find: `    if needs_tasks(project, path, analyze(project, path, "spec")):`
+  - replace: `    if True:`
+- M109 REQ-ORC-004.S1 skill/sdd/scripts/sdd.py
+  - find: `    return bool(report.critic or report.open_questions)`
+  - replace: `    return False`
+- M110 REQ-ORC-004.S1 skill/sdd/scripts/sdd.py
+  - find: `    if size == "standard" and status in ("draft", "clarifying"):`
+  - replace: `    if size == "standard" and status in ("clarifying",):`
+- M111 REQ-ORC-004.S10 skill/sdd/scripts/sdd.py
+  - find: `            for r in reqs if r.tag != "REMOVED" and last["audit"].get(r.id) not in ("ok", "issues")]`
+  - replace: `            for r in reqs if r.tag != "REMOVED" and last["audit"].get(r.id) not in ("ok", "issues", "?")]`
+- M112 REQ-ORC-004.N10 skill/sdd/scripts/sdd.py
+  - find: `    return bool(report.critic or report.open_questions)`
+  - replace: `    return bool(report.critic or (report.open_questions and report.level != "prototype"))`
+- M113 REQ-ORC-004.B2 skill/sdd/scripts/sdd.py
+  - find: `    if not critic_required(size, level):`
+  - replace: `    if False:`
+- M114 REQ-ORC-004.B3 skill/sdd/scripts/sdd.py
+  - find: `    return bool(report.critic or report.open_questions)`
+  - replace: `    return True`
+- M115 REQ-ORC-004.N9 skill/sdd/scripts/sdd.py
+  - find: `        return implement_stage_steps(status, path), results_gate(size)`
+  - replace: `        return (["clarify"] if clarify_applies(analyze(project, path, "spec")) else []) + implement_stage_steps(status, path), results_gate(size)`
+- M116 REQ-ORC-004.S4 skill/sdd/scripts/sdd.py
+  - find: `    return steps + ["verify"]`
+  - replace: `    return ["verify"]`
+- M117 REQ-ORC-004.S4 skill/sdd/scripts/sdd.py
+  - find: `    return "results" if size == "standard" else "review"`
+  - replace: `    return "review"`
+- M118 REQ-ORC-004.S7 skill/sdd/scripts/sdd.py
+  - find: `        return verify_stage_steps(path), verify_stage_gate(path, size)`
+  - replace: `        return [], verify_stage_gate(path, size)`
+- M119 REQ-ORC-004.S7 skill/sdd/scripts/sdd.py
+  - find: `    return ["verify"] if verifier_verdict(path) is None else []`
+  - replace: `    return []`
+- M120 REQ-ORC-004.S8 skill/sdd/scripts/sdd.py
+  - find: `    return ["verify"] if verifier_verdict(path) is None else []`
+  - replace: `    return ["verify"]`
+- M121 REQ-ORC-004.S13 skill/sdd/scripts/sdd.py
+  - find: `    return "gaps" if found and found[0].upper() != "PASS" else results_gate(size)`
+  - replace: `    return results_gate(size)`
+- M122 REQ-ORC-004.S13 skill/sdd/scripts/sdd.py
+  - find: `        return verify_stage_steps(path), verify_stage_gate(path, size)`
+  - replace: `        return verify_stage_steps(path), results_gate(size)`
+- M123 REQ-ORC-004.S5 skill/sdd/scripts/sdd.py
+  - find: `        return ["archive"], "none"`
+  - replace: `        return [], "none"`
+- M124 REQ-ORC-004.S6 skill/sdd/scripts/sdd.py
+  - find: `    return "results" if size == "standard" else "review"`
+  - replace: `    return "results"`
+- M125 REQ-ORC-004.S9 skill/sdd/scripts/sdd.py
+  - find: `    if size == "mini" and status == "draft":`
+  - replace: `    if size == "mini" and status == "drafty":`
+- M126 REQ-ORC-004.S9 skill/sdd/scripts/sdd.py
+  - find: `        return mini_draft_steps(project, path), "plan"`
+  - replace: `        return ["tasks"], "plan"`
+- M127 REQ-ORC-004.S11 skill/sdd/scripts/sdd.py
+  - find: `        return [], "review"`
+  - replace: `        return ["archive"], "review"`
+- M128 REQ-ORC-004.S12 skill/sdd/scripts/sdd.py
+  - find: `    return ["verify"] if verifier_verdict(path) is None else []`
+  - replace: `    return ["verify"]`
+- M131 REQ-ORC-004.N13 skill/sdd/scripts/sdd.py
+  - find: `    return bool(locked and effective not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked)`
+  - replace: `    return bool(locked and ("draft" if status == "blocked" else effective) not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked)`
+- M132 REQ-ORC-004.N12 skill/sdd/scripts/sdd.py
+  - find: `    changed = project.constitution_state()["changed"]`
+  - replace: `    changed = project.constitution_state()["changed"] and fm.get("status") != "blocked"`
+- M133 REQ-ORC-004.N14 skill/sdd/scripts/sdd.py
+  - find: `    if fm.get("status") == "abandoned":`
+  - replace: `    if False:`
+- M134 REQ-ORC-004.N4 skill/sdd/scripts/sdd.py
+  - find: `        change_id = change_arg or self.active()`
+  - replace: `        change_id = change_arg or self.active() or "0003-x"`
+- M135 REQ-ORC-004.N5 skill/sdd/scripts/sdd.py
+  - find: `            raise SddError("this repository is not initialized: run `sdd init` first")`
+  - replace: `            pass`
+- M136 REQ-ORC-004.N6 skill/sdd/scripts/sdd.py
+  - find: `        change_id = change_arg or self.active()`
+  - replace: `        change_id = self.active()`
+- M137 REQ-ORC-004.N6 skill/sdd/scripts/sdd.py
+  - find: `            path = self.changes / change_id / name`
+  - replace: `            path = self.archive / change_id / name`
+- M129 REQ-ORC-004.N3 skill/sdd/scripts/sdd.py
+  - find: `    if spec_edited_since_approval(fm, whole):`
+  - replace: `    if False:`
+- M130 REQ-ORC-004.N3 skill/sdd/scripts/sdd.py
+  - find: `        return ["1. sdd amend", GATE_LINES["amend"]]`
+  - replace: `        return [GATE_LINES["amend"]]`
+- M138 REQ-ORC-005.S1 skill/sdd/scripts/sdd.py
+  - find: `    return report.counts["requirements"] == 0 or bool(spec_errors_outside_rounds(report))`
+  - replace: `    return False`
+- M139 REQ-ORC-005.N5 skill/sdd/scripts/sdd.py
+  - find: `    return [error for error in report.errors if error not in report.round_errors]`
+  - replace: `    return report.errors`
+- M140 REQ-ORC-005.S2 skill/sdd/scripts/sdd.py
+  - find: `    if needs_tasks(project, path, analyze(project, path, "spec")):`
+  - replace: `    if False:`
+- M141 REQ-ORC-005.N3 skill/sdd/scripts/sdd.py
+  - find: `    if needs_tasks(project, path, analyze(project, path, "spec")):`
+  - replace: `    if needs_tasks(project, path, analyze(project, path, "spec")) and not report.design_errors:`
+- M142 REQ-ORC-005.N3 skill/sdd/scripts/sdd.py
+  - find: `    if report.design_errors:`
+  - replace: `    if report.design_errors and report.counts["tasks"]["total"]:`
+- M143 REQ-ORC-005.N6 skill/sdd/scripts/sdd.py
+  - find: `            check_contracts(view, report.design_error, warn)`
+  - replace: `            check_contracts(view, report.warnings.append, warn)`
+- M144 REQ-ORC-005.B2 skill/sdd/scripts/sdd.py
+  - find: `    check_failure_modes(view, known_ids, counting_scenarios(project, report.reqs), err)`
+  - replace: `    check_failure_modes(view, known_ids, counting_scenarios(project, report.reqs), report.warnings.append)`
+- M145 REQ-ORC-005.B1 skill/sdd/scripts/sdd.py
+  - find: `    if report.design_errors:`
+  - replace: `    if report.design_errors or report.warnings:`
+- M146 REQ-ORC-005.N4 skill/sdd/scripts/sdd.py
+  - find: `    if status in ("planned", "implementing"):`
+  - replace: `    if status in ("planned", "implementing") and not analyze(project, path, "plan").errors:`
+- M147 REQ-ORC-005.S4 skill/sdd/scripts/sdd.py
+  - find: `        return mini_draft_steps(project, path), "plan"`
+  - replace: `        return [], "plan"`
+- M148 REQ-ORC-005.S4 skill/sdd/scripts/sdd.py
+  - find: `        ("specify", spec_needs_work(report)),`
+  - replace: `        ("specify", False),`
+- M149 REQ-ORC-005.S4 skill/sdd/scripts/sdd.py
+  - find: `        ("tasks", needs_tasks(project, path, report)),`
+  - replace: `        ("tasks", False),`
+- M150 REQ-ORC-005.S4 skill/sdd/scripts/sdd.py
+  - find: `        ("clarify", clarify_applies(report)),`
+  - replace: `        ("clarify", False),`
+- M151 REQ-ORC-005.N7 skill/sdd/scripts/sdd.py
+  - find: `    return not report.counts["tasks"]["total"] or bool(plan_errors_only(project, path, report))`
+  - replace: `    return not report.counts["tasks"]["total"]`
+- M152 REQ-ORC-005.N2 skill/sdd/scripts/sdd.py
+  - find: `        ("tasks", needs_tasks(project, path, report)),`
+  - replace: `        ("tasks", False),`
+- M153 REQ-ORC-006.N1 skill/sdd/scripts/sdd.py
+  - find: `    if status == "designed":`
+  - replace: `    if status == "designed" and False:`
+- M154 REQ-ORC-006.B1 skill/sdd/scripts/sdd.py
+  - find: `        return "sdd implement"`
+  - replace: `        return "sdd analyze, then ask for plan approval"`
+- M155 REQ-ANL-001.B3 skill/sdd/scripts/sdd.py
+  - find: `    if fm.get("size") != "standard":`
+  - replace: `    if False:`
+- M156 REQ-ANL-003.N16 skill/sdd/scripts/sdd.py
+  - find: `    if not re.sub(r"^[:—]\s*", "", text):`
+  - replace: `    if False:`
+- M157 REQ-ANL-003.N17 skill/sdd/scripts/sdd.py
+  - find: `    if body.strip() and not re.match(r"\s*[:—]", body):`
+  - replace: `    if False:`
+- M158 REQ-ORC-005.N8 skill/sdd/scripts/sdd.py
+  - find: `    return not report.counts["tasks"]["total"] or bool(plan_errors_only(project, path, report))`
+  - replace: `    return not report.counts["tasks"]["total"]`

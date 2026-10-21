@@ -8,6 +8,66 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.17.0 — 2026-10-21
+
+Change 0003-design-depth-analyze-next (v1 increment 5) passed its second
+verification round and was archived. Living specs:
+[`analysis`](specs/capabilities/analysis/spec.md) (8 requirements, new) and
+[`orchestration`](specs/capabilities/orchestration/spec.md) (now 6
+requirements). The change has 11 requirements, 147 scenarios and 146 tasks.
+The suite is now 439 tests, and all 158 planned mutations are caught.
+
+- **Behavior:** new `sdd.py analyze [--change] [--json]`. It prints check's
+  plan-stage report headed `analyze <id>`, adds the cross-artifact findings
+  and a scenario count, and exits 1 on any error. For a `standard` change at
+  designed or later:
+  - the design must not name a requirement that doesn't exist (error), and
+    should name every requirement of the change (warning);
+  - every `- FM<n> <text> → <outcome>` failure mode, or a single
+    `- None — <reason>` line, must be well formed, and its outcome must be
+    scenario references that exist or `N/A` with a reason of at least three
+    words;
+  - at `production` and above a design with no failure modes is an error
+    (below, a warning).
+  At any size it also warns about a requirement clause no scenario exercises
+  and about a change with more happy than non-happy scenarios. Both are
+  heuristics.
+- **Behavior:** in a `standard` change, from the plan stage on, each
+  `- interface: <name>` line needs a `### <name>` entry under `## Contracts`.
+  `check` reports a missing, nameless or repeated entry as an error and an
+  entry no interface lists as a warning.
+- **Behavior:** `approve plan` runs the same analysis and refuses on any
+  analyze error. It prints the report and records nothing. Warnings don't
+  block, and a `mini` plan approval is unchanged.
+- **Behavior:** new `sdd.py next [--change]`. It lists the numbered steps to
+  the next gate for the change's size and status, then the gate line. It puts
+  a fixing step first (`specify`, `design` or `tasks`) when a report shows the
+  problem. A changed constitution, an edited approved spec, a blocked or an
+  abandoned change each print their own line. It runs nothing and writes
+  nothing.
+- **Behavior:** `status` at designed, with tasks and a clean check, now says
+  `sdd analyze, then ask for plan approval`.
+- Method: the design phase adds Failure modes, Contracts and a failure-mode
+  review by a strong read-only subagent (a fresh session in Codex). New
+  `analyze` and `next` phases. The Architect role, `format.md`, `overview.md`,
+  the `tasks` phase, `SKILL.md` and the standard design template follow.
+- Upgrade: no spec needs editing, but a `standard` change at `production`
+  that reaches the plan gate now needs a Failure modes section (or a `- None`
+  line). A change already past the plan gate sees the design findings only in
+  `analyze`.
+- Built with the 0.16.0 fan-out: the prime session routed all 146 tasks to
+  implementer subagents by tier (86 light, 43 mid, 11 strong, plus 6 light
+  repair tasks). Verification ran in a separate fresh session. Round 1 found 12 gaps, and
+  the operator chose to amend four (amendment A2: four new scenarios) and
+  accept five as known gaps. Round 2 passed.
+- Known issue: `archive` copies every known gap of a change into each
+  capability it touches, so `analysis` and `orchestration` both list all 16.
+- Roadmap: delivery profiles and install options move from increment 5 to 6,
+  with releases and deploy. A visual design step (style guide, style sheets,
+  mock-ups) is recorded as unscheduled after v1, and contract depth is to be
+  revisited with the `full` size.
+- Published on the `v1` branch; not merged into `main` yet.
+
 ## 0.16.0 — 2026-10-18
 
 Change 0002-subagent-fanout (v1 increment 4) passed verification and was

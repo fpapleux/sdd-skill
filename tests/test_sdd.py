@@ -2821,5 +2821,1845 @@ class MutateTests(GitFixture):
         self.assertIn("M1 caught", out)
 
 
+# ---------------------------------------------------------------- change 0003: analyze
+
+ANL_REQS = """\
+### REQ-ANL-001 Analyze reports findings
+When the operator runs analyze, the tool shall print a report.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | a clean change | analyze runs | it prints the report |
+| N1 | validation | a broken change | analyze runs | it prints the error · nothing is written |
+
+- N/A boundary: the report has no size limit to probe
+- N/A access: the tool runs locally with no users
+- N/A state: the tool keeps no state between runs
+- N/A dependency: the tool calls no other component or service
+"""
+
+ANL_ROUND = """\
+### Round 1 — 2026-10-08 · Critic: fresh session
+
+| REQ | Verdict | Notes |
+| --- | --- | --- |
+| REQ-ANL-001 | ok | |
+"""
+
+ANL_DESIGN = """\
+## Approach
+- The report is built from check's findings (REQ-ANL-001)
+
+## Components and interfaces
+- **analyze** (REQ-ANL-001): prints the report
+
+## Test strategy
+- Unit tests
+- Test command: `python3 -m unittest`
+
+## Failure modes
+- FM1 the change is broken → REQ-ANL-001.N1
+"""
+
+ANL_TASKS = """\
+- [ ] T1 REQ-ANL-001.S1 Print the report
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T2 REQ-ANL-001.N1 Print the error
+  - tier: mid
+  - test:
+  - red:
+  - green:
+"""
+
+
+class DesignedBase(Base):
+    """A standard change 0003-x at designed, built through the real gates."""
+
+    cid = "0003-x"
+
+    def designed(self, level="production", design=ANL_DESIGN, reqs=ANL_REQS, tasks=ANL_TASKS, round_=ANL_ROUND,
+                 living=None):
+        self.spec_approved(level, reqs=reqs, round_=round_, living=living)
+        (self.dir / "design.md").write_text(design)
+        self.repo.ok("advance", "designed")
+        set_file_section(self.dir / "tasks.md", "Tasks", tasks)
+
+    def spec_approved(self, level="production", reqs=ANL_REQS, round_=ANL_ROUND, living=None):
+        """The standard change 0003-x with its spec approved, before design."""
+        self.init(level)
+        if living:  # a living spec for the analyze capability, written before the spec gate
+            self.repo.write("specs/capabilities/analyze/spec.md", living)
+        for earlier in ("0001-first", "0002-second"):  # so the new change is numbered 0003
+            (self.repo.root / "specs/archive" / earlier).mkdir(parents=True)
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard",
+                     "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes" / self.cid
+        set_file_section(self.dir / "spec-delta.md", "Requirements", reqs)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", round_)
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+
+    def two_requirements(self, design=None):
+        """A designed change with REQ-ANL-001 and REQ-ANL-002, a task per scenario, and the design given."""
+        reqs = ANL_REQS + (
+            "\n### REQ-ANL-002 The design traces to the requirements\n"
+            "When a standard change is designed, analyze shall check the design trace.\n\n"
+            "| ID | Category | Given | When | Then |\n| --- | --- | --- | --- | --- |\n"
+            "| S1 | happy | a designed change naming both requirements | analyze runs | no trace finding is printed |\n"
+            "| N1 | validation | a designed change naming one requirement | analyze runs | a warning is printed"
+            " · nothing is written |\n\n"
+            "- N/A boundary: the trace has no size limit to probe\n"
+            "- N/A access: the trace runs locally with no users\n"
+            "- N/A state: the trace keeps no state between runs\n"
+            "- N/A dependency: the trace calls no other component or service\n")
+        if design is None:
+            design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                        "- **analyze** (REQ-ANL-001): prints the report\n"
+                                        "- **trace** (REQ-ANL-002): checks the design names each requirement")
+        tasks = ANL_TASKS + "".join(f"- [ ] T{n} REQ-ANL-002.{sid} Check the trace\n"
+                                    "  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+                                    for n, sid in ((3, "S1"), (4, "N1")))
+        round_ = ANL_ROUND + "| REQ-ANL-002 | ok | |\n"
+        self.designed(design=design, reqs=reqs, tasks=tasks, round_=round_)
+
+    def living_orchestration(self):
+        """The living spec the design says the tests use: REQ-ORC-001 (S1, N1, N4) and REQ-ORC-002 (S1)."""
+        def req(number, title, ids):
+            rows = "".join(f"| {i} | {'happy' if i.startswith('S') else 'validation'} | a given | a when | a then |\n"
+                           for i in ids)
+            return (f"### REQ-ORC-{number:03d} {title}\nWhen asked, the tool shall answer.\n\n"
+                    f"| ID | Category | Given | When | Then |\n| --- | --- | --- | --- | --- |\n{rows}\n")
+        self.repo.write("specs/capabilities/orchestration/spec.md",
+                        "---\ncapability: orchestration\nprefix: ORC\n---\n\n## Requirements\n\n"
+                        + req(1, "Orchestration answers", ["S1", "N1", "N4"])
+                        + req(2, "Orchestration lists", ["S1"]))
+
+
+class AnalyzeTests(DesignedBase):
+    """REQ-ANL-001: sdd.py analyze prints check's plan report with the cross-artifact findings."""
+
+    def test_REQ_ANL_001_S1_analyze_prints_header_scenarios_and_result(self):
+        self.designed()
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("analyze 0003-x (assurance: production)\n"), out)
+        lines = out.rstrip("\n").splitlines()
+        self.assertEqual(lines[-2], "scenarios: 1 happy, 1 negative, 0 boundary", out)
+        self.assertEqual(lines[-1], "result: OK", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_S3_change_option_analyzes_another_change(self):
+        self.designed()
+        self.repo.ok("new", "other", "--title", "Other", "--capability", "other=OTH")
+        self.repo.ok("use", "0003-x")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--change", "0004-other")
+        self.assertTrue(out.startswith("analyze 0004-other (assurance: production)\n"), out)
+        self.assertEqual((self.repo.root / "specs/.sdd/active").read_text().strip(), "0003-x")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_S2_json_merges_trace_warning_into_checks_keys(self):
+        self.two_requirements(design=ANL_DESIGN)  # REQ-ANL-002 is never named
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--json")
+        self.assertEqual(code, 0, out)
+        data = json.loads(out)
+        _, check_out = self.repo.run("check", "--stage", "plan", "--json")
+        self.assertEqual(sorted(data), sorted(json.loads(check_out)))
+        self.assertIs(data["ok"], True)
+        self.assertEqual(data["stage"], "plan")
+        self.assertEqual(data["errors"], [])
+        self.assertIn("REQ-ANL-002 is not named in design.md: trace each component to its requirements",
+                      data["warnings"])
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N1_unknown_change_refused(self):
+        self.designed()
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--change", "9999-none")
+        self.assertEqual(code, 1, out)
+        self.assertIn("error: no change '9999-none' in specs/changes/", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N3_uninitialized_repository_refused(self):
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn("error: this repository is not initialized: run `sdd init` first", out)
+        self.assertFalse((self.repo.root / "specs").exists())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N4_no_active_change_refused(self):
+        self.designed()
+        (self.repo.root / "specs/.sdd/active").write_text("\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn("error: no active change: start one with `sdd quick", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N2_unknown_option_is_usage_error(self):
+        self.designed()
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--bogus")
+        self.assertEqual(code, 2, out)
+        self.assertIn("error: unrecognized arguments: --bogus", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N5_scenario_without_task_fails_like_check(self):
+        only_negative = ("- [ ] T1 REQ-ANL-001.N1 Print the error\n"
+                         "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        self.designed(tasks=only_negative)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        finding = "  - REQ-ANL-001.S1: no task plans this scenario"
+        self.assertIn(finding, out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn(finding, check_out.splitlines())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_B1_draft_without_tasks_fails_analyze(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        change = self.repo.root / "specs/changes/0001-x"
+        set_file_section(change / "spec-delta.md", "Requirements", ANL_REQS)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario", out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_N6_json_with_trace_error_is_not_ok(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--json")
+        self.assertEqual(code, 1, out)
+        data = json.loads(out)
+        self.assertIs(data["ok"], False)
+        self.assertIn("design.md names REQ-ANL-009, which doesn't exist (in this change or the living spec)",
+                      data["errors"])
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_B2_mini_change_has_no_design_finding(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--capability", "analyze=ANL")
+        spec = self.repo.root / "specs/changes/0001-x/spec.md"
+        set_file_section(spec, "Requirements", ANL_REQS)
+        set_file_section(spec, "Known gaps", "- None\n")
+        set_file_section(spec, "Tasks", ANL_TASKS)
+        self.assertFalse((spec.parent / "design.md").exists())
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("design.md", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_001_B3_mini_change_past_the_plan_gate_has_no_design_finding(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--capability", "analyze=ANL")
+        spec = self.repo.root / "specs/changes/0001-x/spec.md"
+        set_file_section(spec, "Requirements", ANL_REQS)
+        set_file_section(spec, "Known gaps", "- None\n")
+        set_file_section(spec, "Clarifications", ANL_ROUND)  # production needs a Critic round, even for mini
+        set_file_section(spec, "Tasks", ANL_TASKS)
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(sdd.read_front_matter(spec.read_text()).get("status"), "planned")
+        self.assertFalse((spec.parent / "design.md").exists())
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("design.md", out)
+        self.assertNotIn("no failure modes", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+class DesignTraceTests(DesignedBase):
+    """REQ-ANL-002: the design traces to the requirements."""
+
+    MISSING = "design.md names REQ-ANL-009, which doesn't exist (in this change or the living spec)"
+
+    def test_REQ_ANL_002_N1_design_naming_nonexistent_requirement_is_error(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"  - {self.MISSING}", out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    NOT_NAMED = "REQ-ANL-002 is not named in design.md: trace each component to its requirements"
+
+    def test_REQ_ANL_002_S1_design_naming_every_requirement_raises_no_finding(self):
+        self.two_requirements()
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("design.md names", out)
+        self.assertNotIn("not named in the design", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_N2_requirement_the_design_never_names_is_a_warning(self):
+        self.two_requirements(design=ANL_DESIGN)  # names REQ-ANL-001 only
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  - {self.NOT_NAMED}", out.splitlines())
+        self.assertIn("warnings (1):", out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_N3_no_trace_finding_before_designed(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes/0001-x"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ANL_ROUND)
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        (self.dir / "design.md").write_text("## Approach\n- a component with no requirement named\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertTrue(out.startswith("analyze 0001-x (assurance: production)\n"), out)
+        self.assertNotIn("names REQ-", out)
+        self.assertNotIn("is not named in design.md", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_N4_blocked_change_counts_at_the_status_it_was_blocked_from(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        _, designed_out = self.repo.run("analyze")
+        self.repo.ok("advance", "blocked")
+        self.assertIn("blocked_from: designed", "".join(f.read_text() for f in self.dir.glob("*.md")))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"  - {self.MISSING}", out.splitlines())
+        self.assertIn(f"  - {self.MISSING}", designed_out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_ANL_002_N5_abandoned_change_gets_no_trace_finding(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        self.repo.ok("advance", "abandoned")  # abandoning clears the active change, so name it
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze", "--change", "0003-x")
+        self.assertTrue(out.startswith("analyze 0003-x (assurance: production)\n"), out)
+        self.assertNotIn("design.md names", out)
+        self.assertNotIn("is not named in design.md", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B1_removed_requirement_is_not_warned_about(self):
+        living = ("---\ncapability: analyze\nprefix: ANL\n---\n# analyze\n\n"
+                  "### REQ-ANL-003 Old rule\nWhen the old rule applies, the tool shall do the old thing.\n\n"
+                  "- N/A validation: the rule takes no input\n")
+        removed = "### REQ-ANL-003 [REMOVED] Old rule\nReason: replaced by the new rule.\n"
+        self.designed(reqs=ANL_REQS + "\n" + removed, living=living)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("REQ-ANL-003", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B2_living_spec_requirement_is_known(self):
+        self.living_orchestration()
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **router** (REQ-ORC-001): reuses the orchestration answers")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("REQ-ORC-001", out)
+        self.assertNotIn("design.md names", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B3_mention_inside_html_comment_does_not_count(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "<!-- the trace component serves REQ-ANL-002 -->")
+        self.two_requirements(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  - {self.NOT_NAMED}", out.splitlines())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B6_mention_inside_fenced_code_block_does_not_count(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "```\nan example naming REQ-ANL-009\n```")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("REQ-ANL-009", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_ANL_002_B4_underscore_form_does_not_count(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **trace** (test_REQ_ANL_002_S1): checks each requirement")
+        self.two_requirements(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  - {self.NOT_NAMED}", out.splitlines())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B5_scenario_reference_names_its_requirement(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **trace** (REQ-ANL-002.S1): checks each requirement")
+        self.two_requirements(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("REQ-ANL-002 is not named", out)
+        self.assertNotIn("design.md names", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_B7_one_error_per_distinct_id(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote\n"
+                                    "- **extra2** (REQ-ANL-009.N1): the same requirement, by scenario")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn("errors (1):", out.splitlines())
+        self.assertEqual([line for line in out.splitlines() if "REQ-ANL-009" in line],
+                         [f"  - {self.MISSING}"])
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_002_N6_failure_mode_outcome_naming_missing_requirement_is_one_error(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-009.N1"))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(code, 1, out)
+        self.assertIn("errors (1):", out.splitlines())
+        self.assertEqual([line for line in out.splitlines() if "REQ-ANL-009" in line],
+                         [f"  - {self.MISSING}"])
+        self.assertNotIn("Failure modes:", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+def fm_design(*bullets):
+    """ANL_DESIGN with its ## Failure modes section holding the given lines."""
+    head = ANL_DESIGN.split("## Failure modes\n")[0]
+    return head + "## Failure modes\n" + "".join(line + "\n" for line in bullets)
+
+
+class FailureModeTests(DesignedBase):
+    """REQ-ANL-003: every failure mode in design.md has an outcome."""
+
+    def analyze_unchanged(self):
+        """Run analyze, asserting it changes no file; returns (code, output lines)."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def test_REQ_ANL_003_N1_failure_mode_without_arrow_has_no_outcome(self):
+        self.designed(design=fm_design("- FM1 the queue is full"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("  - Failure modes: FM1 has no outcome (end the line with → <scenarios> "
+                      "or → N/A: <reason>)", lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_S1_well_formed_entries_with_na_raise_no_finding(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "- FM2 no cache is added → N/A: the design adds no cache"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_S4_colon_separator_raises_no_finding(self):
+        self.designed(design=fm_design("- FM1: the queue is full → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_N6_bullet_that_is_neither_entry_nor_none_line(self):
+        self.designed(design=fm_design("- the queue may fill up"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn('  - Failure modes: "the queue may fill up" is neither a failure-mode entry '
+                      'nor a None line', lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_S2_lone_none_line_with_reason_is_accepted(self):
+        self.designed(design=fm_design("- None — the design adds no new component"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_003_N4_none_line_needs_three_word_reason(self):
+        self.designed(design=fm_design("- None — none"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("  - Failure modes: the None line needs a reason of at least 3 words", lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N15_bare_none_line_needs_a_reason(self):
+        self.designed(design=fm_design("- None"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("  - Failure modes: the None line needs a reason of at least 3 words", lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N7_none_line_next_to_an_entry(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "- None — the design adds nothing else"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines.count("  - Failure modes: a None line can't sit next to entries"), 1, lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_N13_second_none_line_is_refused(self):
+        self.designed(design=fm_design("- None — the design adds nothing",
+                                       "- None — the design adds nothing"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines.count("  - Failure modes: a None line can't sit next to entries"), 1, lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N3_na_outcome_needs_three_word_reason(self):
+        self.designed(design=fm_design("- FM1 the queue is full → N/A: later"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("  - Failure modes: FM1's N/A needs a real reason (at least 3 words)", lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_B3_na_reason_of_three_words_is_accepted(self):
+        self.designed(design=fm_design("- FM1 the queue is full → N/A: no queue added"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_N8_outcome_neither_references_nor_na(self):
+        self.designed(design=fm_design(
+            "- FM1 the queue is full → REQ-ANL-001.N1 (the producer is refused)"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        errors = [line for line in lines if "Failure modes" in line]
+        self.assertEqual(len(errors), 1, lines)
+        self.assertIn("  - Failure modes: FM1's outcome is neither scenario references nor N/A", errors[0])
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_N14_na_without_separator_is_refused(self):
+        self.designed(design=fm_design("- FM1 the queue is full → N/A the design adds nothing"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        errors = [line for line in lines if "Failure modes" in line]
+        self.assertEqual(len(errors), 1, lines)
+        self.assertIn("  - Failure modes: FM1's outcome is neither scenario references nor N/A", errors[0])
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N10_wrapped_entry_has_no_outcome(self):
+        self.designed(design=fm_design("- FM1 the queue is full", "  → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        errors = [line for line in lines if "Failure modes" in line]
+        self.assertEqual(len(errors), 1, lines)
+        self.assertIn("  - Failure modes: FM1 has no outcome (end the line with → <scenarios> or → N/A: <reason>)",
+                      errors[0])
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N5_repeated_fm_number(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "- FM1 the disk is full → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line],
+                         ["  - Failure modes: FM1 is repeated"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_N11_fm1_and_fm01_are_the_same_number(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "- FM01 the disk is full → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line],
+                         ["  - Failure modes: FM1 is repeated"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_N2_missing_scenario_reference_needs_an_amendment(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N9"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "REQ-ANL-001.N9" in line],
+                         ["  - Failure modes: FM1 names REQ-ANL-001.N9, which doesn't exist: a failure mode "
+                          "the spec doesn't cover needs an amendment (sdd amend)"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_B1_several_scenario_references_on_one_entry(self):
+        reqs = ANL_REQS.replace("| N1 | validation | a broken change | analyze runs | it prints the error · nothing is written |",
+                                "| N1 | validation | a broken change | analyze runs | it prints the error · nothing is written |\n"
+                                "| N2 | validation | a second broken change | analyze runs | it prints a second error |")
+        tasks = ANL_TASKS + ("- [ ] T3 REQ-ANL-001.N2 Print the second error\n"
+                             "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1, REQ-ANL-001.N2"),
+                      reqs=reqs, tasks=tasks)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_S3_living_spec_scenario_counts(self):
+        self.living_orchestration()  # REQ-ORC-001.N1 exists only in the living spec
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ORC-001.N1"))
+        self.assertNotIn("REQ-ORC", (self.dir / "spec-delta.md").read_text())
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line or "REQ-ORC" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_N12_scenario_dropped_by_modified_restatement_does_not_count(self):
+        self.living_orchestration()  # REQ-ORC-001 has S1, N1 and N4 in the living spec
+        living = (self.repo.root / "specs/capabilities/orchestration/spec.md").read_text()
+        self.assertIn("| N4 |", living.split("### REQ-ORC-002")[0])
+        restated = (
+            "\n### REQ-ORC-001 [MODIFIED] Orchestration answers\n"
+            "When asked, the tool shall answer.\n\n"
+            "| ID | Category | Given | When | Then |\n| --- | --- | --- | --- | --- |\n"
+            "| S1 | happy | a given | a when | a then |\n"
+            "| N1 | validation | a given | a when | a then · nothing is written |\n\n"
+            "- N/A boundary: the answer has no size limit to probe\n"
+            "- N/A access: the tool runs locally with no users\n"
+            "- N/A state: the tool keeps no state between runs\n"
+            "- N/A dependency: the tool calls no other component or service\n")
+        tasks = ANL_TASKS + "".join(
+            f"- [ ] T{n} REQ-ORC-001.{sid} Answer\n  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+            for n, sid in ((3, "S1"), (4, "N1")))
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ORC-001.N4"),
+                      reqs=ANL_REQS + restated, tasks=tasks, round_=ANL_ROUND + "| REQ-ORC-001 | ok | |\n")
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ["  - Failure modes: FM1 names REQ-ORC-001.N4, which doesn't exist: a failure mode "
+                          "the spec doesn't cover needs an amendment (sdd amend)"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_B2_scenario_of_removed_requirement_does_not_count(self):
+        self.living_orchestration()  # REQ-ORC-002 has S1 in the living spec
+        removed = "### REQ-ORC-002 [REMOVED] Orchestration lists\nReason: lists are gone.\n"
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ORC-002.S1"),
+                      reqs=ANL_REQS + "\n" + removed)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line],
+                         ["  - Failure modes: FM1 names REQ-ORC-002.S1, which doesn't exist: a failure mode "
+                          "the spec doesn't cover needs an amendment (sdd amend)"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_B4_prose_ignored_and_indented_sub_bullet_checked(self):
+        self.designed(design=fm_design("The queue notes follow.",
+                                       "- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "  - see the queue notes"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line],
+                         ['  - Failure modes: "see the queue notes" is neither a failure-mode entry nor a None line'],
+                         lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_003_B5_entry_inside_fenced_code_block_is_ignored(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1",
+                                       "```", "- FM2 the disk is full", "```"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_B6_entry_inside_html_comment_is_ignored(self):
+        self.designed(design=fm_design("<!--", "- FM2 the disk is full", "-->",
+                                       "- FM1 the queue is full → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_003_N9_no_failure_mode_finding_before_designed(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes/0001-x"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ANL_ROUND)
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        (self.dir / "design.md").write_text(fm_design("- the queue may fill up"))
+        code, lines = self.analyze_unchanged()
+        self.assertTrue(lines[0].startswith("analyze 0001-x (assurance: production)"), lines)
+        self.assertEqual([line for line in lines if "Failure modes" in line], [], lines)
+
+    # REQ-ANL-004: a production design lists its failure modes
+
+    NO_FAILURE_MODES = ('design.md has no failure modes: list each as "- FM<n> <what fails> → <scenario>", '
+                        'or write "- None — <reason>"')
+
+    def test_REQ_ANL_004_N1_production_design_without_failure_modes_section_is_error(self):
+        self.designed(design=ANL_DESIGN.split("## Failure modes\n")[0])
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (1):", lines)
+        self.assertIn(f"  - {self.NO_FAILURE_MODES}", lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_004_S1_one_failure_mode_entry_satisfies_presence_rule(self):
+        self.designed(design=fm_design("- FM1 the queue is full → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_004_S2_none_line_satisfies_presence_rule(self):
+        self.designed(design=fm_design("- None — the design adds no new component"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_004_N3_section_with_only_a_malformed_bullet_still_lacks_an_entry(self):
+        self.designed(design=fm_design("- the queue may fill up"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (2):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ['  - Failure modes: "the queue may fill up" is neither a failure-mode entry '
+                          'nor a None line',
+                          f"  - {self.NO_FAILURE_MODES}"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_004_B3_bullet_starting_with_none_but_not_a_none_line_is_no_entry(self):
+        self.designed(design=fm_design("- Nonetheless the queue may fill up"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (2):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ['  - Failure modes: "Nonetheless the queue may fill up" is neither a '
+                          'failure-mode entry nor a None line',
+                          f"  - {self.NO_FAILURE_MODES}"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_004_B2_section_with_no_bullet_lacks_an_entry(self):
+        self.designed(design=fm_design())
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line],
+                         [f"  - {self.NO_FAILURE_MODES}"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_004_B4_entry_inside_a_comment_does_not_count(self):
+        self.designed(design=fm_design("<!--", "- FM1 the queue is full → REQ-ANL-001.N1", "-->"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line],
+                         [f"  - {self.NO_FAILURE_MODES}"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_004_B1_below_production_missing_section_is_a_warning(self):
+        self.designed(level="internal", design=ANL_DESIGN.split("## Failure modes\n")[0])
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line],
+                         [f"  - {self.NO_FAILURE_MODES}"], lines)
+        self.assertIn(f"warnings (1):", lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_004_N2_no_presence_finding_before_designed(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes/0001-x"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ANL_ROUND)
+        self.repo.ok("approve", "spec", "--evidence", "Operator: spec ok")
+        (self.dir / "design.md").write_text("## Approach\n- a component, no failure modes section yet\n")
+        code, lines = self.analyze_unchanged()
+        self.assertTrue(lines[0].startswith("analyze 0001-x (assurance: production)"), lines)
+        self.assertEqual([line for line in lines if "no failure modes" in line], [], lines)
+
+    def test_REQ_ANL_003_N16_failure_mode_with_no_text_before_its_arrow_is_refused(self):
+        self.designed(design=fm_design("- FM1 → REQ-ANL-001.N1"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ["  - Failure modes: FM1 has no text before its arrow"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_003_N17_none_line_with_no_separator_is_refused(self):
+        self.designed(design=fm_design("- None the design adds nothing"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ['  - Failure modes: the None line needs ":" or "—" before its reason'], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+def contract_design(interfaces=(), contracts=None):
+    """ANL_DESIGN with the given interface lines under Components, and a ## Contracts section
+    holding the given lines when contracts is not None."""
+    design = ANL_DESIGN.replace("## Components and interfaces\n",
+                                "## Components and interfaces\n" + "".join(l + "\n" for l in interfaces))
+    if contracts is not None:
+        design += "\n## Contracts\n" + "".join(l + "\n" for l in contracts)
+    return design
+
+
+class ContractTests(DesignedBase):
+    """REQ-ANL-005: every listed interface has a contract entry."""
+
+    def check_unchanged(self, stage="plan"):
+        """Run check at the stage, asserting it changes no file; returns (code, output lines)."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", stage)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def test_REQ_ANL_005_N1_listed_interface_without_contract_entry(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze"]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn('  - the interface "sdd.py analyze" has no contract entry '
+                      '(add "### sdd.py analyze" under ## Contracts)', lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_005_S1_interface_with_its_contract_entry(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze"],
+                                             contracts=["### sdd.py analyze", "Prints the report."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_005_S2_backticks_around_interface_name_are_trimmed(self):
+        self.designed(design=contract_design(["- interface: `sdd.py analyze`"],
+                                             contracts=["### sdd.py analyze", "Prints the report."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_005_S3_no_interface_line_and_no_contracts_section(self):
+        self.designed(design=contract_design())
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_005_N2_interface_line_with_no_name(self):
+        self.designed(design=contract_design(["- interface:"]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ["  - an interface line has no name"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_005_N3_repeated_contract_entry(self):
+        self.designed(design=contract_design(
+            ["- interface: sdd.py analyze"],
+            contracts=["### sdd.py analyze", "Prints the report.", "### sdd.py analyze", "Again."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertIn("errors (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ['  - the contract entry "sdd.py analyze" is repeated'], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+    def test_REQ_ANL_005_N5_contract_heading_with_no_name(self):
+        self.designed(design=contract_design([], contracts=["###", "Prints the report.", "### sdd.py analyze",
+                                                              "Prints the report."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "has no name" in line],
+                         ["  - a contract entry under ## Contracts has no name"], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_005_B1_two_interfaces_one_entry_one_error_for_second(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze", "- interface: sdd.py next"],
+                                             contracts=["### sdd.py analyze", "Prints the report."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "contract entry" in line],
+                         ['  - the interface "sdd.py next" has no contract entry '
+                          '(add "### sdd.py next" under ## Contracts)'], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_ANL_005_B3_interface_listed_twice_counts_once(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze", "- interface: sdd.py analyze"],
+                                             contracts=["### sdd.py analyze", "Prints the report."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_005_B2_entry_with_no_interface_line_is_a_warning(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze"],
+                                             contracts=["### sdd.py analyze", "Prints the report.",
+                                                        "### sdd.py next", "Lists the steps."]))
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertIn("warnings (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ['  - the contract entry "sdd.py next" has no interface line'], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_005_N6_interface_line_in_fenced_block_is_ignored(self):
+        design = ANL_DESIGN.replace("## Components and interfaces\n",
+                                    "## Components and interfaces\n```\n- interface: sdd.py analyze\n```\n")
+        self.designed(design=design)
+        code, lines = self.check_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_005_N4_no_contract_finding_at_the_spec_stage(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes/0001-x"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        (self.dir / "design.md").write_text(contract_design(["- interface: sdd.py analyze"]))
+        code, lines = self.check_unchanged(stage="spec")
+        self.assertEqual([line for line in lines if "contract" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK", lines)
+
+    def test_REQ_ANL_005_B4_missing_entry_error_shows_at_implement_stage(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze"]))
+        code, lines = self.check_unchanged(stage="implement")
+        self.assertEqual(code, 1, lines)
+        self.assertEqual([line for line in lines if "contract entry" in line],
+                         ['  - the interface "sdd.py analyze" has no contract entry '
+                          '(add "### sdd.py analyze" under ## Contracts)'], lines)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+
+CLAUSES_3 = "X shall print a header; Y shall write a ledger; Z shall restore a snapshot."
+
+
+def clause_reqs(statement=CLAUSES_3, s1_then="it prints the header", n1_then="it writes the ledger"):
+    """ANL_REQS with the given statement and the Then cells of S1 and N1 (their other cells mention
+    no word of the statement)."""
+    return (ANL_REQS
+            .replace("When the operator runs analyze, the tool shall print a report.", statement)
+            .replace("| it prints the report |", f"| {s1_then} |")
+            .replace("| it prints the error · nothing is written |", f"| {n1_then} |"))
+
+
+class ClauseTests(DesignedBase):
+    """REQ-ANL-006: analyze flags requirement clauses no scenario exercises."""
+
+    def analyze_unchanged(self):
+        """Run analyze, asserting it changes no file; returns (code, output lines)."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    @staticmethod
+    def clause_warnings(lines):
+        return [line for line in lines if "no scenario exercises the clause" in line]
+
+    def test_REQ_ANL_006_N1_clause_no_scenario_exercises_is_warning(self):
+        self.designed(reqs=clause_reqs())
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines),
+                         ['  - REQ-ANL-001: no scenario exercises the clause "Z shall restore a snapshot" '
+                          '(heuristic)'], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_006_S1_clauses_all_exercised_raise_no_warning(self):
+        self.designed(reqs=clause_reqs(n1_then="it writes the ledger and can restore the snapshot"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_N2_one_warning_per_uncovered_clause(self):
+        self.designed(reqs=clause_reqs(s1_then="it prints the header", n1_then="it prints the header"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines),
+                         ['  - REQ-ANL-001: no scenario exercises the clause "Y shall write a ledger" (heuristic)',
+                          '  - REQ-ANL-001: no scenario exercises the clause "Z shall restore a snapshot" (heuristic)'],
+                         lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_N3_removed_requirement_gets_no_clause_warning(self):
+        self.living_orchestration()  # REQ-ORC-002 is in the living spec, so the removal is valid
+        removed = "### REQ-ORC-002 [REMOVED] Orchestration lists\n" + CLAUSES_3 + "\nReason: lists are gone.\n"
+        self.designed(reqs=ANL_REQS + "\n" + removed)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_N4_category_cell_does_not_count_as_a_mention(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Y is validation"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines),
+                         ['  - REQ-ANL-001: no scenario exercises the clause "Y is validation" (heuristic)'], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_N5_only_whole_words_match(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Y shall write a ledger.",
+                                       n1_then="it writes the ledgers and a subledger"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines),
+                         ['  - REQ-ANL-001: no scenario exercises the clause "Y shall write a ledger" (heuristic)'],
+                         lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_006_B1_one_clause_statement_is_not_checked(self):
+        self.designed(reqs=clause_reqs(statement="Z shall restore a snapshot"))  # one clause, uncovered
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_B2_clause_with_no_distinctive_word_is_skipped(self):
+        statement = ("X shall print a header and write a ledger; Y shall print a header; "
+                     "Z can run now.")
+        self.designed(reqs=clause_reqs(statement=statement))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_006_B3_trailing_semicolon_empty_clause_is_dropped(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Y shall write a ledger;"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_B3_one_clause_with_trailing_semicolon_is_not_checked(self):
+        # the empty clause must not count: one clause stays one clause, so it is not checked
+        self.designed(reqs=clause_reqs(statement="Z shall restore a snapshot;"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_006_B4_one_distinctive_word_is_enough(self):
+        self.designed(reqs=clause_reqs(n1_then="it writes the ledger and can restore"))
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.clause_warnings(lines), [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+class BalanceTests(DesignedBase):
+    """REQ-ANL-007: analyze flags a happy-heavy change."""
+
+    def balance_change(self, happy, negative=0, boundary=0, level="production"):
+        """A designed change whose one requirement REQ-ANL-001 has the given numbers of happy (S),
+        validation (N) and boundary (B) scenarios, a task for each, and N/A lines for the other
+        categories, so that it is otherwise clean."""
+        rows = [(f"S{i}", "happy", "it prints the report") for i in range(1, happy + 1)]
+        rows += [(f"N{i}", "validation", "it prints the error · nothing is written")
+                 for i in range(1, negative + 1)]
+        rows += [(f"B{i}", "boundary", "it prints the edge · nothing is written")
+                 for i in range(1, boundary + 1)]
+        table = "".join(f"| {sid} | {cat} | a clean change | analyze runs | {then} |\n"
+                        for sid, cat, then in rows)
+        na = "".join(f"- N/A {cat}: the tool has no {cat} input to probe\n"
+                     for cat, n in (("validation", negative), ("boundary", boundary)) if not n)
+        reqs = ("### REQ-ANL-001 Analyze reports findings\n"
+                "When the operator runs analyze, the tool shall print a report.\n\n"
+                "| ID | Category | Given | When | Then |\n| --- | --- | --- | --- | --- |\n" + table + "\n"
+                + na + "- N/A access: the tool runs locally with no users\n"
+                "- N/A state: the tool keeps no state between runs\n"
+                "- N/A dependency: the tool calls no other component or service\n")
+        tasks = "".join(f"- [ ] T{n} REQ-ANL-001.{sid} Print\n  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+                        for n, (sid, _, _) in enumerate(rows, 1))
+        design = ANL_DESIGN.replace("→ REQ-ANL-001.N1", f"→ REQ-ANL-001.{rows[0][0]}")
+        self.designed(level=level, design=design, reqs=reqs, tasks=tasks)
+
+    def analyze_unchanged(self):
+        """Run analyze, asserting it changes no file; returns (code, output lines)."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("analyze")
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def test_REQ_ANL_007_N1_happy_heavy_change_warns_with_both_counts(self):
+        self.balance_change(happy=3, negative=2)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertIn("warnings (1):", lines)
+        self.assertEqual([line for line in lines if line.startswith("  - ")],
+                         ["  - 3 happy scenarios outweigh 2 non-happy ones"], lines)
+        self.assertIn("scenarios: 3 happy, 2 negative, 0 boundary", lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+
+    def test_REQ_ANL_007_S1_balanced_change_does_not_warn(self):
+        self.balance_change(happy=2, negative=5)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "outweigh" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_007_B1_equal_happy_and_non_happy_does_not_warn(self):
+        self.balance_change(happy=2, negative=2)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "outweigh" in line], [], lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_007_B3_boundary_counts_as_non_happy(self):
+        self.balance_change(happy=3, negative=1, boundary=2)
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "outweigh" in line], [], lines)
+        self.assertIn("scenarios: 3 happy, 1 negative, 2 boundary", lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_007_N2_no_balance_warning_at_prototype(self):
+        self.balance_change(happy=3, negative=2, level="prototype")
+        code, lines = self.analyze_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([line for line in lines if "outweigh" in line], [], lines)
+        self.assertIn("scenarios: 3 happy, 2 negative, 0 boundary", lines)
+        self.assertEqual(lines[-1], "result: OK")
+
+    def test_REQ_ANL_007_B2_no_requirements_no_balance_warning(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        spec = self.repo.root / "specs/changes/0001-x/spec-delta.md"
+        set_file_section(spec, "Requirements", "")  # no requirement at all
+        code, lines = self.analyze_unchanged()
+        self.assertTrue(lines[0].startswith("analyze 0001-x (assurance: production)"), lines)
+        self.assertEqual([line for line in lines if "outweigh" in line], [], lines)
+        self.assertIn("scenarios: 0 happy, 0 negative, 0 boundary", lines)
+
+
+class PlanGateAnalyzeTests(DesignedBase):
+    """REQ-ANL-008: the plan gate needs a clean analysis."""
+
+    REFUSED = "error: plan approval refused: fix the analyze errors first"
+
+    def gate_state(self):
+        """(status, recorded gates) of the change."""
+        text = sdd.change_text(self.dir / "proposal.md")
+        return sdd.read_front_matter(text).get("status"), sdd.approvals(text)
+
+    def test_REQ_ANL_008_N1_plan_approval_refused_on_analyze_error(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(code, 1, out)
+        lines = out.rstrip("\n").splitlines()
+        self.assertEqual(lines[0], "analyze 0003-x (assurance: production)", out)
+        self.assertIn("  - design.md names REQ-ANL-009, which doesn't exist (in this change or the living spec)",
+                      lines)
+        self.assertEqual(lines[-2:], ["result: FAIL", self.REFUSED], out)
+        self.assertEqual(self.gate_state(), ("designed", ["spec"]))
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_ANL_008_S1_warning_alone_does_not_stop_plan_approval(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Z shall restore a snapshot."))
+        _, analysis = self.repo.run("analyze")  # the warning is there before the gate
+        self.assertIn('  - REQ-ANL-001: no scenario exercises the clause "Z shall restore a snapshot" (heuristic)',
+                      analysis.splitlines())
+        code, out = self.repo.run("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines(), ["0003-x: plan approved → planned"], out)
+        self.assertEqual(self.gate_state(), ("planned", ["spec", "plan"]))
+
+    def test_REQ_ANL_008_N2_missing_failure_mode_entry_blocks_plan_gate(self):
+        self.designed(design=ANL_DESIGN.split("## Failure modes\n")[0])
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(code, 1, out)
+        lines = out.rstrip("\n").splitlines()
+        self.assertIn('  - design.md has no failure modes: list each as "- FM<n> <what fails> → <scenario>", '
+                      'or write "- None — <reason>"', lines)
+        self.assertEqual(lines[-2:], ["result: FAIL", self.REFUSED], out)
+        self.assertEqual(self.gate_state(), ("designed", ["spec"]))
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ANL_008_B1_error_check_also_reports_is_printed_once(self):
+        only_negative = ("- [ ] T1 REQ-ANL-001.N1 Print the error\n"
+                         "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        self.designed(tasks=only_negative)  # S1 has no task: an error check reports too
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        finding = "  - REQ-ANL-001.S1: no task plans this scenario"
+        self.assertEqual(check_out.splitlines().count(finding), 1, check_out)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "plan", "--evidence", "Operator: plan ok")
+        self.assertEqual(code, 1, out)
+        lines = out.rstrip("\n").splitlines()
+        self.assertEqual(lines.count(finding), 1, out)
+        self.assertIn("errors (1):", lines)
+        self.assertEqual(lines[-2:], ["result: FAIL", self.REFUSED], out)
+        self.assertEqual(self.gate_state(), ("designed", ["spec"]))
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_ANL_008_N3_mini_plan_approval_is_unchanged(self):
+        self.init("internal")
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--capability", "duration=DUR")
+        spec = self.repo.root / "specs/changes/0001-durations/spec.md"
+        self.repo.fill("0001-durations")  # a mini change: one spec.md, VALID_REQS and VALID_TASKS
+        code, out = self.repo.run("approve", "plan", "--evidence", "Operator in chat: 'approve'")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out, "0001-durations: plan approved → planned\n", out)
+        text = spec.read_text()
+        self.assertEqual(sdd.read_front_matter(text).get("status"), "planned")
+        self.assertEqual(sdd.approvals(text), ["plan"])
+
+
+class NextTests(DesignedBase):
+    """REQ-ORC-004, REQ-ORC-005: sdd.py next lists the steps to the next gate."""
+
+    SPEC_GATE = "gate: the operator approves the spec (sdd approve spec)"
+    PLAN_GATE = "gate: the operator approves the plan (sdd approve plan)"
+    RESULTS_GATE = "gate: the operator approves the results (sdd approve results)"
+    REVIEW_GATE = "gate: the operator reviews the verification, then sdd archive"
+    GAPS_GATE = "gate: the operator decides on the gaps (amend or accept), then sdd verify"
+
+    def next_unchanged(self, *args):
+        """Run next, asserting it changes no file; returns (code, output lines)."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("next", *args)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def draft(self, level="production", reqs=ANL_REQS, round_=None):
+        """The standard draft 0003-x with its requirements written, and a Critic round when given."""
+        self.init(level)
+        for earlier in ("0001-first", "0002-second"):  # so the new change is numbered 0003
+            (self.repo.root / "specs/archive" / earlier).mkdir(parents=True)
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        self.dir = self.repo.root / "specs/changes" / self.cid
+        set_file_section(self.dir / "spec-delta.md", "Requirements", reqs)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        if round_:
+            set_file_section(self.dir / "clarifications.md", "Clarifications", round_)
+
+    def planned(self, **kwargs):
+        """The standard change 0003-x designed and then plan-approved (status planned)."""
+        self.designed(**kwargs)
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+
+
+    def verifying(self, verification=None, **kwargs):
+        """The standard change 0003-x at verifying, with the given text in verification.md's
+        Verification section when there is any."""
+        self.planned(**kwargs)
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        if verification is not None:
+            set_file_section(self.dir / "verification.md", "Verification", verification)
+
+
+    def test_REQ_ORC_004_S2_spec_approved_lists_design_tasks_analyze_and_plan_gate(self):
+        self.spec_approved()
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd design", "2. sdd tasks", "3. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_004_S3_designed_with_tasks_lists_analyze_then_the_plan_gate(self):
+        self.designed()
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_004_S1_draft_needing_a_critic_round_lists_clarify(self):
+        self.draft()
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd clarify", self.SPEC_GATE])
+
+
+    def test_REQ_ORC_004_S10_round_with_question_verdicts_keeps_clarify(self):
+        self.draft(round_=ANL_ROUND.replace("| REQ-ANL-001 | ok | |", "| REQ-ANL-001 | ? | |"))
+        self.repo.ok("advance", "clarifying")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd clarify", self.SPEC_GATE])
+
+    def test_REQ_ORC_004_N7_open_question_with_no_finding_keeps_clarify(self):
+        question = "\n- Q1 Should the report be sorted? A) yes B) no — recommended: A\n"
+        self.draft(round_=ANL_ROUND + question)  # the round audits every requirement; no finding waits on Q1
+        _, check_out = self.repo.run("check", "--stage", "spec")
+        self.assertIn("1 open question ([NEEDS CLARIFICATION])", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd clarify", self.SPEC_GATE])
+
+
+    def test_REQ_ORC_004_N10_open_marker_keeps_clarify_at_prototype(self):
+        reqs = ANL_REQS.replace("the tool shall print a report.",
+                                "the tool shall print a report. [NEEDS CLARIFICATION: which format?]")
+        self.draft(level="prototype", reqs=reqs)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd clarify", self.SPEC_GATE])
+
+    def test_REQ_ORC_004_B2_no_round_required_no_clarify_step(self):
+        self.draft(level="prototype")  # a clean draft at prototype: no Critic round is required
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.SPEC_GATE])
+
+    def test_REQ_ORC_004_B3_complete_round_no_clarify_step(self):
+        self.draft(round_=ANL_ROUND)  # production, the round audits every requirement with ok
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.SPEC_GATE])
+
+    def test_REQ_ORC_004_N9_round_predating_an_amendment_adds_no_clarify_step(self):
+        self.planned()
+        added = ("\n### REQ-ANL-002 The design traces to the requirements\n"
+                 "When designed, analyze shall check the trace.\n\n"
+                 "| ID | Category | Given | When | Then |\n| --- | --- | --- | --- | --- |\n"
+                 "| S1 | happy | a designed change | analyze runs | no finding is printed |\n"
+                 "| N1 | validation | a broken change | analyze runs | a finding is printed · nothing is written |\n\n"
+                 "- N/A boundary: the trace has no size limit to probe\n"
+                 "- N/A access: the trace runs locally with no users\n"
+                 "- N/A state: the trace keeps no state between runs\n"
+                 "- N/A dependency: the trace calls no other component or service\n")
+        set_file_section(self.dir / "spec-delta.md", "Requirements", ANL_REQS + added)
+        set_file_section(self.dir / "tasks.md", "Tasks", ANL_TASKS + "".join(
+            f"- [ ] T{n} REQ-ANL-002.{sid} Check the trace\n  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+            for n, sid in ((3, "S1"), (4, "N1"))))
+        set_file_section(self.dir / "proposal.md", "Amendments",
+                         "- A1 2026-10-09: the trace was missing → added REQ-ANL-002\n")
+        self.repo.ok("approve", "amend", "--evidence", "Operator: accept the new requirement")
+        report = sdd.analyze(sdd.Project(self.repo.root), self.dir / "proposal.md", "spec")
+        self.assertEqual(len(report.critic), 1, report.critic)  # the round predates REQ-ANL-002
+        self.assertIn("REQ-ANL-002: not audited in the latest Critic round", report.critic[0])
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd implement", "2. sdd verify", self.RESULTS_GATE])
+
+    def test_REQ_ORC_004_S4_planned_lists_implement_verify_and_the_results_gate(self):
+        tasks = "".join(f"- [ ] T{n} REQ-ANL-001.{sid} Print\n  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+                        for n, sid in enumerate(("S1", "N1", "S1", "N1", "S1"), 1))
+        self.planned(tasks=tasks)
+        path = self.dir / "tasks.md"
+        text = path.read_text()
+        for task in ("T1", "T2"):  # 2 of 5 tasks ticked
+            text = text.replace(f"- [ ] {task} ", f"- [x] {task} ")
+        path.write_text(text)
+        done = sdd.parse_tasks(sdd.sections(sdd.strip_comments(text)).get("Tasks", ""))[0]
+        self.assertEqual([t["done"] for t in done], [True, True, False, False, False])
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd implement", "2. sdd verify", self.RESULTS_GATE])
+
+
+    def test_REQ_ORC_004_B1_all_tasks_ticked_lists_verify_only(self):
+        tasks = "".join(f"- [ ] T{n} REQ-ANL-001.{sid} Print\n  - tier: mid\n  - test:\n  - red:\n  - green:\n"
+                        for n, sid in enumerate(("S1", "N1"), 1))
+        self.planned(tasks=tasks)
+        path = self.dir / "tasks.md"
+        path.write_text(path.read_text().replace("- [ ] ", "- [x] "))  # every task ticked
+        self.repo.ok("advance", "implementing")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd verify", self.RESULTS_GATE])
+
+    def test_REQ_ORC_004_S7_verifying_with_no_verdict_lists_verify(self):
+        self.verifying()
+        text = (self.dir / "verification.md").read_text()
+        self.assertIsNone(sdd.latest_verdict(sdd.sections(sdd.strip_comments(text)).get("Verification", "")))
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd verify", self.RESULTS_GATE])
+
+
+    def test_REQ_ORC_004_S8_verifying_with_pass_verdict_lists_no_step(self):
+        self.verifying(verification="Verdict: PASS")
+        text = (self.dir / "verification.md").read_text()
+        verdict = sdd.latest_verdict(sdd.sections(sdd.strip_comments(text)).get("Verification", ""))
+        self.assertEqual(verdict[0], "PASS")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.RESULTS_GATE])
+
+    def test_REQ_ORC_004_S13_gaps_verdict_names_the_gaps_gate(self):
+        gaps = "Verdict: GAPS — REQ-ANL-001.N1 is not exercised\n"
+        self.verifying(verification=gaps)  # standard
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.GAPS_GATE])
+
+
+    def test_REQ_ORC_004_S5_verified_standard_change_lists_archive(self):
+        self.verifying(verification="Verdict: PASS")
+        # the verify check needs every task ticked with its evidence, and a test naming each scenario
+        tasks = "".join(f"- [x] T{n} REQ-ANL-001.{sid} Print\n  - tier: mid\n"
+                        f"  - test: tests/test_analyze.py::test_REQ_ANL_001_{sid}\n"
+                        "  - red: pre-existing — the report already prints\n  - green: ok\n"
+                        for n, sid in ((1, "S1"), (2, "N1")))
+        set_file_section(self.dir / "tasks.md", "Tasks", tasks)
+        self.repo.write("tests/test_analyze.py", "def test_REQ_ANL_001_S1(): pass\n\ndef test_REQ_ANL_001_N1(): pass\n")
+        self.repo.ok("approve", "results", "--evidence", "Operator: verification accepted")
+        status = sdd.read_front_matter(sdd.change_text(self.dir / "proposal.md")).get("status")
+        self.assertEqual(status, "verified")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd archive", "gate: none"])
+
+    def test_REQ_ORC_004_S6_mini_change_at_planned_ends_at_the_review_gate(self):
+        self.init("internal")
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--capability", "duration=DUR")
+        cid = "0001-durations"
+        self.repo.fill(cid)  # a mini change: one spec.md with VALID_REQS and VALID_TASKS
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd implement", "2. sdd verify", self.REVIEW_GATE])
+
+    def mini_draft(self, level="production", round_=None):
+        """A clean mini draft 0001-durations at the level: valid spec and tasks, a complete Critic
+        round when given."""
+        self.init(level)
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--capability", "duration=DUR")
+        self.mini = "0001-durations"
+        reqs = VALID_REQS + "- N/A boundary: the parser has no size limit to probe\n" \
+                            "- N/A access: the parser runs locally with no users\n"
+        self.repo.fill(self.mini, reqs=reqs, verdict=None)
+        if round_:
+            self.repo.set_section(self.mini, "Clarifications", round_)
+
+    def test_REQ_ORC_004_S9_clean_mini_draft_prints_the_plan_gate_alone(self):
+        self.mini_draft(round_=ANL_ROUND.replace("REQ-ANL-001", "REQ-DUR-001"))
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertEqual(check_out.splitlines()[-1], "result: OK", check_out)  # nothing to fix
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.PLAN_GATE])
+
+
+    def mini_verifying(self):
+        """A clean mini change 0001-durations at verifying with its Verdict PASS and tests naming its scenarios."""
+        self.init("internal")
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--capability", "duration=DUR")
+        cid = "0001-durations"
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)  # fill writes Verdict: PASS
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.write("tests/test_dur.py", "test_REQ_DUR_001_S1 test_REQ_DUR_001_N1")
+        return cid
+
+    def test_REQ_ORC_004_S11_mini_change_at_verified_prints_review_gate_alone(self):
+        cid = self.mini_verifying()
+        self.repo.ok("advance", "verified")
+        status = sdd.read_front_matter(self.repo.spec(cid).read_text()).get("status")
+        self.assertEqual(status, "verified")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.REVIEW_GATE])
+
+    def test_REQ_ORC_004_S12_mini_change_at_verifying_with_pass_prints_review_gate_alone(self):
+        cid = self.mini_verifying()
+        text = self.repo.spec(cid).read_text()
+        verdict = sdd.latest_verdict(sdd.sections(sdd.strip_comments(text)).get("Verification", ""))
+        self.assertEqual(verdict[0], "PASS")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.REVIEW_GATE])
+
+    CONSTITUTION_LINE = "the constitution changed since approval: review it, then sdd approve (constitution)"
+
+    def change_constitution(self):
+        """Approve the constitution, then add a rule to it, so that its fingerprint differs."""
+        self.repo.ok("approve", "constitution", "--evidence", "Operator: constitution ok")
+        c = self.repo.root / "specs/constitution.md"
+        c.write_text(c.read_text().replace("## Approvals", "10. A new rule.\n\n## Approvals", 1))
+        self.assertTrue(sdd.Project(self.repo.root).constitution_state()["changed"])
+
+    def test_REQ_ORC_004_N8_changed_constitution_prints_its_line_alone(self):
+        self.draft()  # a draft that would list "1. sdd clarify" and the spec gate
+        self.change_constitution()
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.CONSTITUTION_LINE])
+
+    AMEND_GATE = "gate: the operator approves the amendment (sdd approve amend)"
+
+    def edit_approved_spec(self):
+        """Change a Then cell of the approved spec, leaving the Amendments section untouched."""
+        path = self.dir / "spec-delta.md"
+        text = path.read_text()
+        self.assertIn("| it prints the report |", text)
+        path.write_text(text.replace("| it prints the report |", "| it prints the whole report |", 1))
+
+    def test_REQ_ORC_004_N3_edited_spec_lists_amend_then_its_gate(self):
+        self.planned()
+        self.edit_approved_spec()
+        _, check_out = self.repo.run("check")
+        self.assertIn("the spec changed since it was approved", check_out)  # check's lock error
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd amend", self.AMEND_GATE])
+
+
+    def test_REQ_ORC_004_N11_logged_edit_prints_amendment_gate_alone(self):
+        self.planned()
+        self.edit_approved_spec()
+        set_file_section(self.dir / "proposal.md", "Amendments",
+                         "- A1 2026-10-21: the report wording changed → the Then cell\n")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.AMEND_GATE])
+
+    def test_REQ_ORC_004_N13_blocked_change_with_unlogged_edit_lists_amend(self):
+        self.planned()
+        self.edit_approved_spec()
+        self.repo.ok("advance", "blocked")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd amend", self.AMEND_GATE])
+
+    def test_REQ_ORC_004_N12_blocked_change_with_changed_constitution_prints_its_line(self):
+        self.planned()
+        self.change_constitution()
+        self.repo.ok("advance", "blocked")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [self.CONSTITUTION_LINE])
+
+
+    def test_REQ_ORC_004_N1_blocked_change_prints_its_blocker_line(self):
+        self.planned()
+        self.repo.ok("advance", "blocked")
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["blocked: resolve the blocker, then sdd status"])
+
+    def test_REQ_ORC_004_N2_abandoned_change_prints_nothing_to_run(self):
+        self.draft()
+        self.repo.ok("advance", "abandoned")  # abandoning clears the active change, so name it
+        code, lines = self.next_unchanged("--change", "0003-x")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["nothing to run: the change is abandoned"])
+
+    def test_REQ_ORC_004_N14_abandoned_change_beats_changed_constitution(self):
+        self.planned()
+        self.change_constitution()
+        self.repo.ok("advance", "abandoned")
+        code, lines = self.next_unchanged("--change", "0003-x")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["nothing to run: the change is abandoned"])
+
+    def test_REQ_ORC_004_N15_unknown_status_is_refused(self):
+        self.draft()
+        proposal = self.dir / "proposal.md"
+        proposal.write_text(proposal.read_text().replace("status: draft", "status: drafty", 1))
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines, ['error: cannot list steps: unknown status "drafty"'])
+
+
+    def test_REQ_ORC_004_N4_no_active_change_refused(self):
+        self.draft()
+        (self.repo.root / "specs/.sdd/active").write_text("\n")  # no active change
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines, ['error: no active change: start one with `sdd quick "<idea>"`'])
+
+    def test_REQ_ORC_004_N5_uninitialized_repository_refused(self):
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines, ["error: this repository is not initialized: run `sdd init` first"])
+        self.assertFalse((self.repo.root / "specs").exists())
+
+    def test_REQ_ORC_004_N6_unknown_change_id_refused(self):
+        self.draft()
+        code, lines = self.next_unchanged("--change", "9999-none")
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines, ["error: no change '9999-none' in specs/changes/"])
+
+    def test_REQ_ORC_004_N6_archived_change_id_refused(self):
+        self.draft()
+        self.dir.rename(self.repo.root / "specs/archive" / self.cid)  # the change is archived
+        code, lines = self.next_unchanged("--change", self.cid)
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines, [f"error: no change '{self.cid}' in specs/changes/"])
+
+    def test_REQ_ORC_005_S1_draft_with_no_requirements_lists_specify_first(self):
+        self.draft(reqs="")
+        _, check_out = self.repo.run("check", "--stage", "spec")
+        self.assertIn("  - no requirements yet: add at least one '### REQ-<PREFIX>-<NNN> Title' block",
+                      check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd specify", "2. sdd clarify", self.SPEC_GATE])
+
+    def test_REQ_ORC_005_N1_spec_error_puts_specify_before_clarify(self):
+        reqs = ANL_REQS.replace("- N/A boundary: the report has no size limit to probe\n", "")
+        self.draft(reqs=reqs, round_=ANL_ROUND)  # a complete round: clarify alone would not apply
+        _, check_out = self.repo.run("check", "--stage", "spec")
+        self.assertIn("  - REQ-ANL-001: missing boundary coverage (Boundaries): add a scenario or "
+                      "'- N/A boundary: <reason>'", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd specify", self.SPEC_GATE])
+
+
+    def test_REQ_ORC_005_N5_question_verdicts_alone_do_not_add_specify(self):
+        self.draft(round_=ANL_ROUND.replace("| REQ-ANL-001 | ok | |", "| REQ-ANL-001 | ? | |"))
+        _, check_out = self.repo.run("check", "--stage", "spec")
+        self.assertIn("  - Round 1: REQ-ANL-001 has no verdict (write ok or issues)", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd clarify", self.SPEC_GATE])
+
+    def test_REQ_ORC_005_S2_designed_with_no_tasks_lists_tasks_first(self):
+        self.designed(tasks="")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario",
+                      check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd tasks", "2. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_S3_design_error_puts_design_first(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design)
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn("  - design.md names REQ-ANL-009, which doesn't exist (in this change or the living spec)",
+                      analyze_out.splitlines(), analyze_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd design", "2. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_N3_design_error_and_no_tasks_lists_design_then_tasks(self):
+        design = ANL_DESIGN.replace("- **analyze** (REQ-ANL-001): prints the report",
+                                    "- **analyze** (REQ-ANL-001): prints the report\n"
+                                    "- **extra** (REQ-ANL-009): a component for a requirement nobody wrote")
+        self.designed(design=design, tasks="")
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn("  - design.md names REQ-ANL-009, which doesn't exist (in this change or the living spec)",
+                      analyze_out.splitlines(), analyze_out)
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario",
+                      check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd design", "2. sdd tasks", "3. sdd analyze", self.PLAN_GATE])
+
+
+    def test_REQ_ORC_005_N6_contract_error_puts_design_first(self):
+        self.designed(design=contract_design(["- interface: sdd.py analyze"]))
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn('  - the interface "sdd.py analyze" has no contract entry '
+                      '(add "### sdd.py analyze" under ## Contracts)', analyze_out.splitlines(), analyze_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd design", "2. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_B2_failure_mode_error_puts_design_first(self):
+        self.designed(design=fm_design("- FM1 the queue is full"))
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn("  - Failure modes: FM1 has no outcome (end the line with → <scenarios> or → N/A: <reason>)",
+                      analyze_out.splitlines(), analyze_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd design", "2. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_B1_warnings_alone_add_no_fixing_step(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Z shall restore a snapshot."))
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn('  - REQ-ANL-001: no scenario exercises the clause "Z shall restore a snapshot" (heuristic)',
+                      analyze_out.splitlines(), analyze_out)
+        self.assertIn("result: OK", analyze_out.splitlines(), analyze_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd analyze", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_N4_check_error_at_planned_adds_no_fixing_step(self):
+        self.planned()
+        tasks = self.dir / "tasks.md"
+        tasks.write_text(tasks.read_text() + "- [ ] T9 REQ-ANL-001.S9 Print nothing\n"
+                         "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - T9: references unknown scenario REQ-ANL-001.S9", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd implement", "2. sdd verify", self.RESULTS_GATE])
+
+    def test_REQ_ORC_005_S4_mini_draft_lists_specify_tasks_clarify(self):
+        self.init("production")
+        self.repo.ok("new", "durations", "--title", "Parse durations", "--capability", "duration=DUR")
+        _, check_out = self.repo.run("check", "--stage", "plan")  # a new mini draft: nothing written yet
+        self.assertIn("  - no requirements yet: add at least one '### REQ-<PREFIX>-<NNN> Title' block",
+                      check_out.splitlines(), check_out)
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario",
+                      check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd specify", "2. sdd tasks", "3. sdd clarify", self.PLAN_GATE])
+
+
+    def test_REQ_ORC_005_N2_mini_draft_with_no_tasks_lists_tasks(self):
+        self.mini_draft(round_=ANL_ROUND.replace("REQ-ANL-001", "REQ-DUR-001"))
+        self.repo.set_section(self.mini, "Tasks", "")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario",
+                      check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd tasks", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_N7_mini_draft_missing_coverage_lists_tasks(self):
+        self.mini_draft(round_=ANL_ROUND.replace("REQ-ANL-001", "REQ-DUR-001"))
+        self.repo.set_section(self.mini, "Tasks", "- [ ] T1 REQ-DUR-001.S1 Parse\n  - tier: mid\n"
+                                                  "  - test:\n  - red:\n  - green:\n")  # N1 has no task
+        _, spec_out = self.repo.run("check", "--stage", "spec")
+        self.assertNotIn("  - REQ-DUR-001.N1: no task plans this scenario", spec_out.splitlines(), spec_out)
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - REQ-DUR-001.N1: no task plans this scenario", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd tasks", self.PLAN_GATE])
+
+    def test_REQ_ORC_005_N8_plan_error_at_designed_lists_tasks(self):
+        only_negative = ("- [ ] T1 REQ-ANL-001.N1 Print the error\n"
+                         "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        self.designed(tasks=only_negative)  # scenario S1 has no task
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - REQ-ANL-001.S1: no task plans this scenario", check_out.splitlines(), check_out)
+        code, lines = self.next_unchanged()
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, ["1. sdd tasks", "2. sdd analyze", self.PLAN_GATE])
+
+
+class StatusAnalyzeTests(DesignedBase):
+    """REQ-ORC-006: status points to analyze before the plan gate."""
+
+    NEXT_ANALYZE = "sdd analyze, then ask for plan approval"
+
+    def test_REQ_ORC_006_S1_status_points_to_analyze_in_text(self):
+        self.designed()
+        before = snapshot(self.repo.root)
+        _, check_out = self.repo.run("check")
+        self.assertEqual(check_out.splitlines()[-1], "result: OK", check_out)  # a clean change at designed
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.rstrip("\n").splitlines()[-1], f"next: {self.NEXT_ANALYZE}", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_006_S2_status_points_to_analyze_in_json(self):
+        self.designed()
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("status", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["next"], self.NEXT_ANALYZE)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_ORC_006_N1_no_tasks_keeps_the_next_line(self):
+        self.designed(tasks="")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - no tasks yet: add one '- [ ] T1 REQ-...S1 ...' task per scenario",
+                      check_out.splitlines(), check_out)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.rstrip("\n").splitlines()[-1], "next: sdd tasks", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_006_N2_check_error_keeps_the_next_line(self):
+        self.designed(tasks=ANL_TASKS + "- [ ] T9 REQ-ANL-001.S9 Print nothing\n"
+                                        "  - tier: mid\n  - test:\n  - red:\n  - green:\n")
+        _, check_out = self.repo.run("check", "--stage", "plan")
+        self.assertIn("  - T9: references unknown scenario REQ-ANL-001.S9", check_out.splitlines(), check_out)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.rstrip("\n").splitlines()[-1],
+                         "next: fix the check errors (sdd.py check), then ask for plan approval", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_006_B1_planned_keeps_the_next_line(self):
+        self.designed()
+        self.repo.ok("approve", "plan", "--evidence", "Operator: plan ok")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.rstrip("\n").splitlines()[-1], "next: sdd implement", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_ORC_006_B2_warnings_only_gives_the_new_next_line(self):
+        self.designed(reqs=clause_reqs(statement="X shall print a header; Z shall restore a snapshot."))
+        _, analyze_out = self.repo.run("analyze")
+        self.assertIn('  - REQ-ANL-001: no scenario exercises the clause "Z shall restore a snapshot" (heuristic)',
+                      analyze_out.splitlines(), analyze_out)
+        self.assertIn("result: OK", analyze_out.splitlines(), analyze_out)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("status")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.rstrip("\n").splitlines()[-1], f"next: {self.NEXT_ANALYZE}", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
 if __name__ == "__main__":
     unittest.main()

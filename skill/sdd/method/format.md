@@ -9,7 +9,7 @@ sections**, spread over a folder and read as one document:
 | --- | --- |
 | `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
 | `spec-delta.md` | Requirements, Known gaps |
-| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:` and `- Test one:`) |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:` and `- Test one:`), Failure modes, Contracts |
 | `tasks.md` | Tasks, Mutations |
 | `verification.md` | Verification |
 
@@ -185,6 +185,43 @@ touched, approach, test strategy. It must keep a line such as
 add the command that runs **one** test: ``- Test one: `python3 -m unittest
 {name}` ``, where `{test}` is a task's whole test line, and `{file}` and
 `{name}` are its parts before and after `::`.
+
+## design.md: Failure modes and Contracts (standard)
+
+A `standard` change's `design.md` holds two checked sections. Lines inside
+HTML comments or fenced code blocks never count.
+
+```markdown
+## Components and interfaces
+- interface: parse_duration
+
+## Failure modes
+- FM1 the text has letters → REQ-DUR-001.N1, REQ-DUR-001.N2
+- FM2: the cache is stale → N/A: the parser keeps no cache
+
+## Contracts
+### parse_duration
+- Input: `parse_duration(text: str)`; output: minutes as an int
+- Errors: `ValueError` naming the bad text
+```
+
+- **Failure modes.** A bullet starts with `- ` or `* `, at any indent; other
+  lines are ignored. An entry is one line: `FM<n>` (then a space, `:` or `—`),
+  text, `→`, and an outcome. The line splits at its last `→`. An outcome is
+  scenario references separated by commas, or `N/A`, then `:` or `—` and a
+  reason of at least 3 words. A reference must name a scenario of the change
+  or of a living-spec requirement the change neither modifies nor removes.
+  FM numbers are unique and compare as integers (`FM01` is `FM1`). When
+  nothing new can fail, the section holds a single `- None — <reason>`
+  (case-sensitive, a reason of at least 3 words). At `designed` and later,
+  `SDD analyze` reports a section with no entry: an error at `production`
+  and above, a warning below.
+- **Contracts.** Each `- interface: <name>` line (key in any case, outside
+  `## Contracts`) needs one `### <name>` entry under `## Contracts`. Names
+  are trimmed of spaces, then of surrounding backticks, and must match
+  exactly; an interface listed twice needs one entry. `SDD check` reports a
+  missing, nameless or repeated entry from the plan stage on, and warns
+  about an entry no interface lists.
 
 ## Tasks
 
