@@ -10,7 +10,7 @@ Plan the work test-first, then bring the change to its gate. Role:
      `sdd design`. If it is `draft`, it needs spec approval.
 2. Write the tasks: `## Tasks` in `spec.md` (mini, together with `## Design
    notes`) or `tasks.md` (standard; the design is already in `design.md`).
-3. Run `SDD check` (plan stage) until it reports `result: OK`.
+3. Run `SDD check` (plan stage) until it reports `result: OK`, then `SDD analyze`: `approve plan` refuses on its errors (`method/phases/analyze.md`).
 4. If open questions remain, ask them first. Approval is refused while any
    `[NEEDS CLARIFICATION]` marker is left.
 5. **Gate: plan.** Show the review digest, then ask and **stop**:

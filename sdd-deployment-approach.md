@@ -123,5 +123,6 @@ Each profile records OS/version, architecture/runtime ABI, builder, package/depe
 8. **SDD develops itself from here.** It uses a pinned tool copy, assurance
    `production`, and requirements limited to script-testable behavior.
    Increment 4 is subagent fan-out. Increment 5 is design depth (`analyze`,
-   `next`) together with delivery profiles and install options. Releases and
-   deploy come in increment 6.
+   `next`). Increment 6 is releases and deploy, together with delivery
+   profiles and install options (split out of increment 5, operator,
+   2026-10-20).
