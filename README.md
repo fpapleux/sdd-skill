@@ -24,7 +24,7 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v1 in progress, version 0.17.0.** The `mini` and `standard` sizes
+> **Status: v1 in progress, version 0.18.0.** The `mini` and `standard` sizes
 > work end to end at every assurance level, with spec locking, amendments,
 > defect changes and a Spec Critic. Since 0.8.0, an approval covers exactly
 > what was approved: the results gate needs a PASS verdict, and edits to an
@@ -33,7 +33,8 @@ the code, verifies the result against the spec, and merges the change into a
 > evidence and runs planned mutations for the Verifier. Since 0.17.0, a
 > `standard` design lists its failure modes and contracts, `sdd analyze`
 > checks the design against the spec before the plan gate, and `sdd next`
-> lists the steps to the next gate. SDD is developed with SDD. Next up:
+> lists the steps to the next gate. Since 0.18.0, `archive` carries each known
+> gap only to the capabilities it concerns. SDD is developed with SDD. Next up:
 > releases and deploy. See the [release notes](RELEASE_NOTES.md) and the
 > [roadmap](#roadmap).
 
@@ -315,7 +316,9 @@ Spec sizes are rough estimates.
 ### When a prototype grows up
 
 The **Known gaps** list is not waste: it is the to-do list for hardening.
-When a change is archived, its known gaps are carried into the living spec.
+When a change is archived, its known gaps are carried into the living spec of
+the capabilities they concern: a trailing tag such as `(cli)`, else the
+requirement IDs a gap names, else every capability the change touches.
 In v1, `sdd harden <capability> --to production` will turn them into
 failure-case scenarios and tests, delivered as one normal change.
 Prototypes cost nothing extra up front, and nothing is forgotten when they
@@ -494,6 +497,7 @@ v1 is built in increments, each one an SDD change from increment 4 on:
 | — | Defect 0001: approval integrity (PASS verdict, constitution fingerprint) | done (0.8–0.13) |
 | 4 | Subagent fan-out: prime orchestrator, role tiers, read-only Critic and Verifier subagents, scripted verification evidence | done (0.14–0.16) |
 | 5 | `design` depth with the Architect, `analyze`, `next` | done (0.17) |
+| — | Change 0004: each known gap goes to the capability it concerns | done (0.18) |
 | 6 | Releases and deploy, with delivery profiles and install options | planned |
 | 7 | `production` assurance: blocking diff coverage, adversarial probe | planned |
 | 8 | `harden <capability> --to <level>` | planned |

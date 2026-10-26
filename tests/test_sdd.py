@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -916,6 +917,207 @@ class ArchiveCarryOverTests(Base):
                         "### REQ-DUR-001 A\n### REQ-DUR-002 B\n")
         out = self.repo.ok("status")
         self.assertIn("duration (DUR, 2 requirements)", out)
+
+
+class ArchiveGapRoutingTests(Base):
+    # Change 0004: archive carries each known gap only to the capability it concerns.
+    CLI_REQS = VALID_REQS.replace("DUR", "CLI").replace("Parse hours and minutes", "Print hours and minutes")
+    REMOVED_APR = "### REQ-APR-001 [REMOVED] Approvals are recorded\nReason: approvals are replaced.\n"
+    LIVING_APR = (
+        "---\ncapability: approvals\nprefix: APR\n---\n\n# Capability: approvals\n\n"
+        "## Known gaps\n\n## Change history\n\n## Requirements\n\n"
+        + VALID_REQS.replace("DUR", "APR").replace("Parse hours and minutes", "Approvals are recorded"))
+    CLI_TASKS = """\
+- [x] T3 REQ-CLI-001.S1 Print "1h30m"
+  - test: tests/test_gaps.py::test_REQ_CLI_001_S1
+  - red: AssertionError: None != 90
+  - green: 1 passed
+- [x] T4 REQ-CLI-001.N1 Reject "abc"
+  - test: tests/test_gaps.py::test_REQ_CLI_001_N1
+  - red: AssertionError: ValueError not raised
+  - green: 1 passed
+"""
+    TESTS = "REQ_DUR_001_S1 REQ_DUR_001_N1 REQ_CLI_001_S1 REQ_CLI_001_N1"
+
+    def archive_with(self, gap, approvals=False, removed=False, second="cli=CLI"):
+        """Archive a verified duration + `second` change carrying `gap`; returns what the archive wrote."""
+        self.init()
+        prefix = second.split("=")[1]
+        caps = ["--capability", "duration=DUR", "--capability", second]
+        apr_path = self.repo.root / "specs/capabilities/approvals/spec.md"
+        if approvals or removed:
+            caps += ["--capability", "approvals=APR"]
+            self.repo.write("specs/capabilities/approvals/spec.md", self.LIVING_APR)
+        self.repo.ok("new", "gaps", "--title", "Gaps", *caps)
+        cid = sorted(p.name for p in (self.repo.root / "specs" / "changes").iterdir() if p.is_dir())[-1]
+        reqs = (VALID_REQS + "\n" + self.CLI_REQS.replace("CLI", prefix)
+                + ("\n" + self.REMOVED_APR if removed else ""))
+        self.repo.fill(cid, reqs=reqs, gaps=gap + "\n",
+                       design_and_tasks=DONE_TASKS + self.CLI_TASKS.replace("CLI", prefix))
+        self.repo.write("tests/test_gaps.py", self.TESTS.replace("CLI", prefix))
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        for status in ("implementing", "verifying", "verified"):
+            self.repo.ok("advance", status)
+        apr_before = apr_path.read_text() if apr_path.exists() else None
+        self.repo.ok("archive")
+
+        def read(name):
+            path = self.repo.root / "specs/capabilities" / name / "spec.md"
+            return path.read_text() if path.exists() else None
+        return types.SimpleNamespace(
+            cid=cid, dur=read("duration"), cli=read("cli"), apr=read("approvals"), apr_before=apr_before,
+            folders=sorted(p.name for p in (self.repo.root / "specs/capabilities").iterdir() if p.is_dir()))
+
+    def known_gaps(self, text):
+        return re.search(r"^## Known gaps\n(.*?)(?=^## )", text, re.S | re.M).group(1).splitlines()
+
+    def assertGap(self, text, line):
+        self.assertIn(line, self.known_gaps(text))
+
+    def assertNoLineWith(self, text, fragment):
+        self.assertEqual([l for l in text.splitlines() if fragment in l], [])
+
+    def assertOnce(self, text, line):
+        self.assertEqual(text.splitlines().count(line), 1)
+
+    # ---- REQ-ARC-001
+    def test_REQ_ARC_001_S1_gap_naming_an_id_goes_to_that_capability_only(self):
+        r = self.archive_with("- REQ-DUR-001.N1 is tested on Linux only")
+        self.assertGap(r.dur, f"- REQ-DUR-001.N1 is tested on Linux only ({r.cid})")
+        self.assertNoLineWith(r.cli, "tested on Linux only")
+
+    def test_REQ_ARC_001_N3_touched_and_untouched_ids_go_to_the_touched_capability(self):
+        r = self.archive_with("- REQ-DUR-001 waits for REQ-APR-001", approvals=True)
+        self.assertGap(r.dur, f"- REQ-DUR-001 waits for REQ-APR-001 ({r.cid})")
+        self.assertNoLineWith(r.cli, "waits for")
+        self.assertEqual(r.apr, r.apr_before)
+
+    def test_REQ_ARC_001_N1_gap_naming_only_an_untouched_id_goes_everywhere(self):
+        r = self.archive_with("- REQ-APR-001 is not rechecked", approvals=True)
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- REQ-APR-001 is not rechecked ({r.cid})")
+        self.assertEqual(r.apr, r.apr_before)
+
+    def test_REQ_ARC_001_N2_gap_naming_an_unknown_prefix_goes_everywhere(self):
+        r = self.archive_with("- REQ-ZZZ-001 is out of reach")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- REQ-ZZZ-001 is out of reach ({r.cid})")
+        self.assertEqual(r.folders, ["cli", "duration"])
+
+    def test_REQ_ARC_001_N4_bare_and_lowercase_prefixes_do_not_route(self):
+        r = self.archive_with("- DUR, CLI-001 and req-dur-001 are slow")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- DUR, CLI-001 and req-dur-001 are slow ({r.cid})")
+
+    def test_REQ_ARC_001_S2_gap_naming_nothing_goes_to_every_touched_capability(self):
+        r = self.archive_with("- Output is not localized")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Output is not localized ({r.cid})")
+
+    def test_REQ_ARC_001_B1_repeated_ids_of_two_capabilities_give_each_one_line(self):
+        gap = "- REQ-DUR-001 and REQ-DUR-001.S1 depend on REQ-CLI-001"
+        r = self.archive_with(gap)
+        for text in (r.dur, r.cli):
+            self.assertOnce(text, f"{gap} ({r.cid})")
+
+    def test_REQ_ARC_001_B2_capability_touched_only_by_a_removal_gets_its_gap(self):
+        r = self.archive_with("- REQ-APR-001 is gone", removed=True)
+        self.assertGap(r.apr, f"- REQ-APR-001 is gone ({r.cid})")
+        self.assertNoLineWith(r.dur, "is gone")
+        self.assertNoLineWith(r.cli, "is gone")
+
+    # ---- REQ-ARC-002
+    def test_REQ_ARC_002_S1_tag_sends_the_gap_to_that_capability_with_the_tag_removed(self):
+        r = self.archive_with("- Output is not localized (cli)")
+        self.assertGap(r.cli, f"- Output is not localized ({r.cid})")
+        self.assertNoLineWith(r.dur, "not localized")
+
+    def test_REQ_ARC_002_N1_tag_naming_an_untouched_capability_is_kept_as_text(self):
+        r = self.archive_with("- Output is not localized (approvals)", approvals=True)
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Output is not localized (approvals) ({r.cid})")
+        self.assertEqual(r.apr, r.apr_before)
+
+    def test_REQ_ARC_002_N2_tag_list_with_one_untouched_name_is_kept_as_text(self):
+        r = self.archive_with("- Output is not localized (cli, approvals)", approvals=True)
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Output is not localized (cli, approvals) ({r.cid})")
+        self.assertEqual(r.apr, r.apr_before)
+
+    def test_REQ_ARC_002_N3_tag_at_the_start_of_the_gap_is_not_a_tag(self):
+        r = self.archive_with("- (cli) Output is not localized")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- (cli) Output is not localized ({r.cid})")
+
+    def test_REQ_ARC_002_N4_capitalised_name_is_not_a_tag(self):
+        r = self.archive_with("- Output is not localized (CLI)")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Output is not localized (CLI) ({r.cid})")
+
+    def test_REQ_ARC_002_N5_gap_that_is_only_a_tag_is_not_a_tag(self):
+        r = self.archive_with("- (cli)")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- (cli) ({r.cid})")
+
+    def test_REQ_ARC_002_N6_unrecognised_tag_still_routes_by_the_touched_id(self):
+        r = self.archive_with("- REQ-DUR-001 is slow (approvals)", approvals=True)
+        self.assertGap(r.dur, f"- REQ-DUR-001 is slow (approvals) ({r.cid})")
+        self.assertNoLineWith(r.cli, "is slow")
+        self.assertEqual(r.apr, r.apr_before)
+
+    def test_REQ_ARC_002_S2_tag_wins_over_a_named_requirement_id(self):
+        r = self.archive_with("- REQ-DUR-001 errors are printed by the cli layer (cli)")
+        self.assertGap(r.cli, f"- REQ-DUR-001 errors are printed by the cli layer ({r.cid})")
+        self.assertNoLineWith(r.dur, "printed by the cli layer")
+
+    def test_REQ_ARC_002_S3_tag_before_a_period_is_removed_and_the_period_kept(self):
+        r = self.archive_with("- Output is not localized (cli).")
+        self.assertGap(r.cli, f"- Output is not localized. ({r.cid})")
+        self.assertNoLineWith(r.dur, "not localized")
+
+    def test_REQ_ARC_002_B1_two_name_tag_sends_the_gap_to_both_with_the_tag_removed(self):
+        r = self.archive_with("- Units are English only (duration, cli)")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Units are English only ({r.cid})")
+            self.assertNoLineWith(text, "(duration, cli)")
+
+    def test_REQ_ARC_002_B2_tag_without_spaces_and_a_repeated_name_gives_each_one_line(self):
+        r = self.archive_with("- Units are English only (duration,cli,cli)")
+        for text in (r.dur, r.cli):
+            self.assertOnce(text, f"- Units are English only ({r.cid})")
+
+    def test_REQ_ARC_002_B3_tag_naming_a_capability_touched_only_by_a_removal(self):
+        r = self.archive_with("- Its replacement is pending (approvals)", removed=True)
+        self.assertGap(r.apr, f"- Its replacement is pending ({r.cid})")
+        self.assertNoLineWith(r.dur, "replacement is pending")
+        self.assertNoLineWith(r.cli, "replacement is pending")
+
+    def test_REQ_ARC_002_N7_tag_shaped_name_mid_line_is_not_a_tag(self):
+        r = self.archive_with("- Output (cli) is not localized")
+        for text in (r.dur, r.cli):
+            self.assertGap(text, f"- Output (cli) is not localized ({r.cid})")
+            self.assertNotIn(f"- Output ({r.cid})", text.splitlines())
+
+    # ---- amendment A1
+    def test_REQ_ARC_001_B3_one_capability_under_two_prefixes_gets_each_line_once(self):
+        r = self.archive_with("- Output is not localized", second="duration=DU2")
+        self.assertOnce(r.dur, f"- Output is not localized ({r.cid})")
+        self.assertEqual([l for l in r.dur.splitlines() if l.startswith(f"- {r.cid} — ")], [
+            f"- {r.cid} — Gaps ({sdd.today()}): added REQ-DUR-001, added REQ-DU2-001"])
+        self.assertEqual(r.folders, ["duration"])
+
+    # ---- amendment A2
+    def test_REQ_ARC_001_B4_gap_naming_one_of_two_prefixes_of_a_capability_lands_once(self):
+        r = self.archive_with("- REQ-DUR-001 is slow", second="duration=DU2")
+        self.assertOnce(r.dur, f"- REQ-DUR-001 is slow ({r.cid})")
+        self.assertEqual(r.folders, ["duration"])
+
+    # ---- amendment A3
+    def test_REQ_ARC_001_B5_gaps_naming_each_of_two_prefixes_land_once_each(self):
+        r = self.archive_with("- REQ-DUR-001 is slow\n- REQ-DU2-001 is slow", second="duration=DU2")
+        self.assertOnce(r.dur, f"- REQ-DUR-001 is slow ({r.cid})")
+        self.assertOnce(r.dur, f"- REQ-DU2-001 is slow ({r.cid})")
+        self.assertEqual(r.folders, ["duration"])
 
 
 # ---------------------------------------------------------------- v1 increment 1: amend

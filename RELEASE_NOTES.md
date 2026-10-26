@@ -8,6 +8,37 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.18.0 — 2026-10-26
+
+Change 0004-archive-gap-routing (a mini change, found by the Steward reviews
+of 0002 and 0003) passed its fourth verification round and was archived. New
+living spec: [`archive`](specs/capabilities/archive/spec.md) (2
+requirements). The change has 24 scenarios and 24 tasks. The suite is now 463
+tests, and all 12 planned mutations are caught.
+
+- **Behavior:** `archive` carries each known gap only to the capabilities it
+  concerns, choosing by the first of these that applies:
+  - a capability tag ending the gap's line, such as `- Output is not localized
+    (cli).` or `(duration, cli)`. The gap goes to those capabilities, and the
+    tag is removed;
+  - the touched capabilities whose requirement IDs the gap names, such as
+    `REQ-DUR-001`, matched by prefix;
+  - every capability the change touches, as before.
+- **Behavior:** a capability reached through two prefixes gets each gap and
+  the change-history line exactly once.
+- Method: `format.md` documents the tag and the order of the rules, and the
+  `archive` phase describes the routing.
+- Upgrade: no spec needs editing. A gap with no tag and no requirement ID is
+  carried as before, which the Verifier checked byte for byte against 0.17.0.
+  The gaps that 0002 and 0003 already copied into every capability stay
+  where they are.
+- Verification: a strong read-only Verifier subagent ran four rounds. Rounds
+  1 to 3 found four gaps around the tag anchor and capabilities with two
+  prefixes, and each was closed by an amendment the operator approved (A1 to
+  A3). Round 4 passed.
+- Published on the `v1` branch together with 0.17.0, in the same PR; not
+  merged into `main` yet.
+
 ## 0.17.0 — 2026-10-21
 
 Change 0003-design-depth-analyze-next (v1 increment 5) passed its second

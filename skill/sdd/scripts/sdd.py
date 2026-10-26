@@ -2131,7 +2131,7 @@ def cmd_archive(project: Project, args) -> int:
     registry = project.registry()
     secs = sections(strip_comments(text))
     reqs, _ = parse_requirements(secs.get("Requirements", ""))
-    pending, actions = {}, {}
+    pending, actions, touched = {}, {}, {}
     for req in reqs:
         info = registry.get(req.prefix)
         if info is None:
@@ -2139,6 +2139,7 @@ def cmd_archive(project: Project, args) -> int:
             info = registry[req.prefix] = {"name": name, "reqs": set(),
                                            "path": project.capabilities / name / "spec.md"}
         cap_path = info["path"]
+        touched[req.prefix] = (info["name"], cap_path)  # removed requirements touch too
         if cap_path not in pending:
             pending[cap_path] = (cap_path.read_text() if cap_path.exists()
                                  else render("capability-spec.md", name=info["name"], prefix=req.prefix))
@@ -2155,9 +2156,12 @@ def cmd_archive(project: Project, args) -> int:
     gaps = [re.sub(r"^\s*[-*]\s+", "", line).strip()
             for line in secs.get("Known gaps", "").splitlines() if re.match(r"^\s*[-*]\s+\S", line)]
     gaps = [g for g in gaps if g.lower().rstrip(".") != "none"]
-    for cap_path, done in actions.items():
+    routed = [route_gap(g, touched) for g in gaps]
+    for cap_path, done in actions.items():  # per file: one spec may hold several prefixes
+        prefixes = {prefix for prefix, (_, path) in touched.items() if path == cap_path}
         head, blocks = split_capability(pending[cap_path])
-        head = insert_in_section(head, "Known gaps", [f"- {g} ({change_id})" for g in gaps])
+        head = insert_in_section(head, "Known gaps",
+                                 [f"- {text} ({change_id})" for text, to in routed if prefixes & to])
         head = insert_in_section(head, "Change history",
                                  [f"- {change_id} — {fm.get('title', '')} ({today()}): {', '.join(done)}"])
         pending[cap_path] = join_capability(head, blocks)
@@ -2176,6 +2180,24 @@ def cmd_archive(project: Project, args) -> int:
         print(f"carried {len(gaps)} known gap(s) into the living spec")
     print(f"archived {change_id} → specs/archive/{change_id}")
     return 0
+
+
+GAP_TAG = re.compile(r"^(.*\S) \(([a-z0-9-]+(?:, ?[a-z0-9-]+)*)\)(\.?)$")
+
+
+def route_gap(gap: str, touched: dict) -> tuple:
+    """(text, prefixes) of the touched capabilities a known gap is written into.
+
+    A trailing "(name, name)" tag naming touched capabilities wins and is removed (a final
+    period stays); else the touched capabilities whose requirement IDs the gap names; else all."""
+    tag = GAP_TAG.match(gap)
+    if tag:
+        names = {n.strip() for n in tag.group(2).split(",")}
+        by_name = {name: prefix for prefix, (name, _) in touched.items()}
+        if names <= set(by_name):
+            return tag.group(1) + tag.group(3), {by_name[n] for n in names}
+    named = {m for m in re.findall(r"REQ-([A-Z][A-Z0-9]{1,5})-\d{3,}", gap) if m in touched}
+    return gap, named or set(touched)
 
 
 def insert_in_section(head: str, name: str, new_lines: list) -> str:

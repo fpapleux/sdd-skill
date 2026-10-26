@@ -177,6 +177,20 @@ the size cap.
 handle. It is required at `prototype`; write `- None` if there are none. At
 other levels it's optional, and useful for things out of scope.
 
+A gap is its bullet line: `sdd.py archive` carries each gap only to the
+capabilities it concerns, and reads nothing from continuation lines. It picks
+them in this order:
+
+1. A **capability tag** ends the line: a space, then in parentheses one or
+   more names of capabilities the change touches (lowercase, comma-separated,
+   at most one space after each comma), then optionally a period:
+   `- Output is not localized (cli).` or `- Units are English only (duration, cli)`.
+   The gap goes to those capabilities with the tag removed (the period stays).
+   A tag naming a capability the change doesn't touch isn't a tag.
+2. Otherwise, the touched capabilities whose requirement IDs the gap names
+   (`REQ-DUR-001`, with or without a scenario suffix; by prefix alone).
+3. Otherwise, every capability the change touches.
+
 ## Design notes
 
 `## Design notes`: just enough "how" for a small change: files or modules
