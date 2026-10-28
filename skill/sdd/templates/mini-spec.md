@@ -42,9 +42,12 @@ Required at `prototype` (write "- None" if there are none). Optional otherwise. 
 ## Design notes
 <!-- Planner: just enough "how" for a small change: modules touched, approach,
 test strategy. Keep the test command line; "Test one" runs a single test
-for sdd replay and sdd mutate, e.g. `python3 -m unittest {name}`. -->
+for sdd replay and sdd mutate, e.g. `python3 -m unittest {name}`. "Test
+component" runs the tests of one capability at a checkpoint; `{prefix}` stands
+for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`. -->
 - Test command:
 - Test one:
+- Test component:
 
 ## Tasks
 <!-- Planner: one task per scenario; schedule each negative next to its happy path.

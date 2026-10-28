@@ -3058,6 +3058,7 @@ ANL_DESIGN = """\
 ## Test strategy
 - Unit tests
 - Test command: `python3 -m unittest`
+- Test component: `python3 -m unittest tests.test_sdd -k REQ_{prefix}_`
 
 ## Failure modes
 - FM1 the change is broken → REQ-ANL-001.N1
@@ -4861,6 +4862,786 @@ class StatusAnalyzeTests(DesignedBase):
         self.assertEqual(code, 0, out)
         self.assertEqual(out.rstrip("\n").splitlines()[-1], f"next: {self.NEXT_ANALYZE}", out)
         self.assertEqual(snapshot(self.repo.root), before)
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (EVD)
+
+COMPONENT_LINE = "- Test component: `python3 -m unittest tests.test_x -k REQ_{prefix}_`"
+
+
+class ComponentCommandTests(DesignedBase):
+    """REQ-EVD-004: the design names a component test command."""
+
+    def design_with(self, *lines):
+        """ANL_DESIGN without its Test component line, and the given lines after the Test command line."""
+        marker = "- Test command: `python3 -m unittest`"
+        bare = ANL_DESIGN.replace("- Test component: `python3 -m unittest tests.test_sdd -k REQ_{prefix}_`\n", "")
+        return bare.replace(marker, "\n".join([marker, *lines]))
+
+    def check_plan(self, design):
+        """Design a change with the given design, then check it at the plan stage."""
+        self.designed(design=design)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "plan")
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out
+
+    def test_REQ_EVD_004_N1_component_command_without_prefix_is_an_error(self):
+        code, out = self.check_plan(self.design_with("- Test component: `python3 -m unittest`"))
+        self.assertEqual(code, 1, out)
+        errors = [line for line in out.splitlines() if "Test component" in line and "{prefix}" in line]
+        self.assertEqual(len(errors), 1, out)
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+
+    def test_REQ_EVD_004_S1_valid_component_command_raises_no_message(self):
+        code, out = self.check_plan(self.design_with(COMPONENT_LINE))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Test component", out)
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+
+    def test_REQ_EVD_004_N2_component_command_with_unclosed_quote_is_an_error(self):
+        code, out = self.check_plan(self.design_with("- Test component: `runner -k 'REQ_{prefix}`"))
+        self.assertEqual(code, 1, out)
+        errors = [line for line in out.splitlines() if "Test component" in line and "quote that is not closed" in line]
+        self.assertEqual(len(errors), 1, out)
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+
+    def test_REQ_EVD_004_N3_second_component_line_is_an_error(self):
+        code, out = self.check_plan(self.design_with(COMPONENT_LINE, COMPONENT_LINE))
+        self.assertEqual(code, 1, out)
+        self.assertIn('  - the design has more than one "Test component:" line: keep one', out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: FAIL")
+
+    SKIPPED = ('  - the design has no "Test component:" line (or it is empty): '
+               'the component checkpoints will be skipped')
+
+    def test_REQ_EVD_004_B1_no_component_command_warns(self):
+        code, out = self.check_plan(self.design_with())
+        self.assertEqual(code, 0, out)
+        self.assertIn("warnings (1):", out.splitlines())
+        self.assertIn(self.SKIPPED, out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+
+    def test_REQ_EVD_004_B2_empty_component_command_warns(self):
+        code, out = self.check_plan(self.design_with("- Test component:"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("warnings (1):", out.splitlines())
+        self.assertIn(self.SKIPPED, out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+
+    def test_REQ_EVD_004_B5_component_line_without_list_marker_does_not_count(self):
+        code, out = self.check_plan(self.design_with("Test component: `runner -k REQ_{prefix}_`"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("warnings (1):", out.splitlines())
+        self.assertIn(self.SKIPPED, out.splitlines())
+        self.assertEqual(out.splitlines()[-1], "result: OK")
+
+    def test_REQ_EVD_004_B3_spec_stage_ignores_the_component_command(self):
+        self.init("production")
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        directory = self.repo.root / "specs/changes/0001-x"
+        set_file_section(directory / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(directory / "spec-delta.md", "Known gaps", "- None\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "spec")
+        self.assertNotIn("Test component", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_004_B6_mini_change_reads_its_design_notes(self):
+        self.init()
+        cid = self.new()
+        tasks = VALID_TASKS.replace("- Test command: `python3 -m unittest`\n",
+                                    "- Test command: `python3 -m unittest`\n"
+                                    "- Test component: `runner -k REQ_{prefix}_`\n", 1)
+        self.repo.fill(cid, design_and_tasks=tasks)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "plan")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Test component", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (DEF)
+
+DEFECT_HEADER = "| ID | Status | Severity | Decision | Capability | Change | Test | Evidence | Close evidence |"
+DEFECT_SEPARATOR = "| --- " * 9 + "|"
+
+
+def defect_row(*cells):
+    """A defect row as the script writes it: '| ' + cells joined by ' | ' + ' |'."""
+    return "| " + " | ".join(cells) + " |"
+
+
+def defect_log(*rows):
+    """A valid specs/defects.md text with the header, the separator and the given rows."""
+    return "\n".join(["# Defects", "", DEFECT_HEADER, DEFECT_SEPARATOR, *rows]) + "\n"
+
+
+CLI_LIVING = "---\ncapability: cli\nprefix: CLI\n---\n\n## Requirements\n"
+
+
+class DefectAddTests(Base):
+    """REQ-DEF-001: sdd.py defect add appends a row to specs/defects.md."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        for n in range(1, 7):  # so the new change is numbered 0007
+            (self.repo.root / f"specs/archive/{n:04d}-old").mkdir(parents=True)
+        self.cid = self.new("x")
+        self.log = self.repo.root / "specs" / "defects.md"
+
+    def test_REQ_DEF_001_S1_first_defect_creates_the_log(self):
+        self.assertEqual(self.cid, "0007-x")
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "critical")
+        self.assertEqual(code, 0, out)
+        row = defect_row("D1", "open", "critical", "undecided", "DUR", "0007-x", "test_REQ_DUR_001_S1_parses", "", "")
+        self.assertEqual(row, "| D1 | open | critical | undecided | DUR | 0007-x | test_REQ_DUR_001_S1_parses |  |  |")
+        self.assertEqual(self.log.read_text(), "\n".join(["# Defects", "", DEFECT_HEADER, DEFECT_SEPARATOR, row]) + "\n")
+        self.assertEqual(out.strip(), "D1 added (critical, DUR)")
+
+    D1_OPEN = defect_row("D1", "open", "critical", "undecided", "DUR", "0007-x", "test_REQ_DUR_001_S1_parses", "", "")
+    D2_CLOSED = defect_row("D2", "closed", "minor", "fix-now", "DUR", "0007-x", "test_REQ_DUR_001_S2_x",
+                           "Fix it", "T4 green")
+
+    def test_REQ_DEF_001_S2_next_number_is_highest_plus_one(self):
+        before = defect_log(self.D1_OPEN, self.D2_CLOSED)
+        self.log.write_text(before)
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_N1_x", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        d3 = defect_row("D3", "open", "minor", "undecided", "DUR", "0007-x", "test_REQ_DUR_001_N1_x", "", "")
+        self.assertEqual(self.log.read_text(), before + d3 + "\n")
+        self.assertEqual(out.strip(), "D3 added (minor, DUR)")
+
+    def only_row(self):
+        """The cells of the log's single row."""
+        rows = [line for line in self.log.read_text().splitlines() if line.startswith("| D")]
+        self.assertEqual(len(rows), 1, rows)
+        return sdd.table_cells(rows[0])
+
+    def test_REQ_DEF_001_S3_capability_option_names_the_capability(self):
+        self.repo.write("specs/capabilities/cli/spec.md", CLI_LIVING)
+        code, out = self.repo.run("defect", "add", "--test", "test_legacy_total", "--severity", "major",
+                                  "--capability", "CLI")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.only_row(), ["D1", "open", "major", "undecided", "CLI", "0007-x", "test_legacy_total",
+                                           "", ""])
+        self.assertEqual(out.strip(), "D1 added (major, CLI)")
+
+    def refused(self, *args, code=1):
+        """Run defect add with the args; it must exit with code, create no log and change no file."""
+        before = snapshot(self.repo.root)
+        result, out = self.repo.run("defect", "add", *args)
+        self.assertEqual(result, code, out)
+        self.assertFalse(self.log.exists(), out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return out
+
+    def test_REQ_DEF_001_N1_unknown_severity_is_a_usage_error(self):
+        out = self.refused("--test", "test_x", "--severity", "blocker", code=2)
+        error = [line for line in out.splitlines() if "invalid choice" in line]
+        self.assertEqual(len(error), 1, out)
+        for severity in ("critical", "major", "minor"):
+            self.assertIn(severity, error[0].split("choose from", 1)[1])
+
+    def test_REQ_DEF_001_N2_name_without_requirement_id_asks_for_capability(self):
+        out = self.refused("--test", "test_legacy_total", "--severity", "major")
+        self.assertIn("error: the test name carries no requirement ID: name the capability with "
+                      "--capability <PREFIX>", out)
+
+    def test_REQ_DEF_001_N4_empty_test_name_refused(self):
+        out = self.refused("--test", "", "--severity", "minor")
+        self.assertIn("error: the test name is empty", out)
+
+    def test_REQ_DEF_001_N7_capability_must_be_a_known_prefix(self):
+        out = self.refused("--test", "test_legacy_total", "--severity", "minor", "--capability", "dur")
+        self.assertIn('error: capability "dur" is not a prefix of the living spec or of 0007-x', out)
+        out = self.refused("--test", "test_REQ_ZZZ_001_S1", "--severity", "minor")
+        self.assertIn('error: capability "ZZZ" is not a prefix of the living spec or of 0007-x', out)
+
+    def test_REQ_DEF_001_N8_unknown_change_refused(self):
+        out = self.refused("--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor", "--change", "9999-none")
+        self.assertIn("error: no change '9999-none' in specs/changes/", out)
+
+    def test_REQ_DEF_001_N6_no_active_change_refused(self):
+        (self.repo.root / "specs/.sdd/active").write_text("\n")
+        out = self.refused("--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor")
+        self.assertIn("error: no active change", out)
+
+    def test_REQ_DEF_001_N5_one_open_defect_per_test(self):
+        before = defect_log(self.D1_OPEN).encode()
+        self.log.write_bytes(before)
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "major")
+        self.assertEqual(code, 1, out)
+        self.assertIn("error: test_REQ_DUR_001_S1_parses already has an open defect: D1", out)
+        self.assertEqual(self.log.read_bytes(), before)
+
+    def test_REQ_DEF_001_B1_closed_defect_does_not_block_a_new_one(self):
+        closed = defect_row("D1", "closed", "critical", "fix-now", "DUR", "0007-x", "test_REQ_DUR_001_S1_parses",
+                            "Fix it", "T4 green")
+        before = defect_log(closed)
+        self.log.write_text(before)
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        d2 = defect_row("D2", "open", "minor", "undecided", "DUR", "0007-x", "test_REQ_DUR_001_S1_parses", "", "")
+        self.assertEqual(self.log.read_text(), before + d2 + "\n")
+
+    def test_REQ_DEF_001_B2_pipe_in_the_test_name_is_escaped(self):
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1[a|b]", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        row = self.log.read_text().splitlines()[-1]
+        self.assertEqual(row, "| D1 | open | minor | undecided | DUR | 0007-x | test_REQ_DUR_001_S1[a\\|b] |  |  |")
+        self.assertEqual(self.only_row(), ["D1", "open", "minor", "undecided", "DUR", "0007-x",
+                                           "test_REQ_DUR_001_S1[a|b]", "", ""])
+        _, out = self.repo.run("check")
+        self.assertNotIn("defects.md", out)
+
+    def test_REQ_DEF_001_B3_first_requirement_id_in_the_name_counts(self):
+        self.repo.write("specs/capabilities/cli/spec.md", CLI_LIVING)
+        code, out = self.repo.run("defect", "add", "--test", "REQ-CLI-001.S1 then req_dur_001_s2", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.only_row()[4], "CLI")
+        self.assertEqual(out.strip(), "D1 added (minor, CLI)")
+
+    def test_REQ_DEF_001_B4_capability_option_wins_over_the_name(self):
+        self.repo.write("specs/capabilities/cli/spec.md", CLI_LIVING)
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor",
+                                  "--capability", "CLI")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.only_row()[4], "CLI")
+        self.assertEqual(out.strip(), "D1 added (minor, CLI)")
+
+    def test_REQ_DEF_001_B5_title_only_file_gets_the_table_appended(self):
+        self.log.write_text("# Defects\n")
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        row = defect_row("D1", "open", "minor", "undecided", "DUR", "0007-x", "test_REQ_DUR_001_S1_parses", "", "")
+        self.assertEqual(self.log.read_text(), defect_log(row))
+
+    def test_REQ_DEF_001_B6_any_change_status_may_record_a_defect(self):
+        spec = self.repo.spec(self.cid)
+        spec.write_text(sdd.set_front_matter(spec.read_text(), "status", "verified"))
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S1_parses", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.only_row()[5], "0007-x")
+        self.assertEqual(out.strip(), "D1 added (minor, DUR)")
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (EVD, sort-failures)
+
+SORT_TASKS = """\
+- Test command: `python3 -m unittest`
+
+## Tasks
+- [x] T1 REQ-DUR-001.S1 Parse "1h30m"
+  - test: tests/test_dur.py::test_REQ_DUR_001_S1
+  - red: AssertionError: None != 90
+  - green: 1 passed
+- [ ] T2 REQ-DUR-001.N1 Reject "abc"
+  - test:
+  - red:
+  - green:
+"""
+
+
+class SortFailuresTests(Base):
+    """REQ-EVD-005: sdd.py sort-failures sorts failing tests into regressions, expected failures and the rest."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        for n in range(1, 7):  # so the new change is numbered 0007
+            (self.repo.root / f"specs/archive/{n:04d}-old").mkdir(parents=True)
+        self.cid = self.new("x")
+        self.repo.fill(self.cid, design_and_tasks=SORT_TASKS)
+
+    def sort(self, *names, args=()):
+        """Write failed.txt with the names, one per line, and sort it; no file may change."""
+        failed = self.repo.write("failed.txt", "".join(name + "\n" for name in names))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed), *args)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def test_REQ_EVD_005_S1_regression_and_expected_failures_are_sorted(self):
+        code, lines = self.sort("test_REQ_DUR_001_S1_parses", "test_REQ_DUR_001_N1_rejects")
+        self.assertEqual(lines, ["regression: test_REQ_DUR_001_S1_parses (REQ-DUR-001.S1, T1 done)",
+                                 "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)",
+                                 "sorted: 1 regression, 1 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+
+    EXPECTED_N1 = "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)"
+
+    def test_REQ_EVD_005_S2_names_outside_the_change_are_sorted_outside(self):
+        code, lines = self.sort("test_REQ_DUR_001_N1_rejects", "test_legacy_total", "test_REQ_DUR_001_S10_x")
+        self.assertEqual(lines, [self.EXPECTED_N1, "outside: test_legacy_total", "outside: test_REQ_DUR_001_S10_x",
+                                 "sorted: 0 regression, 1 expected, 2 outside the change"])
+        self.assertEqual(code, 0)
+
+    def refused(self, *args):
+        """Run sort-failures with the args: exit 1, no sorted line, no file changed; returns the output."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", *args)
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("sorted:", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return out
+
+    def test_REQ_EVD_005_N1_unreadable_file_refused(self):
+        missing = self.repo.root / "missing.txt"
+        out = self.refused(str(missing))
+        self.assertTrue(out.startswith(f"error: cannot read {missing}: "), out)
+        self.assertFalse(missing.exists())
+
+    def test_REQ_EVD_005_N2_blank_lines_and_duplicate_names_skipped(self):
+        code, lines = self.sort("  test_REQ_DUR_001_N1_rejects  ", "", "test_REQ_DUR_001_N1_rejects")
+        self.assertEqual(lines, [self.EXPECTED_N1, "sorted: 0 regression, 1 expected, 0 outside the change"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_005_N3_no_active_change_refused(self):
+        failed = self.repo.write("failed.txt", "test_REQ_DUR_001_N1_rejects\n")
+        (self.repo.root / "specs/.sdd/active").write_text("\n")
+        out = self.refused(str(failed))
+        self.assertIn("error: no active change", out)
+
+    def test_REQ_EVD_005_N4_unknown_change_refused(self):
+        failed = self.repo.write("failed.txt", "test_REQ_DUR_001_N1_rejects\n")
+        out = self.refused(str(failed), "--change", "9999-none")
+        self.assertIn("error: no change '9999-none' in specs/changes/", out)
+
+    def test_REQ_EVD_005_B1_empty_file_sorts_nothing(self):
+        code, lines = self.sort()
+        self.assertEqual(lines, ["sorted: 0 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_005_B2_first_id_that_decides_is_printed(self):
+        code, lines = self.sort("test_REQ_DUR_001_N1_and_REQ_DUR_001_S1")
+        self.assertEqual(lines, ["regression: test_REQ_DUR_001_N1_and_REQ_DUR_001_S1 (REQ-DUR-001.S1, T1 done)",
+                                 "sorted: 1 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_005_B3_scenario_no_task_plans_prints_no_task(self):
+        s1 = '| S1 | happy | the string "1h30m" | parse is called | it returns 90 |'
+        reqs = VALID_REQS.replace(s1, s1 + '\n| S2 | happy | the string "2h" | parse is called | it returns 120 |')
+        self.repo.fill(self.cid, reqs=reqs, design_and_tasks=SORT_TASKS)
+        code, lines = self.sort("test_REQ_DUR_001_S2_x")
+        self.assertEqual(lines, ["expected: test_REQ_DUR_001_S2_x (REQ-DUR-001.S2, no task)",
+                                 "sorted: 0 regression, 1 expected, 0 outside the change"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_005_B4_hyphen_form_in_any_case_is_recognized(self):
+        code, lines = self.sort("Req-Dur-001.N1 rejects letters")
+        self.assertEqual(lines, ["expected: Req-Dur-001.N1 rejects letters (REQ-DUR-001.N1, T2 not done)",
+                                 "sorted: 0 regression, 1 expected, 0 outside the change"])
+        self.assertEqual(code, 0)
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (DEF, decide)
+
+def d1(status="open", decision="undecided", evidence="", close=""):
+    """Row D1 of the defect fixtures: critical, DUR, 0007-x, test_REQ_DUR_001_S1_parses."""
+    return defect_row("D1", status, "critical", decision, "DUR", "0007-x", "test_REQ_DUR_001_S1_parses",
+                      evidence, close)
+
+
+D2_OPEN = defect_row("D2", "open", "minor", "later", "DUR", "0007-x", "test_REQ_DUR_001_N1_x", "After the demo", "")
+
+
+class DefectDecideTests(Base):
+    """REQ-DEF-002: sdd.py defect decide records the operator's decision and words on an open defect."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.log = self.repo.root / "specs" / "defects.md"
+
+    def test_REQ_DEF_002_S1_decide_writes_the_decision_and_the_evidence(self):
+        self.log.write_text(defect_log(d1(), D2_OPEN))
+        code, out = self.repo.run("defect", "decide", "D1", "fix-now", "--evidence", "Fix it before the release")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.log.read_text(), defect_log(d1(decision="fix-now", evidence="Fix it before the release"),
+                                                          D2_OPEN))
+        self.assertEqual(out.strip(), "D1: fix-now")
+
+    def test_REQ_DEF_002_S2_decision_can_be_changed_while_open(self):
+        self.log.write_text(defect_log(d1(decision="later", evidence="After the demo")))
+        code, out = self.repo.run("defect", "decide", "D1", "fix-now", "--evidence", "Fix it now")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.log.read_text(), defect_log(d1(decision="fix-now", evidence="Fix it now")))
+        self.assertEqual(out.strip(), "D1: fix-now")
+
+    def refused(self, *args, code=1, log=None):
+        """Run defect decide with the args on the log (the S1 one by default): it must exit with code and
+        leave the log byte-for-byte unchanged (or not created) and every other file as it was."""
+        if log is not None:
+            self.log.write_bytes(log.encode())
+        before = snapshot(self.repo.root)
+        result, out = self.repo.run("defect", "decide", *args)
+        self.assertEqual(result, code, out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return out
+
+    def test_REQ_DEF_002_N6_decision_without_evidence_refused(self):
+        log = defect_log(d1())
+        for evidence in ((), ("--evidence", "   ")):
+            out = self.refused("D1", "fix-now", *evidence, log=log)
+            self.assertIn("error: a decision needs the operator's words: add --evidence \"<what they said>\"", out)
+            self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_002_N1_unknown_decision_is_a_usage_error(self):
+        log = defect_log(d1())
+        out = self.refused("D1", "soon", "--evidence", "x", code=2, log=log)
+        error = [line for line in out.splitlines() if "invalid choice" in line]
+        self.assertEqual(len(error), 1, out)
+        for decision in ("fix-now", "later", "wont-fix"):
+            self.assertIn(decision, error[0].split("choose from", 1)[1])
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_002_N2_unknown_defect_id_refused(self):
+        log = defect_log(d1())
+        out = self.refused("D9", "later", "--evidence", "x", log=log)
+        self.assertIn("error: no defect D9 in specs/defects.md", out)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_002_N3_malformed_defect_id_refused(self):
+        log = defect_log(d1())
+        out = self.refused("d1", "later", "--evidence", "x", log=log)
+        self.assertIn('error: "d1" is not a defect ID: write D<n>', out)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_002_N4_closed_defect_cannot_be_decided(self):
+        log = defect_log(d1(status="closed", decision="fix-now", evidence="Fix it", close="T4 green"))
+        out = self.refused("D1", "later", "--evidence", "x", log=log)
+        self.assertIn("error: D1 is closed: its decision can't change", out)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_002_N5_missing_log_refused(self):
+        out = self.refused("D1", "later", "--evidence", "x")
+        self.assertIn("error: no defect is logged (specs/defects.md does not exist)", out)
+        self.assertFalse(self.log.exists())
+
+    def test_REQ_DEF_002_B2_same_decision_and_evidence_leaves_the_file_untouched(self):
+        # hand-padded cells: rewriting a cell whose value is unchanged would change the bytes
+        padded = "| D1 | open | critical |  fix-now  | DUR | 0007-x | test_REQ_DUR_001_S1_parses |  Fix it   |  |"
+        log = defect_log(padded, D2_OPEN)
+        out = self.refused("D1", "fix-now", "--evidence", "Fix it", code=0, log=log)
+        self.assertEqual(self.log.read_bytes(), log.encode(), out)
+
+    def decided_row(self, *args):
+        """Decide on the S1 log with the args (exit 0) and return D1's line, after checking every other line."""
+        self.log.write_text(defect_log(d1(), D2_OPEN))
+        code, out = self.repo.run("defect", "decide", "D1", *args)
+        self.assertEqual(code, 0, out)
+        lines = self.log.read_text().splitlines()
+        self.assertEqual(lines[:4] + lines[5:], defect_log(d1(), D2_OPEN).splitlines()[:4] + [D2_OPEN])
+        return lines[4]
+
+    def test_REQ_DEF_002_B3_pipe_in_the_evidence_is_escaped(self):
+        line = self.decided_row("later", "--evidence", "Not now | after the demo")
+        self.assertEqual(line, "| D1 | open | critical | later | DUR | 0007-x | test_REQ_DUR_001_S1_parses | "
+                               "Not now \\| after the demo |  |")
+        self.assertEqual(len(sdd.table_cells(line)), 9)
+        self.assertEqual(sdd.table_cells(line)[7], "Not now | after the demo")
+
+    def test_REQ_DEF_002_B4_line_breaks_in_the_evidence_become_spaces(self):
+        for evidence in ("Not now\nafter the demo", "Not now\r\nafter the demo\n"):
+            line = self.decided_row("later", "--evidence", evidence)
+            self.assertEqual(line, "| D1 | open | critical | later | DUR | 0007-x | test_REQ_DUR_001_S1_parses | "
+                                   "Not now after the demo |  |")
+
+
+class DefectCloseTests(Base):
+    """REQ-DEF-003: sdd.py defect close closes a decided defect and keeps its row."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.log = self.repo.root / "specs" / "defects.md"
+
+    D1_FIX_NOW = d1(decision="fix-now", evidence="Fix it")
+
+    def test_REQ_DEF_003_S1_close_writes_status_and_close_evidence(self):
+        self.log.write_text(defect_log(self.D1_FIX_NOW, D2_OPEN))
+        code, out = self.repo.run("defect", "close", "D1", "--evidence", "T4 green: 1 passed")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.log.read_text(), defect_log(d1(status="closed", decision="fix-now", evidence="Fix it",
+                                                             close="T4 green: 1 passed"), D2_OPEN))
+        self.assertEqual(out.strip(), "D1 closed")
+
+    def test_REQ_DEF_003_S2_wont_fix_defect_can_be_closed(self):
+        d2 = defect_row("D2", "open", "minor", "wont-fix", "DUR", "0007-x", "test_REQ_DUR_001_N1_x", "Keep it", "")
+        self.log.write_text(defect_log(self.D1_FIX_NOW, d2))
+        code, out = self.repo.run("defect", "close", "D2", "--evidence", "Accepted as is by the operator")
+        self.assertEqual(code, 0, out)
+        closed = defect_row("D2", "closed", "minor", "wont-fix", "DUR", "0007-x", "test_REQ_DUR_001_N1_x", "Keep it",
+                            "Accepted as is by the operator")
+        self.assertEqual(self.log.read_text(), defect_log(self.D1_FIX_NOW, closed))
+        self.assertEqual(out.strip(), "D2 closed")
+
+    def refused(self, *args, log):
+        """Run defect close with the args on the log: exit 1, the log byte-for-byte unchanged, no file changed."""
+        self.log.write_bytes(log.encode())
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("defect", "close", *args)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        return out
+
+    def test_REQ_DEF_003_N6_close_without_evidence_refused(self):
+        for evidence in ((), ("--evidence", "  ")):
+            out = self.refused("D1", *evidence, log=defect_log(self.D1_FIX_NOW))
+            self.assertIn("error: closing needs --evidence: what fixed the defect, or why it is closed", out)
+
+    def test_REQ_DEF_003_N1_undecided_defect_cannot_be_closed(self):
+        out = self.refused("D1", "--evidence", "Fixed", log=defect_log(d1()))
+        self.assertIn("error: D1 has no decision: the operator decides first (sdd.py defect decide)", out)
+
+    def test_REQ_DEF_003_N2_closed_defect_cannot_be_closed_again(self):
+        closed = d1(status="closed", decision="fix-now", evidence="Fix it", close="T4 green")
+        out = self.refused("D1", "--evidence", "Fixed", log=defect_log(closed))
+        self.assertIn("error: D1 is already closed", out)
+
+    def test_REQ_DEF_003_B1_later_defect_can_be_closed(self):
+        self.log.write_text(defect_log(d1(decision="later", evidence="After the demo"), D2_OPEN))
+        code, out = self.repo.run("defect", "close", "D1", "--evidence", "Fixed")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.log.read_text(), defect_log(d1(status="closed", decision="later",
+                                                             evidence="After the demo", close="Fixed"), D2_OPEN))
+        self.assertEqual(out.strip(), "D1 closed")
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (DEF, counts)
+
+D3_CLOSED = defect_row("D3", "closed", "critical", "fix-now", "DUR", "0007-x", "test_REQ_DUR_001_S2_x", "Fix it",
+                       "T4 green")
+COUNT_LOG = defect_log(d1(), D2_OPEN, D3_CLOSED)  # D1 open critical undecided, D2 open minor later, D3 closed
+COUNT_LINE = "open defects: 2 (1 critical, 1 undecided)"
+COUNT_JSON = {"open": 2, "critical": 1, "undecided": 1}
+ZERO_JSON = {"open": 0, "critical": 0, "undecided": 0}
+
+
+class DefectCountTests(DesignedBase):
+    """REQ-DEF-004: status and check count the open defects of specs/defects.md."""
+
+    def write_log(self, text):
+        return self.repo.write("specs/defects.md", text)
+
+    def unchanged(self, *args):
+        """Run the command (exit 0 expected unless checked by the caller); no file may change."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run(*args)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out
+
+    def test_REQ_DEF_004_S1_status_counts_the_open_defects(self):
+        self.init()
+        self.new()
+        self.write_log(COUNT_LOG)
+        code, out = self.unchanged("status")
+        self.assertEqual(code, 0, out)
+        lines = out.splitlines()
+        self.assertIn(COUNT_LINE, lines)
+        self.assertEqual(len([line for line in lines if line.startswith("open defects")]), 1, out)
+        self.assertLess(lines.index(COUNT_LINE), lines.index(next(l for l in lines if l.startswith("next: "))))
+        code, out = self.unchanged("status", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["defects"], COUNT_JSON)
+
+    def test_REQ_DEF_004_S2_check_counts_the_open_defects(self):
+        self.designed()
+        self.write_log(COUNT_LOG)
+        code, out = self.unchanged("check")
+        self.assertEqual(code, 0, out)
+        lines = out.splitlines()
+        self.assertEqual(lines[-2:], [COUNT_LINE, "result: OK"], out)
+        code, out = self.unchanged("check", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["defects"], COUNT_JSON)
+
+    def test_REQ_DEF_004_N1_status_counts_without_an_active_change(self):
+        self.init()
+        self.write_log(COUNT_LOG)
+        code, out = self.unchanged("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("active change: none", out.splitlines())
+        self.assertIn(COUNT_LINE, out.splitlines())
+
+    def test_REQ_DEF_004_B1_no_log_gives_zeros_and_no_line(self):
+        self.init()
+        self.new()
+        code, out = self.unchanged("status")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("open defects", out)
+        code, out = self.unchanged("status", "--json")
+        self.assertEqual(json.loads(out)["defects"], ZERO_JSON)
+        self.assertFalse((self.repo.root / "specs/defects.md").exists())
+
+    def test_REQ_DEF_004_B2_all_closed_gives_zeros_and_no_line(self):
+        self.designed()
+        self.write_log(defect_log(d1(status="closed", decision="fix-now", evidence="Fix it", close="T4 green"),
+                                  D3_CLOSED))
+        code, out = self.unchanged("check")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("open defects", out)
+        code, out = self.unchanged("check", "--json")
+        self.assertEqual(json.loads(out)["defects"], ZERO_JSON)
+
+    def test_REQ_DEF_004_B3_open_defects_do_not_fail_a_check(self):
+        self.init("production")  # the standard draft of spec_approved, before its spec gate
+        self.repo.ok("new", "x", "--title", "Analyze", "--size", "standard", "--capability", "analyze=ANL")
+        directory = self.repo.root / "specs/changes/0001-x"
+        set_file_section(directory / "spec-delta.md", "Requirements", ANL_REQS)
+        set_file_section(directory / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(directory / "clarifications.md", "Clarifications", ANL_ROUND)
+        self.write_log(COUNT_LOG)
+        code, out = self.unchanged("check", "--stage", "spec")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[-2:], [COUNT_LINE, "result: OK"], out)
+
+
+# ---------------------------------------------------------------- change 0005-scoped-test-runs (DEF, invalid log)
+
+BLOCKER_LOG = defect_log(d1().replace("| critical |", "| blocker |"))  # row D1 on line 5
+BLOCKER_PROBLEM = 'specs/defects.md line 5: severity "blocker" is not critical, major or minor'
+
+
+class DefectLogTests(DesignedBase):
+    """REQ-DEF-006: a defect log that isn't valid rows is refused."""
+
+    def write_log(self, text):
+        self.log = self.repo.write("specs/defects.md", text)
+
+    def refused(self, *args, log):
+        """Run a defect command on the log (a mini change declaring DUR is active): exit 1, the log
+        byte-for-byte unchanged, no file changed; returns the output."""
+        self.init()
+        self.new("x")
+        self.write_log(log)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("defect", *args)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        return out
+
+    def test_REQ_DEF_006_N1_invalid_severity_row_refused_by_defect_add(self):
+        self.assertEqual(BLOCKER_LOG.splitlines()[4], d1().replace("| critical |", "| blocker |"))
+        out = self.refused("add", "--test", "test_REQ_DUR_001_S1_x", "--severity", "minor", log=BLOCKER_LOG)
+        self.assertEqual(out.strip(), f"error: {BLOCKER_PROBLEM}")
+
+    def test_REQ_DEF_006_N7_wrong_header_refused(self):
+        log = "\n".join(["# Defects", "", DEFECT_HEADER.replace(" Close evidence |", ""), "| --- " * 8 + "|",
+                         d1()]) + "\n"
+        out = self.refused("add", "--test", "test_REQ_DUR_001_S1_x", "--severity", "minor", log=log)
+        self.assertEqual(out.strip(), "error: specs/defects.md line 3: the header must be the cells ID, Status, "
+                                      "Severity, Decision, Capability, Change, Test, Evidence, Close evidence")
+
+    def test_REQ_DEF_006_N6_row_with_eight_cells_refused(self):
+        eight = d1(decision="fix-now", evidence="Fix it").rsplit("|  |", 1)[0] + "|"
+        self.assertEqual(len(sdd.table_cells(eight)), 8, eight)
+        out = self.refused("close", "D1", "--evidence", "Fixed", log=defect_log(eight))
+        self.assertEqual(out.strip(), "error: specs/defects.md line 5: a row needs 9 cells, found 8")
+
+    def test_REQ_DEF_006_N5_repeated_defect_id_refused(self):
+        out = self.refused("decide", "D1", "later", "--evidence", "x", log=defect_log(d1(), d1()))
+        self.assertEqual(out.strip(), "error: specs/defects.md line 6: D1 is repeated (first on line 5)")
+
+    def unchanged(self, *args):
+        """Run the command; no file may change."""
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run(*args)
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out
+
+    def test_REQ_DEF_006_N2_invalid_log_is_an_error_at_verify(self):
+        self.init()
+        cid = self.new()
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.write("tests/test_dur.py", "test_REQ_DUR_001_S1 test_REQ_DUR_001_N1")
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 0, out)  # otherwise clean
+        self.write_log(BLOCKER_LOG)
+        code, out = self.unchanged("check", "--stage", "verify")
+        self.assertEqual(code, 1, out)
+        lines = out.splitlines()
+        self.assertEqual(lines[1:3], ["errors (1):", f"  - {BLOCKER_PROBLEM}"], out)
+        self.assertEqual(lines[-1], "result: FAIL")
+
+    def test_REQ_DEF_006_N3_invalid_log_is_a_warning_at_other_stages(self):
+        self.designed()
+        self.write_log(BLOCKER_LOG)
+        code, out = self.unchanged("check", "--stage", "plan")
+        self.assertEqual(code, 0, out)
+        lines = out.splitlines()
+        self.assertEqual(lines[1:3], ["warnings (1):", f"  - {BLOCKER_PROBLEM}"], out)
+        self.assertNotIn("open defects", out)
+        self.assertEqual(lines[-1], "result: OK")
+        code, out = self.unchanged("check", "--stage", "plan", "--json")
+        self.assertIsNone(json.loads(out)["defects"])
+
+    def test_REQ_DEF_006_N4_status_prints_the_problem_and_exits_0(self):
+        self.init()
+        self.new()
+        self.write_log(BLOCKER_LOG)
+        code, out = self.unchanged("status")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"defect log: {BLOCKER_PROBLEM}", out.splitlines())
+        self.assertNotIn("open defects", out)
+        code, out = self.unchanged("status", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertIsNone(json.loads(out)["defects"])
+
+    def accepted(self, log):
+        """defect add on the log (a mini change declaring DUR is active): exit 0, D3 appended after the
+        lines as written."""
+        self.init()
+        self.new("x")
+        self.write_log(log)
+        code, out = self.repo.run("defect", "add", "--test", "test_REQ_DUR_001_S2_x", "--severity", "minor")
+        self.assertEqual(code, 0, out)
+        d3 = defect_row("D3", "open", "minor", "undecided", "DUR", "0001-x", "test_REQ_DUR_001_S2_x", "", "")
+        self.assertEqual(self.log.read_text(), log + d3 + "\n")
+        self.assertEqual(out.strip(), "D3 added (minor, DUR)")
+
+    def test_REQ_DEF_006_B1_blank_line_and_comment_between_rows_accepted(self):
+        # the comment spans lines and holds a row-like line, which must not count
+        self.accepted(defect_log(d1(), "", "<!-- moved here by hand:", "| D9 | bogus |", "-->", D2_OPEN))
+
+    def test_REQ_DEF_006_B2_escaped_pipe_in_a_cell_accepted(self):
+        self.designed()
+        piped = d1().replace("test_REQ_DUR_001_S1_parses", "test_REQ_DUR_001_S1[a\\|b]")
+        self.write_log(defect_log(piped))
+        code, out = self.unchanged("check")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("defects.md", out)
+        self.assertIn("open defects: 1 (1 critical, 1 undecided)", out.splitlines())
+
+    def test_REQ_DEF_006_B3_padded_header_and_aligned_separator_accepted(self):
+        header = "| ID  | Status  | Severity | Decision  | Capability | Change | Test | Evidence | Close evidence  |"
+        separator = "| :--- | ------ | :------: | ---: | --- | --- | --- | --- | --- |"
+        log = "\n".join(["# Defects", "", header, separator, d1(), D2_OPEN]) + "\n"
+        self.accepted(log)
+        self.assertEqual(self.log.read_text().splitlines()[2:4], [header, separator])
+
+    def test_REQ_DEF_006_N8_bad_separator_row_refused(self):
+        log = "\n".join(["# Defects", "", DEFECT_HEADER, "| -- | ab |" + " -- |" * 7, d1()]) + "\n"
+        self.assertEqual(log.splitlines()[3], "| -- | ab | -- | -- | -- | -- | -- | -- | -- |")
+        out = self.refused("add", "--test", "test_REQ_DUR_001_S1_x", "--severity", "minor", log=log)
+        self.assertEqual(out.strip(), "error: specs/defects.md line 4: the second table line must be a separator row")
+
+    def test_REQ_DEF_006_N9_bad_row_id_refused(self):
+        log = defect_log(d1().replace("| D1 |", "| E1 |"))
+        out = self.refused("decide", "D1", "later", "--evidence", "x", log=log)
+        self.assertEqual(out.strip(), 'error: specs/defects.md line 5: the ID "E1" is not D<n>')
+
+    def test_REQ_DEF_006_N10_header_with_no_separator_row_refused(self):
+        log = "\n".join(["# Defects", "", DEFECT_HEADER]) + "\n"
+        out = self.refused("add", "--test", "test_REQ_DUR_001_S1_x", "--severity", "minor", log=log)
+        self.assertEqual(out.strip(), "error: specs/defects.md line 3: the header has no separator row after it")
 
 
 if __name__ == "__main__":

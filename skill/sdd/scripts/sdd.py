@@ -16,6 +16,10 @@ same way from Claude Code, Codex, a git hook or a terminal.
     python3 sdd.py archive
     python3 sdd.py next-req DUR
     python3 sdd.py use 0002-other-change
+    python3 sdd.py sort-failures failed.txt
+    python3 sdd.py defect add --test test_REQ_DUR_001_S1_parses --severity major
+    python3 sdd.py defect decide D1 fix-now --evidence "Operator in chat: 'fix it now'"
+    python3 sdd.py defect close D1 --evidence "T4 green: 1 passed"
 """
 
 from __future__ import annotations
@@ -246,6 +250,20 @@ def change_text(path: Path) -> str:
 
 def test_command(clean_text: str) -> str:
     match = re.search(r"Test command\s*:[ \t]*(.*)", clean_text)
+    return match.group(1).strip().strip("`").strip() if match else ""
+
+
+def design_text(path: Path) -> str:
+    """The design a rule reads: design.md of a standard change, the Design notes of a mini one."""
+    if read_front_matter(path.read_text()).get("size") == "standard":
+        design = path.parent / "design.md"
+        return strip_comments(design.read_text()) if design.exists() else ""
+    return sections(strip_comments(path.read_text())).get("Design notes", "")
+
+
+def test_component(design: str) -> str:
+    """The design's component test command template ("" when absent), for the method and later tools."""
+    match = re.search(r"^\s*[-*]\s*Test component\s*:[ \t]*(.*)$", design, re.M)
     return match.group(1).strip().strip("`").strip() if match else ""
 
 
@@ -794,6 +812,7 @@ class Report:
         self.reqs = []  # the change's parsed requirements
         self.design_errors = []  # errors from the design rules (REQ-ANL-002 to REQ-ANL-005)
         self.round_errors = []  # errors about the Critic rounds (the Clarifications section)
+        self.defects = {"open": 0, "critical": 0, "undecided": 0}  # specs/defects.md (REQ-DEF-004); None: invalid
 
     @property
     def ok(self):
@@ -826,6 +845,8 @@ class Report:
         if scenarios:
             sc = self.counts["scenarios"]
             out.append(f"scenarios: {sc['happy']} happy, {sc['negative']} negative, {sc['boundary']} boundary")
+        if defect_line(self.defects):
+            out.append(defect_line(self.defects))
         out.append("result: " + ("OK" if self.ok else "FAIL"))
         return "\n".join(out)
 
@@ -970,6 +991,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     scenario_refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
     if STAGES.index(stage) >= STAGES.index("plan"):
         check_plan(clean, tasks, scenario_refs, err, warn)
+        check_component_command(design_text(path), err, warn)
         view = design_view(path)
         if view is not None:  # a standard change
             check_contracts(view, report.design_error, warn)
@@ -1174,6 +1196,26 @@ def check_evidence(task, err, warn):
             "or 'pre-existing — <reason>' if the behavior already existed")
     elif SETUP_ERRORS.search(red):
         warn(f"{tid}: red looks like a setup error, not a failing assertion ('{red}')")
+
+
+def check_component_command(design: str, err, warn) -> None:
+    """The design's `- Test component:` line: one per design, with {prefix} and closed quotes."""
+    lines = re.findall(r"^\s*[-*]\s*Test component\s*:[ \t]*(.*)$", design, re.M)
+    if len(lines) > 1:
+        err('the design has more than one "Test component:" line: keep one')
+        return
+    command = lines[0].strip().strip("`").strip() if lines else ""
+    if not command:
+        warn('the design has no "Test component:" line (or it is empty): '
+             "the component checkpoints will be skipped")
+        return
+    if "{prefix}" not in command:
+        err('the "Test component:" command has no {prefix}: write where the capability\'s requirement '
+            'prefix goes, e.g. "- Test component: `python3 -m unittest -k REQ_{prefix}_`"')
+    try:
+        shlex.split(command)
+    except ValueError:
+        err(f'the "Test component:" command has a quote that is not closed: {command}')
 
 
 def check_plan(clean, tasks, scenario_refs, err, warn):
@@ -1433,6 +1475,8 @@ def cmd_status(project: Project, args) -> int:
         data["next"] = next_step(project, fm, report)
     else:
         data["next"] = "sdd quick \"<idea>\" (or sdd propose \"<idea>\")"
+    log = read_defect_log(project)  # the log belongs to the project, not to a change
+    data["defects"] = defect_counts(log)
     if args.json:
         print(json.dumps(data, indent=2))
         return 0
@@ -1457,6 +1501,10 @@ def cmd_status(project: Project, args) -> int:
               f" · {change['open_questions']} open questions")
     else:
         print("active change: none")
+    if log.problem:
+        print(f"defect log: {log.problem}")
+    elif defect_line(data["defects"]):
+        print(defect_line(data["defects"]))
     if data["capabilities"]:
         print("living spec: " + ", ".join(
             f"{c['name']} ({c['prefix']}, {c['requirements']} requirement{'' if c['requirements'] == 1 else 's'})"
@@ -1471,12 +1519,22 @@ def cmd_status(project: Project, args) -> int:
 def report_json(report: Report) -> dict:
     return {"ok": report.ok, "stage": report.stage, "errors": report.errors,
             "warnings": report.warnings, "coverage": report.coverage,
-            "open_questions": report.open_questions, **report.counts}
+            "open_questions": report.open_questions, **report.counts, "defects": report.defects}
+
+
+def defect_findings(project: Project, report: Report) -> None:
+    """The defect log's counts on the report, and its problem as an error at verify, else a warning
+    (REQ-DEF-004, REQ-DEF-006); analyze() itself, which the gates call, never reads the log."""
+    log = read_defect_log(project)
+    report.defects = defect_counts(log)
+    if log.problem:
+        (report.errors if report.stage == "verify" else report.warnings).append(log.problem)
 
 
 def cmd_check(project: Project, args) -> int:
     project.require_init()
     report = analyze(project, project.current(args.change), args.stage)
+    defect_findings(project, report)
     if args.json:
         print(json.dumps(report_json(report), indent=2))
     else:
@@ -1779,6 +1837,7 @@ def render_analysis(report: Report) -> str:
 def cmd_analyze(project: Project, args) -> int:
     project.require_init()
     report = full_analysis(project, project.current(args.change))
+    defect_findings(project, report)
     if args.json:
         print(json.dumps(report_json(report), indent=2))
     else:
@@ -2525,6 +2584,245 @@ def cmd_use(project: Project, args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- sort-failures
+
+def change_plan(path: Path) -> tuple:
+    """The change's scenario refs (its non-removed requirements) and its tasks, in plan order."""
+    secs = sections(strip_comments(change_text(path)))
+    reqs, _ = parse_requirements(secs.get("Requirements", ""))
+    refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
+    tasks, _ = parse_tasks(secs.get("Tasks", ""))
+    return refs, tasks
+
+
+def cmd_sort_failures(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    try:
+        lines = Path(args.file).read_text().splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SddError(f"cannot read {args.file}: {exc.strerror if isinstance(exc, OSError) else exc}")
+    names = list(dict.fromkeys(line.strip() for line in lines if line.strip()))  # file order, first kept
+    refs, tasks = change_plan(path)
+    counts = {"regression": 0, "expected": 0, "outside": 0}
+    for name in names:
+        found = sorted((m.start(), ref) for ref in refs for m in [scenario_pattern(ref).search(name)] if m)
+        if not found:
+            counts["outside"] += 1
+            print(f"outside: {name}")
+            continue
+        ids = [ref for _, ref in found]
+        ticked = [(ref, t) for ref in ids for t in tasks if t["done"] and ref in t["refs"]]
+        if ticked:
+            ref, task = ticked[0]
+            counts["regression"] += 1
+            print(f"regression: {name} ({ref}, {task['id']} done)")
+        else:
+            planners = [t["id"] + " not done" for t in tasks if ids[0] in t["refs"]]
+            counts["expected"] += 1
+            print(f"expected: {name} ({ids[0]}, {planners[0] if planners else 'no task'})")
+    print(f"sorted: {counts['regression']} regression, {counts['expected']} expected, "
+          f"{counts['outside']} outside the change")
+    return 1 if counts["regression"] else 0
+
+
+# ---------------------------------------------------------------- defect log
+
+DEFECT_COLUMNS = ["ID", "Status", "Severity", "Decision", "Capability", "Change", "Test", "Evidence",
+                  "Close evidence"]
+DEFECT_HEADER = "| " + " | ".join(DEFECT_COLUMNS) + " |"
+DEFECT_SEPARATOR = "| --- " * len(DEFECT_COLUMNS) + "|"
+DEFECT_STATUSES = ["open", "closed"]
+DEFECT_SEVERITIES = ["critical", "major", "minor"]
+DEFECT_DECISIONS = ["fix-now", "later", "wont-fix"]
+NAME_REQ = re.compile(r"REQ[-_]([A-Z][A-Z0-9]{1,5})[-_]\d+", re.I)
+
+
+def defect_row(cells: list) -> str:
+    """A row as written: '| ' + cells joined by ' | ' + ' |' (an empty cell is two spaces, a | is \\|)."""
+    return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
+
+
+class DefectLog:
+    """specs/defects.md as written: its text, its lines, its rows (with line numbers) and the first problem."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.exists = path.exists()
+        self.text = path.read_text() if self.exists else ""
+        self.lines = self.text.splitlines()
+        self.rows, self.problem = [], None
+        # comments blanked to as many newlines, so that line numbers stay true
+        view = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), self.text, flags=re.S)
+        self.table = [(number, line) for number, line in enumerate(view.splitlines(), 1) if line.startswith("|")]
+        for number, line in self.table[:1]:
+            if table_cells(line) != DEFECT_COLUMNS:  # table_cells trims each cell
+                self.problem = f"specs/defects.md line {number}: the header must be the cells " + \
+                    ", ".join(DEFECT_COLUMNS)
+                return
+        if len(self.table) == 1:
+            self.problem = f"specs/defects.md line {self.table[0][0]}: the header has no separator row after it"
+            return
+        for number, line in self.table[1:2]:
+            if not all(re.fullmatch(r":?-+:?", cell) for cell in table_cells(line)):
+                self.problem = f"specs/defects.md line {number}: the second table line must be a separator row"
+                return
+        for number, line in self.table[2:]:
+            cells = table_cells(line)
+            padded = cells + [""] * (len(DEFECT_COLUMNS) - len(cells))
+            row = {"line": number, "cells": cells, "id": padded[0], "status": padded[1],
+                   "severity": padded[2], "decision": padded[3], "test": padded[6]}
+            problem = self.row_problem(row)
+            first = [r["line"] for r in self.rows if r["id"] == row["id"]]
+            if not problem and first:
+                problem = f"{row['id']} is repeated (first on line {first[0]})"
+            if problem:
+                self.problem = f"specs/defects.md line {number}: {problem}"
+                break
+            self.rows.append(row)
+
+    @staticmethod
+    def row_problem(row: dict) -> str:
+        """What is wrong with a row ("" when it is valid)."""
+        if len(row["cells"]) != len(DEFECT_COLUMNS):
+            return f"a row needs {len(DEFECT_COLUMNS)} cells, found {len(row['cells'])}"
+        if not re.fullmatch(r"D\d+", row["id"]):
+            return f'the ID "{row["id"]}" is not D<n>'
+        for name, allowed in (("status", DEFECT_STATUSES), ("severity", DEFECT_SEVERITIES),
+                              ("decision", ["undecided"] + DEFECT_DECISIONS)):
+            if row[name] not in allowed:
+                return f'{name} "{row[name]}" is not {", ".join(allowed[:-1])} or {allowed[-1]}'
+        return ""
+
+
+def read_defect_log(project: Project) -> DefectLog:
+    return DefectLog(project.specs / "defects.md")
+
+
+def defect_counts(log: DefectLog):
+    """The open defects, how many critical and how many undecided; None for an invalid log (REQ-DEF-004)."""
+    if log.problem:
+        return None
+    open_rows = [r for r in log.rows if r["status"] == "open"]
+    return {"open": len(open_rows), "critical": sum(r["severity"] == "critical" for r in open_rows),
+            "undecided": sum(r["decision"] == "undecided" for r in open_rows)}
+
+
+def defect_line(counts) -> str:
+    """The text line for the open defects ("" when there are none)."""
+    if not counts or not counts["open"]:
+        return ""
+    return f"open defects: {counts['open']} ({counts['critical']} critical, {counts['undecided']} undecided)"
+
+
+def defect_capability(test: str) -> str:
+    """The first requirement prefix the test name carries, in capitals."""
+    match = NAME_REQ.search(test)
+    if not match:
+        raise SddError("the test name carries no requirement ID: name the capability with --capability <PREFIX>")
+    return match.group(1).upper()
+
+
+def cmd_defect_add(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    change_id = path.parent.name
+    if not args.test.strip():
+        raise SddError("the test name is empty")
+    capability = args.capability or defect_capability(args.test)
+    declared = parse_capabilities(read_front_matter(path.read_text()).get("capabilities", ""))
+    if capability not in project.registry() and capability not in declared:
+        raise SddError(f'capability "{capability}" is not a prefix of the living spec or of {change_id}')
+    log = read_defect_log(project)
+    if log.problem:  # an invalid log is never appended to
+        raise SddError(log.problem)
+    for r in log.rows:
+        if r["test"] == args.test and r["status"] == "open":
+            raise SddError(f"{args.test} already has an open defect: {r['id']}")
+    number = 1 + max([int(r["id"][1:]) for r in log.rows if re.fullmatch(r"D\d+", r["id"])] or [0])
+    row = defect_row([f"D{number}", "open", args.severity, "undecided", capability, change_id, args.test, "", ""])
+    table = f"{DEFECT_HEADER}\n{DEFECT_SEPARATOR}\n{row}\n"
+    ending = "" if log.text.endswith("\n") else "\n"
+    if not log.text.strip():
+        log.path.write_text(f"# Defects\n\n{table}")
+    else:  # append: the lines already written stay as they are
+        with log.path.open("a") as handle:
+            handle.write(ending + (row + "\n" if log.table else "\n" + table))
+    print(f"D{number} added ({args.severity}, {capability})")
+    return 0
+
+
+def set_cells(line: str, changes: dict) -> str:
+    """The row line with cell index → value written as ' value ' (a | as \\|) where the cell's value
+    differs; every other segment stays as written."""
+    parts = re.split(r"(?<!\\)\|", line)
+    for index, value in changes.items():
+        if parts[1 + index].strip().replace("\\|", "|") != value:
+            escaped = value.replace("|", "\\|")
+            parts[1 + index] = f" {escaped} "
+    return "|".join(parts)
+
+
+def one_line(text: str) -> str:
+    """Evidence as one cell: line breaks become spaces, surrounding spaces are removed."""
+    return re.sub(r"\r\n|\r|\n", " ", text).strip()
+
+
+def defect_lookup(project: Project, defect_id: str):
+    """The log and the row a decide or close names (REQ-DEF-002, REQ-DEF-003)."""
+    if not re.fullmatch(r"D\d+", defect_id):
+        raise SddError(f'"{defect_id}" is not a defect ID: write D<n>')
+    log = read_defect_log(project)
+    if not log.exists:
+        raise SddError("no defect is logged (specs/defects.md does not exist)")
+    if log.problem:  # an invalid log is never rewritten
+        raise SddError(log.problem)
+    for row in log.rows:
+        if row["id"] == defect_id:
+            return log, row
+    raise SddError(f"no defect {defect_id} in specs/defects.md")
+
+
+def write_cells(log: DefectLog, row: dict, changes: dict) -> None:
+    """Rewrite only the row's line, with its changed cells; every other byte of the log stays as written."""
+    with log.path.open(newline="") as handle:
+        lines = handle.read().splitlines(keepends=True)
+    old = lines[row["line"] - 1]
+    content = old.rstrip("\r\n")
+    new = set_cells(content, changes)
+    if new == content:
+        return
+    lines[row["line"] - 1] = new + old[len(content):]
+    with log.path.open("w", newline="") as handle:
+        handle.write("".join(lines))
+
+
+def cmd_defect_decide(project: Project, args) -> int:
+    project.require_init()
+    if not (args.evidence or "").strip():
+        raise SddError("a decision needs the operator's words: add --evidence \"<what they said>\"")
+    log, row = defect_lookup(project, args.id)
+    if row["status"] == "closed":
+        raise SddError(f"{args.id} is closed: its decision can't change")
+    write_cells(log, row, {3: args.decision, 7: one_line(args.evidence)})
+    print(f"{args.id}: {args.decision}")
+    return 0
+
+
+def cmd_defect_close(project: Project, args) -> int:
+    project.require_init()
+    log, row = defect_lookup(project, args.id)
+    if row["status"] == "closed":
+        raise SddError(f"{args.id} is already closed")
+    if row["decision"] == "undecided":
+        raise SddError(f"{args.id} has no decision: the operator decides first (sdd.py defect decide)")
+    if not (args.evidence or "").strip():
+        raise SddError("closing needs --evidence: what fixed the defect, or why it is closed")
+    write_cells(log, row, {1: "closed", 8: one_line(args.evidence)})
+    print(f"{args.id} closed")
+    return 0
+
+
 # ---------------------------------------------------------------- entry point
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2605,6 +2903,29 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("use", help="make another change active")
     p.add_argument("change_id")
     p.set_defaults(func=cmd_use)
+
+    p = sub.add_parser("sort-failures", help="sort failing tests into regressions, expected failures and the rest")
+    p.add_argument("file", help="the failing test names, one per line")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_sort_failures)
+
+    p = sub.add_parser("defect", help="record a defect in specs/defects.md")
+    defect = p.add_subparsers(dest="defect_command", required=True)
+    p = defect.add_parser("add", help="add an open, undecided defect for a failing test")
+    p.add_argument("--test", required=True)
+    p.add_argument("--severity", required=True, choices=DEFECT_SEVERITIES)
+    p.add_argument("--capability", metavar="PREFIX")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_defect_add)
+    p = defect.add_parser("decide", help="record the operator's decision on an open defect")
+    p.add_argument("id", help="the defect ID, D<n>")
+    p.add_argument("decision", choices=DEFECT_DECISIONS)
+    p.add_argument("--evidence", help="the operator's words")
+    p.set_defaults(func=cmd_defect_decide)
+    p = defect.add_parser("close", help="close a decided defect, with what fixed it or why it is closed")
+    p.add_argument("id", help="the defect ID, D<n>")
+    p.add_argument("--evidence", help="what fixed the defect, or why it is closed")
+    p.set_defaults(func=cmd_defect_close)
     return parser
 
 

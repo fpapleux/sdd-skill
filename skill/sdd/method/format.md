@@ -9,7 +9,7 @@ sections**, spread over a folder and read as one document:
 | --- | --- |
 | `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
 | `spec-delta.md` | Requirements, Known gaps |
-| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:` and `- Test one:`), Failure modes, Contracts |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`, `- Test one:` and `- Test component:`), Failure modes, Contracts |
 | `tasks.md` | Tasks, Mutations |
 | `verification.md` | Verification |
 
@@ -200,6 +200,14 @@ add the command that runs **one** test: ``- Test one: `python3 -m unittest
 {name}` ``, where `{test}` is a task's whole test line, and `{file}` and
 `{name}` are its parts before and after `::`.
 
+To run the tests of one capability at a checkpoint, add a **component**
+command as a list line, one per design: ``- Test component: `python3 -m
+unittest -k REQ_{prefix}_` ``. Every `{prefix}` stands for a capability's
+requirement prefix. At the plan stage and later, `SDD check` refuses a command
+without `{prefix}`, with a quote that isn't closed, or a second
+`Test component:` line, and warns, without failing, when the design has no
+such line or an empty one (the component checkpoints are then skipped).
+
 ## design.md: Failure modes and Contracts (standard)
 
 A `standard` change's `design.md` holds two checked sections. Lines inside
@@ -297,6 +305,33 @@ cap.
 - `SDD mutate` runs the tests of the tasks that plan the scenario: before the
   mutation (they must pass), then after (at least one must fail). The result
   is `caught`, `survived` or `invalid`.
+
+## The defect log (`specs/defects.md`)
+
+The project's failing tests that the operator must decide on. It belongs to
+the project, not to a change, and the script writes it: `SDD defect add`,
+`SDD defect decide` and `SDD defect close`. Don't edit it by hand.
+
+```markdown
+# Defects
+
+| ID | Status | Severity | Decision | Capability | Change | Test | Evidence | Close evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| D1 | open | critical | undecided | DUR | 0007-x | test_REQ_DUR_001_S1_parses |  |  |
+```
+
+- **ID** `D<n>`: one more than the highest number in the log, so a closed
+  defect's number is never reused.
+- **Status** `open` or `closed`; **Severity** `critical`, `major` or `minor`;
+  **Decision** `undecided`, `fix-now`, `later` or `wont-fix`.
+- **Capability**: the requirement prefix, from the first requirement ID in the
+  test name or from `--capability`. **Change**: the active change, or
+  `--change`. **Test**: the failing test's name. One test has at most one
+  open defect.
+- **Evidence**: the operator's words for the decision. **Close evidence**:
+  what fixed the defect, or why it is closed.
+- A row is `| ` and its cells joined by ` | `, then ` |`; an empty cell is two
+  spaces between pipes, and a `|` inside a cell is written `\|`.
 
 ## Test naming
 

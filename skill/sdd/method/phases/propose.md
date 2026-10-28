@@ -5,7 +5,10 @@ Author** (`method/roles/spec-author.md`).
 
 1. Do steps 1–3 of `method/phases/quick.md`: size, capability, `SDD new`.
    For a `standard` change, add `--size standard`. Intent and Scope then go
-   in `proposal.md`.
+   in `proposal.md`. A capability is a unit of coherent functional purpose
+   (for example checkout, catalog or accounts), small enough to test as one
+   component; propose the ones the change needs, and the operator confirms
+   them at the spec gate.
 2. Write `## Intent` and `## Scope` (In / Out). Use the operator's words, and
    make no technology choices.
 3. If the scope is ambiguous, ask up to 3 questions now.

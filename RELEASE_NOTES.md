@@ -8,6 +8,55 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.19.0 — 2026-10-28
+
+An intermediary release ahead of increment 6. On larger programs a run spent
+most of its time re-running the whole suite at every task, and the failing
+tests of tasks not built yet sent the run back to the operator. Change
+0005-scoped-test-runs (a `standard` change) passed its second verification
+round and was archived. New living spec:
+[`defects`](specs/capabilities/defects/spec.md) (5 requirements); `evidence`
+gains 2. The change has 71 scenarios and 71 tasks. The suite is now 534
+tests, and all 59 planned mutations are caught.
+
+- **Behavior:** a design may name a component test command,
+  `- Test component: <command>` with `{prefix}` for the capability's
+  requirement prefix. From the plan stage, `check` reports a malformed line as
+  an error, and a missing one as a warning that the component checkpoints
+  will be skipped.
+- **Behavior:** `sdd.py sort-failures <file>` sorts failing test names, by the
+  scenario IDs they carry, into `regression` (a ticked task plans the
+  scenario), `expected` (no ticked task plans it) and `outside`. It exits 1 on
+  any regression and writes nothing.
+- **Behavior:** a defect log, `specs/defects.md`, owned by the script:
+  `defect add` (test, severity critical, major or minor, capability),
+  `defect decide D<n> fix-now|later|wont-fix --evidence "<the operator's
+  words>"` and `defect close D<n> --evidence "<why>"`. IDs are never reused,
+  and a test has at most one open defect. `status`, `check` and `analyze`
+  count the open defects. A malformed log is refused by the defect commands,
+  is an error at check's verify stage and a warning elsewhere.
+- Method: `implement` takes a range (`T1-T45`) on one authorization and runs
+  to its end. Tests run at three levels: the task's own test during
+  development, the capability's tests at the end of its tasks, and the whole
+  suite once before the run closes. Only a regression, a task's own test that
+  still fails after two planned fixes, or a wrong spec stops the run. The run
+  closes with a triage report: each failure is recorded as a defect and the
+  operator decides it. The Spec Author proposes capabilities as units of
+  coherent functional purpose, confirmed at the spec gate.
+- Upgrade: a design without `Test component:` keeps working; `check` warns and
+  the run skips the component checkpoints. No spec needs editing.
+- Moved to a follow-up change: a scripted run plan, a baseline of tests that
+  passed before the run, and defects that block results approval and archive.
+- Verification: a strong read-only Verifier subagent ran two rounds. Round 1
+  found two untested or undecided defect-log cases, closed by amendment A1;
+  round 2 passed. The change was built with its own discipline: each task ran
+  its own test, each capability its tests at its checkpoint, and the full
+  suite ran once per run.
+- Archived with the pinned 0.16.0 tool, so its known gaps were copied into
+  both touched capabilities; a follow-up change will route them.
+- Published on the `v1` branch together with 0.17.0 and 0.18.0, in the same
+  PR; not merged into `main` yet.
+
 ## 0.18.0 — 2026-10-26
 
 Change 0004-archive-gap-routing (a mini change, found by the Steward reviews

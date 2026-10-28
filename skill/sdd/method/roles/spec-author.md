@@ -16,6 +16,11 @@ a product decision the operator hasn't made.
 
 - **Intent** in the operator's words: who it's for, the problem, the outcome.
 - **Scope**: an explicit In and Out. The Out list is what stops scope creep.
+- **Choose the capabilities.** A capability is a unit of coherent functional
+  purpose (for example checkout, catalog or accounts), small enough to test
+  as one component: its prefix selects its tests at a component checkpoint.
+  Propose the capabilities the change needs, each `name=PREFIX`; the operator
+  confirms them at the spec gate.
 - **Check the living spec first.** Read `specs/capabilities/` for the
   capability. Reuse its prefix. If a behavior there changes, restate that
   requirement in full as `[MODIFIED]`. If it goes away, use `[REMOVED]` with a

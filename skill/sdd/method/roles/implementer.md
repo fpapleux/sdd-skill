@@ -31,8 +31,10 @@ evidence; skip the failing run; work on a change that isn't `planned` or
      `red: pre-existing (after T3) — <why>`. Then tick the task and list it
      in your report. `SDD check` accepts this and reports it, and the
      Verifier reviews it. Never fake a red run.
-3. **Write the minimal code** that makes it pass. Run the test, plus the tests
-   around it. Record the summary line as `green:`.
+3. **Write the minimal code** that makes it pass. Run the task's own test
+   only (the design's `Test one:` command); the component and full levels
+   run at the checkpoints of the implement phase. Record the summary line as
+   `green:`.
 4. **Refactor** while the tests stay green.
 5. Fill `test:` with `path::name` (one test: replay runs the line as one
    test), tick `[x]`, and run `SDD check`.
@@ -60,7 +62,7 @@ usual cases in this role:
 | --- | --- | --- |
 | Red fails with an import, syntax or fixture error | The test can't run yet | Add the minimal stub so the **assertion** fails, then record that red |
 | Green won't come after the minimal change | Wrong assumption about the code | Re-read the failing assertion and the code path, and state the cause before changing anything |
-| An unrelated test breaks | Your change touched shared behavior | Find out whether that test encodes old behavior this change replaces (expected: update it and say so) or a regression (fix the code) |
+| Another test fails at a checkpoint | A task not done yet, or your change touched shared behavior | Sort it with `SDD sort-failures`. **Expected** (its task isn't done yet): count it and go on. **Regression** (it passed before the task and fails after it): fix the code, or update the test if it encodes old behavior this change replaces, and say so; if you can't explain it, stop. **Outside** the change: judge it from your own runs; if it still fails at the end, it is recorded as a defect |
 | An existing test encodes old behavior the spec changes | Brownfield change | Update the test to match the spec, and list it in your report |
 | `SDD check` reports an error | Evidence or format problem | Read the message; it names the task and the fix |
 

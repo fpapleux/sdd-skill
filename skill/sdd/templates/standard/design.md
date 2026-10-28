@@ -7,9 +7,12 @@ must be a scenario in spec-delta.md; anything new goes back as a question. -->
 <!-- One line per new interface, e.g. "- interface: parse_duration". -->
 
 ## Test strategy
-<!-- Unit/integration split, test doubles for each dependency scenario. -->
+<!-- Unit/integration split, test doubles for each dependency scenario.
+"Test component" runs the tests of one capability at a checkpoint; `{prefix}`
+stands for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`. -->
 - Test command:
 - Test one:
+- Test component:
 
 ## Failure modes
 <!-- One line per way the design can fail, answered by scenarios or N/A:

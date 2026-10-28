@@ -160,6 +160,8 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD use <change-id>` | Switch the active change |
 | `SDD replay --base <rev>` | Rerun each ticked task's test at the base revision and now; report each as confirmed or a mismatch. Needs git and a `Test one:` line. |
 | `SDD mutate` | Run the planned `## Mutations`; report each as caught, survived or invalid. Needs git and a `Test one:` line. |
+| `SDD sort-failures <file> [--change <id>]` | Sort failing test names (one per line) into `regression` (a ticked task plans its scenario), `expected` (the change's scenario, task not done) and `outside`, then a `sorted:` line. Writes nothing. Exit 1 = a regression. |
+| `SDD defect add\|decide\|close` | The project's defect log, `specs/defects.md`. `add --test <name> --severity critical\|major\|minor [--capability <PREFIX>]` records an open, undecided defect for a failing test. `decide D<n> fix-now\|later\|wont-fix --evidence "<the operator's words>"` records the operator's decision. `close D<n> --evidence "…"` closes a decided defect with what fixed it, or why it is closed. |
 
 All take `--change <id>` to target a change other than the active one, where
 relevant.
