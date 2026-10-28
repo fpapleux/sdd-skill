@@ -9,11 +9,17 @@ same way from Claude Code, Codex, a git hook or a terminal.
     python3 sdd.py new parse-duration --title "Parse durations" --capability duration=DUR
     python3 sdd.py status [--json]
     python3 sdd.py check [--stage spec|plan|implement|verify]
+    python3 sdd.py analyze [--change ID] [--json]
+    python3 sdd.py next [--change ID]
     python3 sdd.py approve plan --evidence "Operator in chat: 'approve'"
     python3 sdd.py advance implementing
     python3 sdd.py archive
     python3 sdd.py next-req DUR
     python3 sdd.py use 0002-other-change
+    python3 sdd.py sort-failures failed.txt
+    python3 sdd.py defect add --test test_REQ_DUR_001_S1_parses --severity major
+    python3 sdd.py defect decide D1 fix-now --evidence "Operator in chat: 'fix it now'"
+    python3 sdd.py defect close D1 --evidence "T4 green: 1 passed"
 """
 
 from __future__ import annotations
@@ -107,6 +113,14 @@ INDEPENDENT_RUNNERS = ("fresh session", "subagent (strong)")  # at production an
 REQ_HEAD = re.compile(
     r"^### (REQ-([A-Z][A-Z0-9]{1,5})-(\d{3,}))(?:\s+\[(MODIFIED|REMOVED)\])?\s*(.*)$")
 REQ_TOKEN = re.compile(r"REQ-([A-Z][A-Z0-9]{1,5})-(\d{3,})")
+FENCE = re.compile(r"^\s*(```|~~~)")
+BULLET = re.compile(r"^\s*[-*] ")
+FM_ENTRY = re.compile(r"^(FM(\d+)|None)(?=[ :—]|$)")
+INTERFACE_LINE = re.compile(r"^\s*[-*]\s+interface\s*:(.*)$", re.I)
+CONTRACT_ENTRY = re.compile(r"^###(?!#)(.*)$")
+CLAUSE_WORD = re.compile(r"[A-Za-z]{5,}")
+LETTERS = re.compile(r"[A-Za-z]+")
+NA_OUTCOME = re.compile(r"^N/A\s*[:—]\s*(.*)$", re.I)
 SCENARIO_REF = re.compile(r"REQ-[A-Z][A-Z0-9]{1,5}-\d{3,}\.[A-Z]\d+")
 TASK_LINE = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
 TASK_ID = re.compile(r"^(T\d+)\b(.*)$")
@@ -236,6 +250,20 @@ def change_text(path: Path) -> str:
 
 def test_command(clean_text: str) -> str:
     match = re.search(r"Test command\s*:[ \t]*(.*)", clean_text)
+    return match.group(1).strip().strip("`").strip() if match else ""
+
+
+def design_text(path: Path) -> str:
+    """The design a rule reads: design.md of a standard change, the Design notes of a mini one."""
+    if read_front_matter(path.read_text()).get("size") == "standard":
+        design = path.parent / "design.md"
+        return strip_comments(design.read_text()) if design.exists() else ""
+    return sections(strip_comments(path.read_text())).get("Design notes", "")
+
+
+def test_component(design: str) -> str:
+    """The design's component test command template ("" when absent), for the method and later tools."""
+    match = re.search(r"^\s*[-*]\s*Test component\s*:[ \t]*(.*)$", design, re.M)
     return match.group(1).strip().strip("`").strip() if match else ""
 
 
@@ -781,13 +809,27 @@ class Report:
         self.open_questions = 0
         self.critic = []  # what a gate still needs from the Spec Critic
         self.counts = {}
+        self.reqs = []  # the change's parsed requirements
+        self.design_errors = []  # errors from the design rules (REQ-ANL-002 to REQ-ANL-005)
+        self.round_errors = []  # errors about the Critic rounds (the Clarifications section)
+        self.defects = {"open": 0, "critical": 0, "undecided": 0}  # specs/defects.md (REQ-DEF-004); None: invalid
 
     @property
     def ok(self):
         return not self.errors
 
-    def render(self) -> str:
-        out = [f"check {self.change_id} (stage: {self.stage}, assurance: {self.level})"]
+    def round_error(self, message):
+        """An error about a Critic round: also kept in round_errors."""
+        self.errors.append(message)
+        self.round_errors.append(message)
+
+    def design_error(self, message):
+        """An error from the design rules (REQ-ANL-002 to REQ-ANL-005): also kept in design_errors."""
+        self.errors.append(message)
+        self.design_errors.append(message)
+
+    def render(self, head=None, scenarios=False) -> str:
+        out = [head or f"check {self.change_id} (stage: {self.stage}, assurance: {self.level})"]
         if self.errors:
             out.append(f"errors ({len(self.errors)}):")
             out += [f"  - {e}" for e in self.errors]
@@ -800,6 +842,11 @@ class Report:
         if self.open_questions:
             plural = "s" if self.open_questions != 1 else ""
             out.append(f"{self.open_questions} open question{plural} ([NEEDS CLARIFICATION])")
+        if scenarios:
+            sc = self.counts["scenarios"]
+            out.append(f"scenarios: {sc['happy']} happy, {sc['negative']} negative, {sc['boundary']} boundary")
+        if defect_line(self.defects):
+            out.append(defect_line(self.defects))
         out.append("result: " + ("OK" if self.ok else "FAIL"))
         return "\n".join(out)
 
@@ -812,6 +859,15 @@ def auto_stage(status: str, has_tasks: bool) -> str:
     if status in ("verifying", "verified"):
         return "verify"
     return "plan"
+
+
+def spec_edited_since_approval(fm: dict, text: str) -> bool:
+    """Whether the locked sections no longer match the fingerprint recorded when the spec was approved
+    (a blocked change counts at the status it was blocked from; an abandoned one is never locked)."""
+    status = fm.get("status", "draft")
+    effective = fm.get("blocked_from", "draft") if status == "blocked" else status
+    locked = fm.get("spec_hash")
+    return bool(locked and effective not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked)
 
 
 def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
@@ -851,8 +907,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if project.constitution_state()["changed"]:
         err(f"{CONSTITUTION_ERROR}: review the edits, then sdd approve (constitution); "
             "the gates refuse until then")
-    locked = fm.get("spec_hash")
-    if locked and effective not in UNLOCKED_STATUSES | {"abandoned"} and spec_hash(text) != locked:
+    if spec_edited_since_approval(fm, text):
         err(f"{LOCK_ERROR} (Intent, Defect, Scope, Requirements or Known gaps): log it under "
             "## Amendments and get the operator's approval (sdd amend)")
 
@@ -867,6 +922,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     if "Requirements" not in secs:
         err("missing '## Requirements' section")
     reqs, req_problems = parse_requirements(secs.get("Requirements", ""))
+    report.reqs = reqs
     for problem in req_problems:
         err(problem)
     if not reqs:
@@ -935,6 +991,10 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
     scenario_refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
     if STAGES.index(stage) >= STAGES.index("plan"):
         check_plan(clean, tasks, scenario_refs, err, warn)
+        check_component_command(design_text(path), err, warn)
+        view = design_view(path)
+        if view is not None:  # a standard change
+            check_contracts(view, report.design_error, warn)
     for task in tasks:
         if task["done"]:
             check_evidence(task, err, warn)
@@ -960,7 +1020,7 @@ def analyze(project: Project, path: Path, stage: str = "auto") -> Report:
              "trim, or split into smaller changes")
     check_mutations(parse_mutations(secs.get("Mutations", "")), set(scenario_refs), err)
     rounds = parse_rounds(secs.get("Clarifications", ""))
-    unanswered = check_rounds(rounds, level, {r.id for r in reqs}, err, warn)
+    unanswered = check_rounds(rounds, level, {r.id for r in reqs}, report.round_error, warn)
     report.open_questions = clean.count("[NEEDS CLARIFICATION") + unanswered
     report.critic = critic_gate_errors(reqs, rounds, fm.get("size", "mini"), level)
 
@@ -1138,6 +1198,26 @@ def check_evidence(task, err, warn):
         warn(f"{tid}: red looks like a setup error, not a failing assertion ('{red}')")
 
 
+def check_component_command(design: str, err, warn) -> None:
+    """The design's `- Test component:` line: one per design, with {prefix} and closed quotes."""
+    lines = re.findall(r"^\s*[-*]\s*Test component\s*:[ \t]*(.*)$", design, re.M)
+    if len(lines) > 1:
+        err('the design has more than one "Test component:" line: keep one')
+        return
+    command = lines[0].strip().strip("`").strip() if lines else ""
+    if not command:
+        warn('the design has no "Test component:" line (or it is empty): '
+             "the component checkpoints will be skipped")
+        return
+    if "{prefix}" not in command:
+        err('the "Test component:" command has no {prefix}: write where the capability\'s requirement '
+            'prefix goes, e.g. "- Test component: `python3 -m unittest -k REQ_{prefix}_`"')
+    try:
+        shlex.split(command)
+    except ValueError:
+        err(f'the "Test component:" command has a quote that is not closed: {command}')
+
+
 def check_plan(clean, tasks, scenario_refs, err, warn):
     if not test_command(clean):
         warn("no 'Test command:' line in the design; the Implementer and Verifier need it")
@@ -1250,7 +1330,7 @@ def next_step_standard(status, counts, report):
             return "sdd tasks"
         if not report.ok:
             return "fix the check errors (sdd.py check), then ask for plan approval"
-        return "awaiting operator approval of the plan: sdd approve"
+        return "sdd analyze, then ask for plan approval"
     return None
 
 
@@ -1395,6 +1475,8 @@ def cmd_status(project: Project, args) -> int:
         data["next"] = next_step(project, fm, report)
     else:
         data["next"] = "sdd quick \"<idea>\" (or sdd propose \"<idea>\")"
+    log = read_defect_log(project)  # the log belongs to the project, not to a change
+    data["defects"] = defect_counts(log)
     if args.json:
         print(json.dumps(data, indent=2))
         return 0
@@ -1419,6 +1501,10 @@ def cmd_status(project: Project, args) -> int:
               f" · {change['open_questions']} open questions")
     else:
         print("active change: none")
+    if log.problem:
+        print(f"defect log: {log.problem}")
+    elif defect_line(data["defects"]):
+        print(defect_line(data["defects"]))
     if data["capabilities"]:
         print("living spec: " + ", ".join(
             f"{c['name']} ({c['prefix']}, {c['requirements']} requirement{'' if c['requirements'] == 1 else 's'})"
@@ -1430,16 +1516,501 @@ def cmd_status(project: Project, args) -> int:
     return 0
 
 
+def report_json(report: Report) -> dict:
+    return {"ok": report.ok, "stage": report.stage, "errors": report.errors,
+            "warnings": report.warnings, "coverage": report.coverage,
+            "open_questions": report.open_questions, **report.counts, "defects": report.defects}
+
+
+def defect_findings(project: Project, report: Report) -> None:
+    """The defect log's counts on the report, and its problem as an error at verify, else a warning
+    (REQ-DEF-004, REQ-DEF-006); analyze() itself, which the gates call, never reads the log."""
+    log = read_defect_log(project)
+    report.defects = defect_counts(log)
+    if log.problem:
+        (report.errors if report.stage == "verify" else report.warnings).append(log.problem)
+
+
 def cmd_check(project: Project, args) -> int:
     project.require_init()
     report = analyze(project, project.current(args.change), args.stage)
+    defect_findings(project, report)
     if args.json:
-        print(json.dumps({"ok": report.ok, "stage": report.stage, "errors": report.errors,
-                          "warnings": report.warnings, "coverage": report.coverage,
-                          "open_questions": report.open_questions, **report.counts}, indent=2))
+        print(json.dumps(report_json(report), indent=2))
     else:
         print(report.render())
     return 0 if report.ok else 1
+
+
+def design_view(path: Path):
+    """design.md without comments, fenced code blanked line by line; None for a mini change."""
+    if read_front_matter(path.read_text()).get("size") != "standard":
+        return None
+    path = path.parent / "design.md"
+    if not path.exists():
+        return ""
+    text = strip_comments(path.read_text())
+    out, fence = [], None
+    for line in text.splitlines():
+        if FENCE.match(line):
+            marker = FENCE.match(line).group(1)[0]
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            out.append("")
+        else:
+            out.append("" if fence else line)
+    return "\n".join(out)
+
+
+def design_rules_apply(fm: dict) -> bool:
+    """A standard change at designed or later; blocked counts as blocked_from, abandoned never."""
+    if fm.get("size") != "standard":
+        return False
+    status = fm.get("status", "draft")
+    status = fm.get("blocked_from") if status == "blocked" else status
+    if status == "abandoned":
+        return False
+    return status in STATUS_ORDER and STATUS_ORDER.index(status) >= STATUS_ORDER.index("designed")
+
+
+def design_findings(project: Project, path: Path, report: Report, err, warn):
+    """The design rules of a standard change at designed or later: trace, failure modes, presence."""
+    fm = read_front_matter(path.read_text())
+    if not design_rules_apply(fm):
+        return
+    view = design_view(path) or ""
+    known_ids = known_requirement_ids(project, report.reqs)
+    check_design_trace(view, report, known_ids, err, warn)
+    check_failure_modes(view, known_ids, counting_scenarios(project, report.reqs), err)
+    level = report.level if report.level in LEVELS else project.level()  # as analyze() falls back
+    check_failure_modes_present(view, level, err, warn)
+
+
+def known_requirement_ids(project: Project, reqs: list) -> set:
+    """Every requirement that exists: the change's (any tag) and the living spec's."""
+    return {r.id for r in reqs} | {rid for info in project.registry().values() for rid in info["reqs"]}
+
+
+def living_scenarios(project: Project) -> dict:
+    """REQ ID -> scenario IDs, parsed from each capability's ## Requirements."""
+    result = {}
+    for info in project.registry().values():
+        text = strip_comments(info["path"].read_text())
+        reqs, _ = parse_requirements(sections(text).get("Requirements", ""))
+        for req in reqs:
+            result[req.id] = [s["id"] for s in req.scenarios]
+    return result
+
+
+def counting_scenarios(project: Project, reqs: list) -> set:
+    """Scenario references that count: the change's (not removed), plus the living spec's for
+    requirements the change neither modifies nor removes."""
+    modified_ids = {r.id for r in reqs if r.tag == "MODIFIED"}
+    removed_ids = {r.id for r in reqs if r.tag == "REMOVED"}
+    result = {f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios}
+    for rid, ids in living_scenarios(project).items():
+        if rid in modified_ids or rid in removed_ids:
+            continue
+        result |= {f"{rid}.{i}" for i in ids}
+    return result
+
+
+def check_design_trace(view: str, report: Report, known_ids: set, err, warn):
+    """REQ-ANL-002: design.md names only requirements that exist, and names every one of the change's."""
+    named = list(dict.fromkeys(m.group(0) for m in REQ_TOKEN.finditer(view)))
+    for rid in named:
+        if rid not in known_ids:
+            err(f"design.md names {rid}, which doesn't exist (in this change or the living spec)")
+    for req in report.reqs:
+        if req.id not in named and req.tag != "REMOVED":
+            warn(f"{req.id} is not named in design.md: trace each component to its requirements")
+
+
+def failure_mode_bullets(view: str) -> list:
+    """The text of each bullet under design.md's ## Failure modes, marker and outer spaces removed."""
+    body = sections(view).get("Failure modes", "")
+    return [line[BULLET.match(line).end():].strip() for line in body.splitlines() if BULLET.match(line)]
+
+
+def check_failure_modes(view: str, known_ids: set, scenario_ids: set, err):
+    """REQ-ANL-003: each bullet under ## Failure modes is a well-formed entry."""
+    bullets = failure_mode_bullets(view)
+    entries, nones = [], []
+    for text in bullets:
+        m = FM_ENTRY.match(text)
+        if not m:
+            err(f'Failure modes: "{text}" is neither a failure-mode entry nor a None line')
+        elif m.group(2):
+            entries.append(text)
+            check_fm_entry(m.group(1), text[m.end():], known_ids, scenario_ids, err)
+        else:
+            nones.append(text)
+            check_none_line(text[m.end():], err)
+    if nones and (entries or len(nones) > 1):
+        err("Failure modes: a None line can't sit next to entries")
+    check_fm_numbers(bullets, err)
+
+
+def failure_mode_entries(view: str) -> list:
+    """The bullets under ## Failure modes that are entries (FM<n> or None first), well formed or not."""
+    return [text for text in failure_mode_bullets(view) if FM_ENTRY.match(text)]
+
+
+def check_failure_modes_present(view: str, level: str, err, warn):
+    """REQ-ANL-004: design.md has an entry under ## Failure modes; an error at production and above,
+    a warning below."""
+    if failure_mode_entries(view):
+        return
+    emit = err if LEVELS.index(level) >= LEVELS.index("production") else warn
+    emit('design.md has no failure modes: list each as "- FM<n> <what fails> → <scenario>", '
+         'or write "- None — <reason>"')
+
+
+def check_fm_numbers(bullets: list, err):
+    """An FM number is used once; numbers compare as integers, and each repeat is reported once."""
+    seen_numbers, reported = set(), set()
+    for text in bullets:
+        m = FM_ENTRY.match(text)
+        if not (m and m.group(2)):
+            continue
+        number = int(m.group(2))
+        if number in seen_numbers:
+            if number not in reported:
+                err(f"Failure modes: FM{number} is repeated")
+                reported.add(number)
+        seen_numbers.add(number)
+
+
+def check_none_line(body: str, err):
+    """A None line: ':' or '—' then a reason of at least three words."""
+    if body.strip() and not re.match(r"\s*[:—]", body):
+        err('Failure modes: the None line needs ":" or "—" before its reason')
+        return
+    none_reason = re.sub(r"^\s*[:—]\s*", "", body)
+    if len(none_reason.split()) < 3:
+        err("Failure modes: the None line needs a reason of at least 3 words")
+
+
+def check_fm_entry(label: str, body: str, known_ids: set, scenario_ids: set, err):
+    """One FM<n> entry: its body (after the label) holds text, an arrow and an outcome."""
+    if "→" not in body:
+        err(f"Failure modes: {label} has no outcome (end the line with → <scenarios> or → N/A: <reason>)")
+        return
+    text, outcome = (part.strip() for part in body.rsplit("→", 1))
+    if not re.sub(r"^[:—]\s*", "", text):
+        err(f"Failure modes: {label} has no text before its arrow")
+        return
+    na = NA_OUTCOME.match(outcome)
+    if na:
+        na_reason = na.group(1).strip()
+        if len(na_reason.split()) < 3:
+            err(f"Failure modes: {label}'s N/A needs a real reason (at least 3 words)")
+        return
+    refs = [part.strip() for part in outcome.split(",")]
+    for part in refs:
+        if not SCENARIO_REF.fullmatch(part):
+            err(f"Failure modes: {label}'s outcome is neither scenario references nor N/A: {outcome}")
+            return
+    check_fm_refs(label, refs, known_ids, scenario_ids, err)
+
+
+def check_fm_refs(label: str, refs: list, known_ids: set, scenario_ids: set, err):
+    """Each reference names a scenario that counts; one whose requirement doesn't exist is left to
+    the design trace (REQ-ANL-002), so it is reported once."""
+    for ref in refs:
+        if ref.split(".")[0] not in known_ids:
+            continue
+        if ref not in scenario_ids:
+            err(f"Failure modes: {label} names {ref}, which doesn't exist: a failure mode the spec "
+                "doesn't cover needs an amendment (sdd amend)")
+
+
+def split_contracts(view: str) -> tuple:
+    """(the view's lines outside ## Contracts, the lines inside it)."""
+    outside, inside, current = [], [], None
+    for line in view.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+        (inside if current == "Contracts" else outside).append(line)
+    return outside, inside
+
+
+def contract_name(name: str) -> str:
+    """A name as written, trimmed of spaces, then of surrounding backticks."""
+    return name.strip().strip("`")
+
+
+def interface_names(lines: list) -> list:
+    """The name on each interface line, in order ("" for a line with no name)."""
+    return [contract_name(m.group(1)) for m in map(INTERFACE_LINE.match, lines) if m]
+
+
+def contract_entries(lines: list) -> list:
+    """The name of each ### entry, in order ("" for an entry with no name)."""
+    return [contract_name(m.group(1)) for m in map(CONTRACT_ENTRY.match, lines) if m]
+
+
+def check_contracts(view: str, err, warn):
+    """REQ-ANL-005: each interface listed outside ## Contracts has a ### entry inside it."""
+    outside, inside = split_contracts(view)
+    interfaces, entries = interface_names(outside), contract_entries(inside)
+    for name in interfaces:
+        if not name:
+            err("an interface line has no name")
+    for name in entries:
+        if not name:
+            err("a contract entry under ## Contracts has no name")
+    for name in dict.fromkeys(n for n in interfaces if n):
+        if name not in entries:
+            err(f'the interface "{name}" has no contract entry (add "### {name}" under ## Contracts)')
+    seen_entries = set()
+    for name in filter(None, entries):
+        if name in seen_entries:
+            err(f'the contract entry "{name}" is repeated')
+        seen_entries.add(name)
+    listed = set(interfaces)
+    for name in dict.fromkeys(n for n in entries if n):
+        if name not in listed:
+            warn(f'the contract entry "{name}" has no interface line')
+
+
+def clause_words(clause: str) -> set:
+    """A clause's words: runs of five or more ASCII letters, lowercased."""
+    return {word.lower() for word in CLAUSE_WORD.findall(clause)}
+
+
+def distinctive_words(clauses: list) -> list:
+    """For each clause, the words no other clause of the statement has."""
+    words = [clause_words(clause) for clause in clauses]
+    return [own - set().union(*(other for j, other in enumerate(words) if j != i))
+            for i, own in enumerate(words)]
+
+
+def scenario_words(req) -> set:
+    """The lowercased letter runs of the Given, When and Then cells of the requirement's scenarios."""
+    return {word.lower() for s in req.scenarios for cell in (s["given"], s["when"], s["then"])
+            for word in LETTERS.findall(cell)}
+
+
+def check_requirement_clauses(req, warn):
+    """REQ-ANL-006: warn about each clause of the statement whose distinctive words no scenario has."""
+    clauses = [c.strip() for c in req.text.split(";") if c.strip()]
+    if len(clauses) < 2:
+        return
+    mentioned = scenario_words(req)
+    for clause, distinct in zip(clauses, distinctive_words(clauses)):
+        if distinct and not distinct & mentioned:
+            shown = clause[:-1] if clause.endswith(".") else clause
+            warn(f'{req.id}: no scenario exercises the clause "{shown}" (heuristic)')
+
+
+def check_balance(report: Report, warn):
+    """REQ-ANL-007: warn when happy scenarios outnumber every non-happy one (boundary included)."""
+    sc = report.counts["scenarios"]
+    happy, negative, boundary, level = sc["happy"], sc["negative"], sc["boundary"], report.level
+    if happy > negative + boundary and level != "prototype":
+        warn(f"{happy} happy scenarios outweigh {negative + boundary} non-happy ones")
+
+
+def cross_artifact(project: Project, path: Path, report: Report):
+    """Analyze-only findings, appended to check's report; design errors also land in design_errors."""
+    design_findings(project, path, report, report.design_error, report.warnings.append)
+    for req in (r for r in report.reqs if r.tag != "REMOVED"):
+        check_requirement_clauses(req, report.warnings.append)
+    check_balance(report, report.warnings.append)
+
+
+def full_analysis(project: Project, path: Path) -> Report:
+    """check's plan-stage report; the cross-artifact findings are appended to it."""
+    report = analyze(project, path, "plan")
+    cross_artifact(project, path, report)
+    return report
+
+
+def render_analysis(report: Report) -> str:
+    """analyze's text report: check's, headed for analyze, with the scenarios line."""
+    return report.render(head=f"analyze {report.change_id} (assurance: {report.level})", scenarios=True)
+
+
+def cmd_analyze(project: Project, args) -> int:
+    project.require_init()
+    report = full_analysis(project, project.current(args.change))
+    defect_findings(project, report)
+    if args.json:
+        print(json.dumps(report_json(report), indent=2))
+    else:
+        print(render_analysis(report))
+    return 1 if report.errors else 0
+
+
+GATE_LINES = {
+    "spec": "gate: the operator approves the spec (sdd approve spec)",
+    "plan": "gate: the operator approves the plan (sdd approve plan)",
+    "results": "gate: the operator approves the results (sdd approve results)",
+    "review": "gate: the operator reviews the verification, then sdd archive",
+    "gaps": "gate: the operator decides on the gaps (amend or accept), then sdd verify",
+    "amend": "gate: the operator approves the amendment (sdd approve amend)",
+    "none": "gate: none",
+}
+
+
+def next_lines(project: Project, path: Path) -> list:
+    """What sdd.py next prints: the numbered steps to the next gate, then the gate line."""
+    fm = read_front_matter(path.read_text())
+    early = early_lines(project, path, fm)
+    if early is not None:
+        return early
+    steps, gate = next_plan(project, path, fm)
+    return [f"{n}. sdd {step}" for n, step in enumerate(steps, 1)] + [GATE_LINES[gate]]
+
+
+def amendment_logged(whole: str) -> bool:
+    """Whether an edit is logged under ## Amendments and not yet approved: more entries than amend approvals."""
+    logged = sum(1 for line in sections(strip_comments(whole)).get("Amendments", "").splitlines()
+                 if AMENDMENT_ENTRY.match(line))
+    return logged > approvals(whole).count("amend")
+
+
+def early_lines(project: Project, path: Path, fm: dict):
+    """The one line (or amend step and gate) that replaces everything else, or None, in design.md's
+    order: an abandoned change, a changed constitution, an edited approved spec (its amend gate alone
+    once the edit is logged), a blocked change."""
+    if fm.get("status") == "abandoned":
+        return ["nothing to run: the change is abandoned"]
+    changed = project.constitution_state()["changed"]
+    if changed:
+        return [f"{CONSTITUTION_ERROR}: review it, then sdd approve (constitution)"]
+    whole = change_text(path)
+    if spec_edited_since_approval(fm, whole):
+        if not amendment_logged(whole):
+            return ["1. sdd amend", GATE_LINES["amend"]]
+        return [GATE_LINES["amend"]]
+    if fm.get("status") == "blocked":
+        return ["blocked: resolve the blocker, then sdd status"]
+    return None
+
+
+def next_plan(project: Project, path: Path, fm: dict) -> tuple:
+    """(steps, gate) by size and status, as in design.md's table for sdd.py next."""
+    status, size = fm.get("status", "draft"), fm.get("size", "mini")
+    if size == "standard" and status in ("draft", "clarifying"):
+        return spec_stage_steps(project, path), "spec"
+    if size == "standard" and status in ("spec-approved", "designed"):
+        return plan_stage_steps(project, path, status), "plan"
+    if size == "mini" and status == "draft":
+        return mini_draft_steps(project, path), "plan"
+    if status in ("planned", "implementing"):
+        return implement_stage_steps(status, path), results_gate(size)
+    if status == "verifying":
+        return verify_stage_steps(path), verify_stage_gate(path, size)
+    if status == "verified" and size == "mini":
+        return [], "review"
+    if status == "verified":
+        return ["archive"], "none"
+    raise SddError(f'cannot list steps: unknown status "{status}"')
+
+
+def results_gate(size: str) -> str:
+    """The gate after verify: the operator approves the results (standard) or reviews them (mini)."""
+    return "results" if size == "standard" else "review"
+
+
+def implement_stage_steps(status: str, path: Path) -> list:
+    """A change between the plan gate and its results gate: implement while it is planned or a task
+    is unticked, then verify."""
+    tasks, _ = parse_tasks(sections(strip_comments(change_text(path))).get("Tasks", ""))
+    unticked = sum(1 for task in tasks if not task["done"])
+    steps = ["implement"] if status == "planned" or unticked else []
+    return steps + ["verify"]
+
+
+def verifier_verdict(path: Path):
+    """(word, rest) of the change's latest Verifier verdict, or None."""
+    return latest_verdict(sections(strip_comments(change_text(path))).get("Verification", ""))
+
+
+def verify_stage_steps(path: Path) -> list:
+    """A change at verifying: verify until the Verifier has written a verdict."""
+    return ["verify"] if verifier_verdict(path) is None else []
+
+
+def verify_stage_gate(path: Path, size: str) -> str:
+    """The results gate, or the gaps gate when the latest verdict is not PASS."""
+    found = verifier_verdict(path)
+    return "gaps" if found and found[0].upper() != "PASS" else results_gate(size)
+
+
+def spec_stage_steps(project: Project, path: Path) -> list:
+    """A standard change before the spec gate: specify while the spec has a problem, then clarify
+    while it applies."""
+    report = analyze(project, path, "spec")
+    steps = []
+    if spec_needs_work(report):
+        steps.append("specify")
+    if clarify_applies(report):
+        steps.append("clarify")
+    return steps
+
+
+def spec_needs_work(report: Report) -> bool:
+    """No requirements yet, or a spec error that is not about a Critic round: specify fixes it."""
+    return report.counts["requirements"] == 0 or bool(spec_errors_outside_rounds(report))
+
+
+def mini_draft_steps(project: Project, path: Path) -> list:
+    """A mini draft, which has one gate (plan): specify, tasks, then clarify, each while it applies."""
+    report = analyze(project, path, "spec")
+    wanted = [
+        ("specify", spec_needs_work(report)),
+        ("tasks", needs_tasks(project, path, report)),
+        ("clarify", clarify_applies(report)),
+    ]
+    return [step for step, applies in wanted if applies]
+
+
+def needs_tasks(project: Project, path: Path, report: Report) -> bool:
+    """No tasks yet, or a plan-stage error that the spec stage does not report (tasks fixes those)."""
+    return not report.counts["tasks"]["total"] or bool(plan_errors_only(project, path, report))
+
+
+def plan_errors_only(project: Project, path: Path, spec_report: Report) -> list:
+    """The plan-stage errors the spec stage does not report, other than the design errors (REQ-ANL-002 to 005)."""
+    full = full_analysis(project, path)
+    return [error for error in full.errors if error not in spec_report.errors and error not in full.design_errors]
+
+
+def spec_errors_outside_rounds(report: Report) -> list:
+    """The spec-stage errors that are not about a Critic round (those are for clarify to fix)."""
+    return [error for error in report.errors if error not in report.round_errors]
+
+
+def clarify_applies(report: Report) -> bool:
+    """Whether the Spec Critic's round still has work: a gate error, an open question or a finding."""
+    return bool(report.critic or report.open_questions)
+
+
+def plan_stage_steps(project: Project, path: Path, status: str) -> list:
+    """A standard change between the spec and plan gates: design, tasks, analyze; at designed, design
+    only while a design rule (REQ-ANL-002 to REQ-ANL-005) reports an error, tasks only while there
+    are none or a plan error (other than a design error) is reported."""
+    if status == "spec-approved":
+        return ["design", "tasks", "analyze"]
+    report = full_analysis(project, path)
+    steps = []
+    if report.design_errors:
+        steps.append("design")
+    if needs_tasks(project, path, analyze(project, path, "spec")):
+        steps.append("tasks")
+    return steps + ["analyze"]
+
+
+def cmd_next(project: Project, args) -> int:
+    project.require_init()
+    for line in next_lines(project, project.current(args.change)):
+        print(line)
+    return 0
 
 
 def cmd_approve(project: Project, args) -> int:
@@ -1514,10 +2085,10 @@ def cmd_approve(project: Project, args) -> int:
                 raise SddError(f"plan approval comes after design: the change is '{status}', "
                                "not 'designed' (sdd.py advance designed)")
             raise SddError(f"change is '{status}': plan approval applies to a draft change")
-        report = analyze(project, path, "plan")
-        if not report.ok:
-            print(report.render())
-            raise SddError("plan approval refused: fix the check errors first")
+        report = full_analysis(project, path)
+        if report.errors:
+            print(render_analysis(report))
+            raise SddError("plan approval refused: fix the analyze errors first")
         if report.open_questions:
             raise SddError(f"plan approval refused: {report.open_questions} open question(s) "
                            "must be answered first")
@@ -1538,9 +2109,7 @@ def cmd_approve(project: Project, args) -> int:
     current = spec_hash(whole)
     if read_front_matter(text).get("spec_hash") == current:
         raise SddError("nothing to amend: the spec hasn't changed since it was last approved")
-    logged = sum(1 for line in sections(strip_comments(whole)).get("Amendments", "").splitlines()
-                 if AMENDMENT_ENTRY.match(line))
-    if logged < approvals(whole).count("amend") + 1:
+    if not amendment_logged(whole):
         raise SddError("log the amendment first under ## Amendments: "
                        "'- A<n> <date>: <reason> → <what changed>'")
     path.write_text(set_front_matter(text, "spec_hash", current))
@@ -1621,7 +2190,7 @@ def cmd_archive(project: Project, args) -> int:
     registry = project.registry()
     secs = sections(strip_comments(text))
     reqs, _ = parse_requirements(secs.get("Requirements", ""))
-    pending, actions = {}, {}
+    pending, actions, touched = {}, {}, {}
     for req in reqs:
         info = registry.get(req.prefix)
         if info is None:
@@ -1629,6 +2198,7 @@ def cmd_archive(project: Project, args) -> int:
             info = registry[req.prefix] = {"name": name, "reqs": set(),
                                            "path": project.capabilities / name / "spec.md"}
         cap_path = info["path"]
+        touched[req.prefix] = (info["name"], cap_path)  # removed requirements touch too
         if cap_path not in pending:
             pending[cap_path] = (cap_path.read_text() if cap_path.exists()
                                  else render("capability-spec.md", name=info["name"], prefix=req.prefix))
@@ -1645,9 +2215,12 @@ def cmd_archive(project: Project, args) -> int:
     gaps = [re.sub(r"^\s*[-*]\s+", "", line).strip()
             for line in secs.get("Known gaps", "").splitlines() if re.match(r"^\s*[-*]\s+\S", line)]
     gaps = [g for g in gaps if g.lower().rstrip(".") != "none"]
-    for cap_path, done in actions.items():
+    routed = [route_gap(g, touched) for g in gaps]
+    for cap_path, done in actions.items():  # per file: one spec may hold several prefixes
+        prefixes = {prefix for prefix, (_, path) in touched.items() if path == cap_path}
         head, blocks = split_capability(pending[cap_path])
-        head = insert_in_section(head, "Known gaps", [f"- {g} ({change_id})" for g in gaps])
+        head = insert_in_section(head, "Known gaps",
+                                 [f"- {text} ({change_id})" for text, to in routed if prefixes & to])
         head = insert_in_section(head, "Change history",
                                  [f"- {change_id} — {fm.get('title', '')} ({today()}): {', '.join(done)}"])
         pending[cap_path] = join_capability(head, blocks)
@@ -1666,6 +2239,24 @@ def cmd_archive(project: Project, args) -> int:
         print(f"carried {len(gaps)} known gap(s) into the living spec")
     print(f"archived {change_id} → specs/archive/{change_id}")
     return 0
+
+
+GAP_TAG = re.compile(r"^(.*\S) \(([a-z0-9-]+(?:, ?[a-z0-9-]+)*)\)(\.?)$")
+
+
+def route_gap(gap: str, touched: dict) -> tuple:
+    """(text, prefixes) of the touched capabilities a known gap is written into.
+
+    A trailing "(name, name)" tag naming touched capabilities wins and is removed (a final
+    period stays); else the touched capabilities whose requirement IDs the gap names; else all."""
+    tag = GAP_TAG.match(gap)
+    if tag:
+        names = {n.strip() for n in tag.group(2).split(",")}
+        by_name = {name: prefix for prefix, (name, _) in touched.items()}
+        if names <= set(by_name):
+            return tag.group(1) + tag.group(3), {by_name[n] for n in names}
+    named = {m for m in re.findall(r"REQ-([A-Z][A-Z0-9]{1,5})-\d{3,}", gap) if m in touched}
+    return gap, named or set(touched)
 
 
 def insert_in_section(head: str, name: str, new_lines: list) -> str:
@@ -1993,6 +2584,245 @@ def cmd_use(project: Project, args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- sort-failures
+
+def change_plan(path: Path) -> tuple:
+    """The change's scenario refs (its non-removed requirements) and its tasks, in plan order."""
+    secs = sections(strip_comments(change_text(path)))
+    reqs, _ = parse_requirements(secs.get("Requirements", ""))
+    refs = [f"{r.id}.{s['id']}" for r in reqs if r.tag != "REMOVED" for s in r.scenarios]
+    tasks, _ = parse_tasks(secs.get("Tasks", ""))
+    return refs, tasks
+
+
+def cmd_sort_failures(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    try:
+        lines = Path(args.file).read_text().splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SddError(f"cannot read {args.file}: {exc.strerror if isinstance(exc, OSError) else exc}")
+    names = list(dict.fromkeys(line.strip() for line in lines if line.strip()))  # file order, first kept
+    refs, tasks = change_plan(path)
+    counts = {"regression": 0, "expected": 0, "outside": 0}
+    for name in names:
+        found = sorted((m.start(), ref) for ref in refs for m in [scenario_pattern(ref).search(name)] if m)
+        if not found:
+            counts["outside"] += 1
+            print(f"outside: {name}")
+            continue
+        ids = [ref for _, ref in found]
+        ticked = [(ref, t) for ref in ids for t in tasks if t["done"] and ref in t["refs"]]
+        if ticked:
+            ref, task = ticked[0]
+            counts["regression"] += 1
+            print(f"regression: {name} ({ref}, {task['id']} done)")
+        else:
+            planners = [t["id"] + " not done" for t in tasks if ids[0] in t["refs"]]
+            counts["expected"] += 1
+            print(f"expected: {name} ({ids[0]}, {planners[0] if planners else 'no task'})")
+    print(f"sorted: {counts['regression']} regression, {counts['expected']} expected, "
+          f"{counts['outside']} outside the change")
+    return 1 if counts["regression"] else 0
+
+
+# ---------------------------------------------------------------- defect log
+
+DEFECT_COLUMNS = ["ID", "Status", "Severity", "Decision", "Capability", "Change", "Test", "Evidence",
+                  "Close evidence"]
+DEFECT_HEADER = "| " + " | ".join(DEFECT_COLUMNS) + " |"
+DEFECT_SEPARATOR = "| --- " * len(DEFECT_COLUMNS) + "|"
+DEFECT_STATUSES = ["open", "closed"]
+DEFECT_SEVERITIES = ["critical", "major", "minor"]
+DEFECT_DECISIONS = ["fix-now", "later", "wont-fix"]
+NAME_REQ = re.compile(r"REQ[-_]([A-Z][A-Z0-9]{1,5})[-_]\d+", re.I)
+
+
+def defect_row(cells: list) -> str:
+    """A row as written: '| ' + cells joined by ' | ' + ' |' (an empty cell is two spaces, a | is \\|)."""
+    return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
+
+
+class DefectLog:
+    """specs/defects.md as written: its text, its lines, its rows (with line numbers) and the first problem."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.exists = path.exists()
+        self.text = path.read_text() if self.exists else ""
+        self.lines = self.text.splitlines()
+        self.rows, self.problem = [], None
+        # comments blanked to as many newlines, so that line numbers stay true
+        view = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), self.text, flags=re.S)
+        self.table = [(number, line) for number, line in enumerate(view.splitlines(), 1) if line.startswith("|")]
+        for number, line in self.table[:1]:
+            if table_cells(line) != DEFECT_COLUMNS:  # table_cells trims each cell
+                self.problem = f"specs/defects.md line {number}: the header must be the cells " + \
+                    ", ".join(DEFECT_COLUMNS)
+                return
+        if len(self.table) == 1:
+            self.problem = f"specs/defects.md line {self.table[0][0]}: the header has no separator row after it"
+            return
+        for number, line in self.table[1:2]:
+            if not all(re.fullmatch(r":?-+:?", cell) for cell in table_cells(line)):
+                self.problem = f"specs/defects.md line {number}: the second table line must be a separator row"
+                return
+        for number, line in self.table[2:]:
+            cells = table_cells(line)
+            padded = cells + [""] * (len(DEFECT_COLUMNS) - len(cells))
+            row = {"line": number, "cells": cells, "id": padded[0], "status": padded[1],
+                   "severity": padded[2], "decision": padded[3], "test": padded[6]}
+            problem = self.row_problem(row)
+            first = [r["line"] for r in self.rows if r["id"] == row["id"]]
+            if not problem and first:
+                problem = f"{row['id']} is repeated (first on line {first[0]})"
+            if problem:
+                self.problem = f"specs/defects.md line {number}: {problem}"
+                break
+            self.rows.append(row)
+
+    @staticmethod
+    def row_problem(row: dict) -> str:
+        """What is wrong with a row ("" when it is valid)."""
+        if len(row["cells"]) != len(DEFECT_COLUMNS):
+            return f"a row needs {len(DEFECT_COLUMNS)} cells, found {len(row['cells'])}"
+        if not re.fullmatch(r"D\d+", row["id"]):
+            return f'the ID "{row["id"]}" is not D<n>'
+        for name, allowed in (("status", DEFECT_STATUSES), ("severity", DEFECT_SEVERITIES),
+                              ("decision", ["undecided"] + DEFECT_DECISIONS)):
+            if row[name] not in allowed:
+                return f'{name} "{row[name]}" is not {", ".join(allowed[:-1])} or {allowed[-1]}'
+        return ""
+
+
+def read_defect_log(project: Project) -> DefectLog:
+    return DefectLog(project.specs / "defects.md")
+
+
+def defect_counts(log: DefectLog):
+    """The open defects, how many critical and how many undecided; None for an invalid log (REQ-DEF-004)."""
+    if log.problem:
+        return None
+    open_rows = [r for r in log.rows if r["status"] == "open"]
+    return {"open": len(open_rows), "critical": sum(r["severity"] == "critical" for r in open_rows),
+            "undecided": sum(r["decision"] == "undecided" for r in open_rows)}
+
+
+def defect_line(counts) -> str:
+    """The text line for the open defects ("" when there are none)."""
+    if not counts or not counts["open"]:
+        return ""
+    return f"open defects: {counts['open']} ({counts['critical']} critical, {counts['undecided']} undecided)"
+
+
+def defect_capability(test: str) -> str:
+    """The first requirement prefix the test name carries, in capitals."""
+    match = NAME_REQ.search(test)
+    if not match:
+        raise SddError("the test name carries no requirement ID: name the capability with --capability <PREFIX>")
+    return match.group(1).upper()
+
+
+def cmd_defect_add(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    change_id = path.parent.name
+    if not args.test.strip():
+        raise SddError("the test name is empty")
+    capability = args.capability or defect_capability(args.test)
+    declared = parse_capabilities(read_front_matter(path.read_text()).get("capabilities", ""))
+    if capability not in project.registry() and capability not in declared:
+        raise SddError(f'capability "{capability}" is not a prefix of the living spec or of {change_id}')
+    log = read_defect_log(project)
+    if log.problem:  # an invalid log is never appended to
+        raise SddError(log.problem)
+    for r in log.rows:
+        if r["test"] == args.test and r["status"] == "open":
+            raise SddError(f"{args.test} already has an open defect: {r['id']}")
+    number = 1 + max([int(r["id"][1:]) for r in log.rows if re.fullmatch(r"D\d+", r["id"])] or [0])
+    row = defect_row([f"D{number}", "open", args.severity, "undecided", capability, change_id, args.test, "", ""])
+    table = f"{DEFECT_HEADER}\n{DEFECT_SEPARATOR}\n{row}\n"
+    ending = "" if log.text.endswith("\n") else "\n"
+    if not log.text.strip():
+        log.path.write_text(f"# Defects\n\n{table}")
+    else:  # append: the lines already written stay as they are
+        with log.path.open("a") as handle:
+            handle.write(ending + (row + "\n" if log.table else "\n" + table))
+    print(f"D{number} added ({args.severity}, {capability})")
+    return 0
+
+
+def set_cells(line: str, changes: dict) -> str:
+    """The row line with cell index → value written as ' value ' (a | as \\|) where the cell's value
+    differs; every other segment stays as written."""
+    parts = re.split(r"(?<!\\)\|", line)
+    for index, value in changes.items():
+        if parts[1 + index].strip().replace("\\|", "|") != value:
+            escaped = value.replace("|", "\\|")
+            parts[1 + index] = f" {escaped} "
+    return "|".join(parts)
+
+
+def one_line(text: str) -> str:
+    """Evidence as one cell: line breaks become spaces, surrounding spaces are removed."""
+    return re.sub(r"\r\n|\r|\n", " ", text).strip()
+
+
+def defect_lookup(project: Project, defect_id: str):
+    """The log and the row a decide or close names (REQ-DEF-002, REQ-DEF-003)."""
+    if not re.fullmatch(r"D\d+", defect_id):
+        raise SddError(f'"{defect_id}" is not a defect ID: write D<n>')
+    log = read_defect_log(project)
+    if not log.exists:
+        raise SddError("no defect is logged (specs/defects.md does not exist)")
+    if log.problem:  # an invalid log is never rewritten
+        raise SddError(log.problem)
+    for row in log.rows:
+        if row["id"] == defect_id:
+            return log, row
+    raise SddError(f"no defect {defect_id} in specs/defects.md")
+
+
+def write_cells(log: DefectLog, row: dict, changes: dict) -> None:
+    """Rewrite only the row's line, with its changed cells; every other byte of the log stays as written."""
+    with log.path.open(newline="") as handle:
+        lines = handle.read().splitlines(keepends=True)
+    old = lines[row["line"] - 1]
+    content = old.rstrip("\r\n")
+    new = set_cells(content, changes)
+    if new == content:
+        return
+    lines[row["line"] - 1] = new + old[len(content):]
+    with log.path.open("w", newline="") as handle:
+        handle.write("".join(lines))
+
+
+def cmd_defect_decide(project: Project, args) -> int:
+    project.require_init()
+    if not (args.evidence or "").strip():
+        raise SddError("a decision needs the operator's words: add --evidence \"<what they said>\"")
+    log, row = defect_lookup(project, args.id)
+    if row["status"] == "closed":
+        raise SddError(f"{args.id} is closed: its decision can't change")
+    write_cells(log, row, {3: args.decision, 7: one_line(args.evidence)})
+    print(f"{args.id}: {args.decision}")
+    return 0
+
+
+def cmd_defect_close(project: Project, args) -> int:
+    project.require_init()
+    log, row = defect_lookup(project, args.id)
+    if row["status"] == "closed":
+        raise SddError(f"{args.id} is already closed")
+    if row["decision"] == "undecided":
+        raise SddError(f"{args.id} has no decision: the operator decides first (sdd.py defect decide)")
+    if not (args.evidence or "").strip():
+        raise SddError("closing needs --evidence: what fixed the defect, or why it is closed")
+    write_cells(log, row, {1: "closed", 8: one_line(args.evidence)})
+    print(f"{args.id} closed")
+    return 0
+
+
 # ---------------------------------------------------------------- entry point
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2023,6 +2853,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--change")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_check)
+
+    p = sub.add_parser("analyze", help="check's plan report plus the cross-artifact findings")
+    p.add_argument("--change")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_analyze)
+
+    p = sub.add_parser("next", help="the steps to the next gate, in order (writes nothing)")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_next)
 
     p = sub.add_parser("approve", help="record an operator approval")
     p.add_argument("gate", choices=["constitution", "spec", "plan", "results", "amend"])
@@ -2064,6 +2903,29 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("use", help="make another change active")
     p.add_argument("change_id")
     p.set_defaults(func=cmd_use)
+
+    p = sub.add_parser("sort-failures", help="sort failing tests into regressions, expected failures and the rest")
+    p.add_argument("file", help="the failing test names, one per line")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_sort_failures)
+
+    p = sub.add_parser("defect", help="record a defect in specs/defects.md")
+    defect = p.add_subparsers(dest="defect_command", required=True)
+    p = defect.add_parser("add", help="add an open, undecided defect for a failing test")
+    p.add_argument("--test", required=True)
+    p.add_argument("--severity", required=True, choices=DEFECT_SEVERITIES)
+    p.add_argument("--capability", metavar="PREFIX")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_defect_add)
+    p = defect.add_parser("decide", help="record the operator's decision on an open defect")
+    p.add_argument("id", help="the defect ID, D<n>")
+    p.add_argument("decision", choices=DEFECT_DECISIONS)
+    p.add_argument("--evidence", help="the operator's words")
+    p.set_defaults(func=cmd_defect_decide)
+    p = defect.add_parser("close", help="close a decided defect, with what fixed it or why it is closed")
+    p.add_argument("id", help="the defect ID, D<n>")
+    p.add_argument("--evidence", help="what fixed the defect, or why it is closed")
+    p.set_defaults(func=cmd_defect_close)
     return parser
 
 

@@ -1,0 +1,586 @@
+<!-- Planner: one task per scenario, each negative right after its happy path
+(no grouping: replay runs one test line per task). -->
+
+## Tasks
+<!-- Tiers dogfood REQ-ORC-001; the pinned tool ignores tier lines. The
+test: lines are filled by the Implementer, in the classes the design names
+(ComponentCommandTests, DefectAddTests, SortFailuresTests, DefectDecideTests,
+DefectCloseTests, DefectCountTests, DefectLogTests).
+Order exceptions. Where a "no warning", "no error" or "unchanged" scenario
+passes before its rule exists, it comes after the first negative or positive
+that creates the rule, so that its red run is real:
+- REQ-EVD-004: N1 creates the check, so S1 follows it; B3 (standard draft at
+  the spec stage) and B6 (mini draft) follow B1, B2 and B5, which create the
+  warning they must not trigger.
+- REQ-DEF-001: B1 (a closed defect does not block) follows N5, which creates
+  the open-defect refusal.
+- REQ-DEF-006: B1 to B3 (valid logs accepted) follow N1 to N7, which create the
+  validator. The reader read_defect_log starts in REQ-DEF-001.S2 (rows, highest
+  number) and gains its checks in REQ-DEF-006.
+Some boundaries may already pass after the task before them (for example
+REQ-DEF-001.B3 and B4 after S3, REQ-DEF-004.B1 after S1); the Implementer then
+records `red: pre-existing (after T<n>)`.
+Method edits (design "Method changes", under skill/sdd/ of the development
+checkout) are folded into the first task each belongs with, as `also:` lines
+below; each task still proves its scenario.
+-->
+
+- [x] T1 REQ-EVD-004.N1 Component command without {prefix} is an error
+  - tier: mid
+  - also: design_text and check_component_command in sdd.py (list-line regex, {prefix} rule), called in analyze() from the plan stage
+  - also: templates/mini-spec.md and templates/standard/design.md: a `- Test component:` line after `- Test one:`, with a comment explaining {prefix}
+  - also: method/format.md: the `Test component:` line (list line, {prefix}, one per design)
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_N1_component_command_without_prefix_is_an_error
+  - red: AssertionError: 0 != 1 : check 0003-x (stage: plan, assurance: production)
+  - green: Ran 1 test in 0.085s OK
+- [x] T2 REQ-EVD-004.S1 Valid component command raises no message
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_S1_valid_component_command_raises_no_message
+  - red: pre-existing (after T1) — the {prefix} rule of T1 already accepts a command that has {prefix}
+  - green: Ran 1 test in 0.190s OK
+- [x] T3 REQ-EVD-004.N2 Component command with an unclosed quote is an error
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_N2_component_command_with_unclosed_quote_is_an_error
+  - red: AssertionError: 0 != 1 : check 0003-x (stage: plan, assurance: production)
+  - green: Ran 1 test in 0.149s OK
+- [x] T4 REQ-EVD-004.N3 Second Test component line is an error
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_N3_second_component_line_is_an_error
+  - red: AssertionError: 0 != 1 : check 0003-x (stage: plan, assurance: production)
+  - green: Ran 1 test in 0.130s OK
+- [x] T5 REQ-EVD-004.B1 No component command warns
+  - tier: mid
+  - also: existing tests that assert `warnings (1):` get a valid `- Test component:` line in their design fixture (the new warning is this scenario's behavior)
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_B1_no_component_command_warns
+  - red: AssertionError: 'warnings (1):' not found in ['check 0003-x (stage: plan, assurance: production)', 'coverage:', ...]
+  - green: Ran 1 test in 0.142s OK (with the fixture line in ANL_DESIGN: Ran 154 tests OK)
+- [x] T6 REQ-EVD-004.B2 Empty component command warns
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_B2_empty_component_command_warns
+  - red: pre-existing (after T5) — the warning of T5 already covers a Test component line with no text
+  - green: Ran 1 test in 0.094s OK
+- [x] T7 REQ-EVD-004.B5 Line without a list marker does not count
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_B5_component_line_without_list_marker_does_not_count
+  - red: pre-existing (after T1) — the list-marker regex written in T1 already ignores an unmarked line, which T5 then warns about
+  - green: Ran 1 test in 0.103s OK
+- [x] T8 REQ-EVD-004.B3 Spec stage ignores the component command
+  - tier: light
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_B3_spec_stage_ignores_the_component_command
+  - red: pre-existing (after T5) — analyze() calls check_component_command only from the plan stage, so the spec stage never sees the T5 warning
+  - green: Ran 1 test in 0.095s OK
+- [x] T9 REQ-EVD-004.B6 Mini change reads its Design notes
+  - tier: mid
+  - test: tests/test_sdd.py::ComponentCommandTests.test_REQ_EVD_004_B6_mini_change_reads_its_design_notes
+  - red: pre-existing (after T1) — design_text written in T1 already reads the Design notes of a mini change
+  - green: Ran 1 test in 0.075s OK
+- [x] T10 REQ-DEF-001.S1 First defect creates the log
+  - tier: strong
+  - also: defect add in build_parser and the module docstring; DEFECT_COLUMNS, row text, new-log text, change and capability resolution
+  - also: method/format.md: the defect log (columns, values, row text, written by the script)
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_S1_first_defect_creates_the_log
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] (invalid choice: 'defect')
+  - green: Ran 1 test in 0.079s OK
+- [x] T11 REQ-DEF-001.S2 Next number is highest plus one, closed ones count
+  - tier: strong
+  - also: read_defect_log(project): lines, rows with line numbers (no validation yet)
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_S2_next_number_is_highest_plus_one
+  - red: AssertionError: '# De[171 chars]en | minor | undecided | DUR | 0007-x | test_R[21 chars] |\n' != '# De[171 chars]en | critical | undecided | DUR | 0007-x | tes[203 chars] |\n'
+  - green: Ran 1 test in 0.068s OK
+- [x] T12 REQ-DEF-001.S3 --capability names the capability
+  - tier: mid
+  - also: method/roles/spec-author.md and method/phases/propose.md: a capability is a unit of coherent functional purpose (checkout, catalog, accounts), small enough to test as one component; the Spec Author proposes, the operator confirms at the spec gate
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_S3_capability_option_names_the_capability
+  - red: AssertionError: 2 != 0 : usage: sdd.py [-h] [--root ROOT] (unrecognized arguments: --capability CLI)
+  - green: Ran 1 test in 0.051s OK
+- [x] T13 REQ-DEF-001.N1 Unknown severity is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N1_unknown_severity_is_a_usage_error
+  - red: AssertionError: 0 != 2 : D1 added (blocker, )
+  - green: Ran 1 test in 0.057s OK
+- [x] T14 REQ-DEF-001.N2 Test name without a requirement ID asks for --capability
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N2_name_without_requirement_id_asks_for_capability
+  - red: AssertionError: 0 != 1 : D1 added (major, )
+  - green: Ran 1 test in 0.074s OK
+- [x] T15 REQ-DEF-001.N4 Empty test name refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N4_empty_test_name_refused
+  - red: AssertionError: 'error: the test name is empty' not found in 'error: the test name carries no requirement ID: name the capability with --capability <PREFIX>\n'
+  - green: Ran 1 test in 0.067s OK
+- [x] T16 REQ-DEF-001.N7 Capability must be a known prefix
+  - tier: mid
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N7_capability_must_be_a_known_prefix
+  - red: AssertionError: 0 != 1 : D1 added (minor, dur)
+  - green: Ran 1 test in 0.080s OK
+- [x] T17 REQ-DEF-001.N8 Unknown change refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N8_unknown_change_refused
+  - red: AssertionError: 2 != 1 : usage: sdd.py [-h] [--root ROOT] (unrecognized arguments: --change 9999-none)
+  - green: Ran 1 test in 0.076s OK
+- [x] T18 REQ-DEF-001.N6 No active change refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N6_no_active_change_refused
+  - red: pre-existing (after T10) — defect add resolves the change with project.current, which already refuses when no change is active
+  - green: Ran 1 test in 0.081s OK
+- [x] T19 REQ-DEF-001.N5 One open defect per test
+  - tier: mid
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_N5_one_open_defect_per_test
+  - red: AssertionError: 0 != 1 : D2 added (major, DUR)
+  - green: Ran 1 test in 0.101s OK
+- [x] T20 REQ-DEF-001.B1 A closed defect does not block a new one
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B1_closed_defect_does_not_block_a_new_one
+  - red: AssertionError (after T19): 1 != 0 : error: test_REQ_DUR_001_S1_parses already has an open defect: D1
+  - green: Ran 1 test in 0.049s OK
+- [x] T21 REQ-DEF-001.B2 Pipe in the test name is escaped
+  - tier: mid
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B2_pipe_in_the_test_name_is_escaped
+  - red: AssertionError: '| D1[17 chars] undecided | DUR | 0007-x | test_REQ_DUR_001_S1[a|b] |  |  |' != '| D1[17 chars] undecided | DUR | 0007-x | test_REQ_DUR_001_S1[a\|b] |  |  |'
+  - green: Ran 1 test in 0.098s OK
+- [x] T22 REQ-DEF-001.B3 The first requirement ID in the name counts
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B3_first_requirement_id_in_the_name_counts
+  - red: pre-existing (after T10) — the name is searched with NAME_REQ.search, which already takes the first requirement ID
+  - green: Ran 1 test in 0.099s OK
+- [x] T23 REQ-DEF-001.B4 --capability wins over the name
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B4_capability_option_wins_over_the_name
+  - red: pre-existing (after T12) — the capability is args.capability first, so the name is read only without the option
+  - green: Ran 1 test in 0.077s OK
+- [x] T24 REQ-DEF-001.B5 A file with only a title gets the table appended
+  - tier: mid
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B5_title_only_file_gets_the_table_appended
+  - red: AssertionError: '# Defects\n| D1 | open | minor | undecided | DUR | 0[40 chars] |\n' != '# Defects\n\n| ID | Status | Severity | Decision | C[195 chars] |\n'
+  - green: Ran 1 test in 0.056s OK
+- [x] T25 REQ-DEF-001.B6 Any change status may record a defect
+  - tier: light
+  - test: tests/test_sdd.py::DefectAddTests.test_REQ_DEF_001_B6_any_change_status_may_record_a_defect
+  - red: pre-existing (after T10) — defect add never reads the change's status, so a verified change records like any other
+  - green: Ran 1 test in 0.070s OK
+- [x] T26 REQ-EVD-005.S1 Regression and expected failures are sorted
+  - tier: strong
+  - also: sort-failures in build_parser and the module docstring; reuse scenario_pattern and parse_tasks
+  - also: method/overview.md: script table row for `SDD sort-failures <file>`
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_S1_regression_and_expected_failures_are_sorted
+  - red: AssertionError: Lists differ: ['usage: sdd.py [-h] [--root ROOT]', '     [352 chars]t')"] != ['regression: test_REQ_DUR_001_S1_parses (R[149 chars]nge'] (invalid choice: 'sort-failures')
+  - green: Ran 1 test in 0.131s OK
+- [x] T27 REQ-EVD-005.S2 Names outside the change are sorted outside
+  - tier: mid
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_S2_names_outside_the_change_are_sorted_outside
+  - red: AssertionError: Lists differ: ['exp[63 chars])', 'sorted: 0 regression, 1 expected, 0 outside the change'] != ['exp[63 chars])', 'outside: test_legacy_total', 'outside: te[75 chars]nge']
+  - green: Ran 1 test in 0.084s OK
+- [x] T28 REQ-EVD-005.N1 Unreadable file refused
+  - tier: light
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_N1_unreadable_file_refused
+  - red: FileNotFoundError: [Errno 2] No such file or directory: '<tmp>/missing.txt' (unhandled, the test expects exit 1 and an error line)
+  - green: Ran 1 test in 0.084s OK
+- [x] T29 REQ-EVD-005.N2 Blank lines and duplicate names skipped
+  - tier: mid
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_N2_blank_lines_and_duplicate_names_skipped
+  - red: AssertionError: Lists differ: ['expected:   test_REQ_DUR_001_N1_rejects   (REQ-DUR-[159 chars]nge'] != ['expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.[71 chars]nge']
+  - green: Ran 1 test in 0.077s OK
+- [x] T30 REQ-EVD-005.N3 No active change refused
+  - tier: light
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_N3_no_active_change_refused
+  - red: pre-existing (after T26) — sort-failures resolves the change with project.current before printing, which already refuses without an active change
+  - green: Ran 1 test in 0.090s OK
+- [x] T31 REQ-EVD-005.N4 Unknown change refused
+  - tier: light
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_N4_unknown_change_refused
+  - red: AssertionError: 2 != 1 : usage: sdd.py [-h] [--root ROOT] (unrecognized arguments: --change 9999-none)
+  - green: Ran 1 test in 0.077s OK
+- [x] T32 REQ-EVD-005.B1 Empty file sorts nothing
+  - tier: light
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_B1_empty_file_sorts_nothing
+  - red: pre-existing (after T26) — with no names the loop never runs, and the sorted line of T26 prints zeros with exit 0
+  - green: Ran 1 test in 0.098s OK
+- [x] T33 REQ-EVD-005.B2 The first ID that decides is printed
+  - tier: strong
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_B2_first_id_that_decides_is_printed
+  - red: AssertionError: Lists differ: ['expected: test_REQ_DUR_001_N1_and_REQ_DUR[92 chars]nge'] != ['regression: test_REQ_DUR_001_N1_and_REQ_D[90 chars]nge']
+  - green: Ran 1 test in 0.039s OK
+- [x] T34 REQ-EVD-005.B3 Scenario no task plans prints no task
+  - tier: mid
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_B3_scenario_no_task_plans_prints_no_task
+  - red: IndexError: list index out of range (unhandled: sort-failures looked up a task for REQ-DUR-001.S2, which no task plans)
+  - green: Ran 1 test in 0.120s OK
+- [x] T35 REQ-EVD-005.B4 Hyphen form in any case is recognized
+  - tier: mid
+  - test: tests/test_sdd.py::SortFailuresTests.test_REQ_EVD_005_B4_hyphen_form_in_any_case_is_recognized
+  - red: pre-existing (after T26) — sort-failures matches with check's scenario_pattern, which already accepts hyphens and dots in any case
+  - green: Ran 1 test in 0.085s OK
+- [x] T36 REQ-DEF-002.S1 Decide writes the decision and the evidence
+  - tier: strong
+  - also: set_cells(line, {index: value}); defect decide in build_parser; the shared id and log lookup
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_S1_decide_writes_the_decision_and_the_evidence
+  - red: AssertionError: 2 != 0 : usage: sdd.py defect [-h] {add} ... (invalid choice: 'decide' (choose from 'add'))
+  - green: Ran 1 test in 0.027s OK
+- [x] T37 REQ-DEF-002.S2 A decision can be changed while open
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_S2_decision_can_be_changed_while_open
+  - red: pre-existing (after T36) — decide of T36 writes the Decision and Evidence cells whatever they held, so an earlier decision is replaced
+  - green: Ran 1 test in 0.084s OK
+- [x] T38 REQ-DEF-002.N6 Decision without evidence refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N6_decision_without_evidence_refused
+  - red: AssertionError: 0 != 1 : D1: fix-now
+  - green: Ran 1 test in 0.069s OK
+- [x] T39 REQ-DEF-002.N1 Unknown decision is a usage error
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N1_unknown_decision_is_a_usage_error
+  - red: AssertionError: 0 != 2 : D1: soon
+  - green: Ran 1 test in 0.054s OK
+- [x] T40 REQ-DEF-002.N2 Unknown defect ID refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N2_unknown_defect_id_refused
+  - red: StopIteration (unhandled: defect_lookup found no row D9 and raised no error)
+  - green: Ran 1 test in 0.057s OK
+- [x] T41 REQ-DEF-002.N3 Malformed defect ID refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N3_malformed_defect_id_refused
+  - red: AssertionError: 'error: "d1" is not a defect ID: write D<n>' not found in 'error: no defect d1 in specs/defects.md\n'
+  - green: Ran 1 test in 0.060s OK
+- [x] T42 REQ-DEF-002.N4 Closed defect cannot be decided
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N4_closed_defect_cannot_be_decided
+  - red: AssertionError: 0 != 1 : D1: later
+  - green: Ran 1 test in 0.065s OK
+- [x] T43 REQ-DEF-002.N5 Missing log refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_N5_missing_log_refused
+  - red: AssertionError: 'error: no defect is logged (specs/defects.md does not exist)' not found in 'error: no defect D1 in specs/defects.md\n'
+  - green: Ran 1 test in 0.029s OK
+- [x] T44 REQ-DEF-002.B2 Same decision and evidence leaves the file untouched
+  - tier: mid
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_B2_same_decision_and_evidence_leaves_the_file_untouched
+  - red: AssertionError: {'AGE[2702 chars]al | fix-now | DUR | 0007-x | test_REQ_DUR_001[113 chars]|\n'} != {'AGE[2702 chars]al |  fix-now  | DUR | 0007-x | test_REQ_DUR_0[118 chars]|\n'}
+  - green: Ran 1 test in 0.066s OK
+- [x] T45 REQ-DEF-002.B3 Pipe in the evidence is escaped
+  - tier: mid
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_B3_pipe_in_the_evidence_is_escaped
+  - red: AssertionError: '| D1[42 chars]| test_REQ_DUR_001_S1_parses | Not now | after the demo |  |' != '| D1[42 chars]| test_REQ_DUR_001_S1_parses | Not now \\| after the demo |  |'
+  - green: Ran 1 test in 0.045s OK
+- [x] T46 REQ-DEF-002.B4 Line breaks in the evidence become spaces
+  - tier: light
+  - test: tests/test_sdd.py::DefectDecideTests.test_REQ_DEF_002_B4_line_breaks_in_the_evidence_become_spaces
+  - red: AssertionError: Lists differ: ['# D[166 chars]|', 'after the demo |  |', '| D2 | open | mino[67 chars]  |'] != ['# D[166 chars]|', '| D2 | open | minor | later | DUR | 0007-[44 chars]  |']
+  - green: Ran 1 test in 0.043s OK
+- [x] T47 REQ-DEF-003.S1 Close writes status and close evidence
+  - tier: mid
+  - also: defect close in build_parser; reuse the decide lookup and set_cells
+  - also: method/phases/implement.md: ranges (T1-T45), one authorization to the end, the three test levels and checkpoints, sort-failures, stop conditions, the triage report with defect add, decide and close
+  - also: method/roles/implementer.md: step 3 runs the task's own test only; the unrelated-test row becomes expected, regression, outside
+  - also: SKILL.md: break protocol says a regression; the implement routing row mentions ranges
+  - also: method/overview.md: script table row for `SDD defect add|decide|close`
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_S1_close_writes_status_and_close_evidence
+  - red: AssertionError: 2 != 0 : usage: sdd.py defect [-h] {add,decide} ... (invalid choice: 'close' (choose from 'add', 'decide'))
+  - green: Ran 1 test in 0.058s OK
+- [x] T48 REQ-DEF-003.S2 A wont-fix defect can be closed
+  - tier: light
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_S2_wont_fix_defect_can_be_closed
+  - red: pre-existing (after T47) — close of T47 writes Status and Close evidence without reading the decision, so wont-fix closes like fix-now
+  - green: Ran 1 test in 0.060s OK
+- [x] T49 REQ-DEF-003.N6 Close without evidence refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_N6_close_without_evidence_refused
+  - red: TypeError: expected string or bytes-like object (unhandled: close of T47 passed the missing --evidence to one_line)
+  - green: Ran 1 test in 0.082s OK
+- [x] T50 REQ-DEF-003.N1 Undecided defect cannot be closed
+  - tier: light
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_N1_undecided_defect_cannot_be_closed
+  - red: AssertionError: 0 != 1 : D1 closed
+  - green: Ran 1 test in 0.068s OK
+- [x] T51 REQ-DEF-003.N2 Closed defect cannot be closed again
+  - tier: light
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_N2_closed_defect_cannot_be_closed_again
+  - red: AssertionError: 0 != 1 : D1 closed
+  - green: Ran 1 test in 0.065s OK
+- [x] T52 REQ-DEF-003.B1 A later defect can be closed
+  - tier: light
+  - test: tests/test_sdd.py::DefectCloseTests.test_REQ_DEF_003_B1_later_defect_can_be_closed
+  - red: pre-existing (after T50) — the T50 refusal tests for undecided only, so a defect decided later closes like fix-now
+  - green: Ran 1 test in 0.055s OK
+- [x] T53 REQ-DEF-004.S1 Status counts the open defects
+  - tier: mid
+  - also: defect_counts(log); cmd_status text line and the defects key in --json
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_S1_status_counts_the_open_defects
+  - red: AssertionError: 'open defects: 2 (1 critical, 1 undecided)' not found in ['project assurance: internal (constitution not approved)', 'active change: 0001-parse-duration — Parse durations', …, 'next: sdd specify']
+  - green: Ran 1 test in 0.085s OK
+- [x] T54 REQ-DEF-004.S2 Check counts the open defects
+  - tier: mid
+  - also: defect_findings, Report.defects, report_json and Report.render, called from cmd_check and cmd_analyze (analyze() itself never reads the log)
+  - also: existing tests that pin the keys of check --json or analyze --json, if any, follow the new `defects` key
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_S2_check_counts_the_open_defects
+  - red: AssertionError: Lists differ: ['  REQ-ANL-001  happy S1 · validation N1 ·[66 chars] OK'] != ['open defects: 2 (1 critical, 1 undecided)', 'result: OK']
+  - green: Ran 1 test in 0.133s OK
+- [x] T55 REQ-DEF-004.N1 Status counts without an active change
+  - tier: light
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_N1_status_counts_without_an_active_change
+  - red: pre-existing (after T53) — cmd_status of T53 reads the log after the active-change branch, so it counts with no change
+  - green: Ran 1 test in 0.072s OK
+- [x] T56 REQ-DEF-004.B1 No log gives zeros and no line
+  - tier: light
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_B1_no_log_gives_zeros_and_no_line
+  - red: pre-existing (after T53) — a missing log reads as no rows, so defect_counts of T53 gives zeros and no line
+  - green: Ran 1 test in 0.073s OK
+- [x] T57 REQ-DEF-004.B2 All closed gives zeros and no line
+  - tier: light
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_B2_all_closed_gives_zeros_and_no_line
+  - red: pre-existing (after T54) — defect_counts counts open rows only and Report.render of T54 prints the line only above zero
+  - green: Ran 1 test in 0.130s OK
+- [x] T58 REQ-DEF-004.B3 Open defects do not fail a check
+  - tier: light
+  - test: tests/test_sdd.py::DefectCountTests.test_REQ_DEF_004_B3_open_defects_do_not_fail_a_check
+  - red: pre-existing (after T54) — defect_findings of T54 adds counts only, never an error, and render prints them at every stage
+  - green: Ran 1 test in 0.075s OK
+- [x] T59 REQ-DEF-006.N1 Invalid severity row refused by defect add
+  - tier: strong
+  - also: read_defect_log validation: problem text as `specs/defects.md line <k>: <what>`, comments blanked to keep line numbers
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N1_invalid_severity_row_refused_by_defect_add
+  - red: AssertionError: 0 != 1 : D2 added (minor, DUR)
+  - green: Ran 1 test in 0.063s OK
+- [x] T60 REQ-DEF-006.N7 Wrong header refused
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N7_wrong_header_refused
+  - red: AssertionError: 0 != 1 : D2 added (minor, DUR)
+  - green: Ran 1 test in 0.059s OK
+- [x] T61 REQ-DEF-006.N6 Row with eight cells refused
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N6_row_with_eight_cells_refused
+  - red: AssertionError: 0 != 1 : D1 closed
+  - green: Ran 1 test in 0.052s OK
+- [x] T62 REQ-DEF-006.N5 Repeated defect ID refused
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N5_repeated_defect_id_refused
+  - red: AssertionError: 0 != 1 : D1: later
+  - green: Ran 1 test in 0.046s OK
+- [x] T63 REQ-DEF-006.N2 Invalid log is an error at verify
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N2_invalid_log_is_an_error_at_verify
+  - red: pre-existing (after T59) — defect_findings of T54 adds log.problem as an error at verify, and T59 makes a problem exist
+  - green: Ran 1 test in 0.276s OK
+- [x] T64 REQ-DEF-006.N3 Invalid log is a warning at other stages
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N3_invalid_log_is_a_warning_at_other_stages
+  - red: pre-existing (after T59) — defect_findings of T54 adds log.problem as a warning below verify, and defect_counts gives None
+  - green: Ran 1 test in 0.181s OK
+- [x] T65 REQ-DEF-006.N4 Status prints the problem and exits 0
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N4_status_prints_the_problem_and_exits_0
+  - red: AssertionError: 'defect log: specs/defects.md line 5: severity "blocker" is not critical, major or minor' not found in ['project assurance: internal (constitution not approved)', …, 'next: sdd specify']
+  - green: Ran 1 test in 0.083s OK
+- [x] T66 REQ-DEF-006.B1 Blank line and comment between rows accepted
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_B1_blank_line_and_comment_between_rows_accepted
+  - red: pre-existing (after T59) — only lines starting with a pipe count, and T59 blanks comments before reading them
+  - green: Ran 1 test in 0.062s OK
+- [x] T67 REQ-DEF-006.B2 Escaped pipe in a cell accepted
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_B2_escaped_pipe_in_a_cell_accepted
+  - red: pre-existing (after T61) — the cell count of T61 uses table_cells, which splits on unescaped pipes only
+  - green: Ran 1 test in 0.118s OK
+- [x] T68 REQ-DEF-006.B3 Padded header and aligned separator accepted
+  - tier: mid
+  - also: at delivery, once every task is green: README, RELEASE_NOTES and the version (rule 9)
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_B3_padded_header_and_aligned_separator_accepted
+  - red: pre-existing (after T60) — T60 compares trimmed header cells and accepts colons around the separator dashes
+  - green: Ran 1 test in 0.068s OK
+- [x] T69 REQ-DEF-006.N8 Bad separator row refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N8_bad_separator_row_refused
+  - red: pre-existing (after T60) — the separator check of T60 already requires every cell of the second table line to be dashes
+  - green: Ran 1 test in 0.047s OK
+- [x] T70 REQ-DEF-006.N9 Bad row ID refused
+  - tier: light
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N9_bad_row_id_refused
+  - red: pre-existing (after T59) — the row check of T59 already refuses an ID that is not D<n>
+  - green: Ran 1 test in 0.035s OK
+- [x] T71 REQ-DEF-006.N10 Header with no separator row refused
+  - tier: mid
+  - test: tests/test_sdd.py::DefectLogTests.test_REQ_DEF_006_N10_header_with_no_separator_row_refused
+  - red: AssertionError: 0 != 1 : D1 added (minor, DUR)
+  - green: Ran 1 test in 0.065s OK
+
+## Mutations
+<!-- One entry per new rule in sdd.py. The code does not exist yet: the
+Implementer adds each entry once its task is green (design "Mutations
+guidance"; format: method/format.md). The Verifier runs the pinned SDD mutate. -->
+
+- M1 REQ-EVD-004.B5 skill/sdd/scripts/sdd.py
+  - find: `lines = re.findall(r"^\s*[-*]\s*Test component`
+  - replace: `lines = re.findall(r"^\s*[-*]?\s*Test component`
+- M2 REQ-EVD-004.N3 skill/sdd/scripts/sdd.py
+  - find: `if len(lines) > 1:`
+  - replace: `if len(lines) > 99:`
+- M3 REQ-EVD-004.B1 skill/sdd/scripts/sdd.py
+  - find: `if not command:`
+  - replace: `if False:`
+- M4 REQ-EVD-004.N1 skill/sdd/scripts/sdd.py
+  - find: `if "{prefix}" not in command:`
+  - replace: `if False:`
+- M5 REQ-EVD-004.N2 skill/sdd/scripts/sdd.py
+  - find: `shlex.split(command)`
+  - replace: `shlex.split("")`
+- M6 REQ-DEF-001.S2 skill/sdd/scripts/sdd.py
+  - find: `number = 1 + max(`
+  - replace: `number = 1 + min(`
+- M7 REQ-DEF-001.B3 skill/sdd/scripts/sdd.py
+  - find: `match = NAME_REQ.search(test)`
+  - replace: `match = ([None] + list(NAME_REQ.finditer(test)))[-1]`
+- M8 REQ-DEF-001.B4 skill/sdd/scripts/sdd.py
+  - find: `capability = args.capability or defect_capability(args.test)`
+  - replace: `capability = defect_capability(args.test) or args.capability`
+- M9 REQ-DEF-001.N7 skill/sdd/scripts/sdd.py
+  - find: `if capability not in project.registry() and capability not in declared:`
+  - replace: `if False:`
+- M10 REQ-DEF-001.N5 skill/sdd/scripts/sdd.py
+  - find: `if r["test"] == args.test and`
+  - replace: `if False and`
+- M11 REQ-DEF-001.B1 skill/sdd/scripts/sdd.py
+  - find: ` and r["status"] == "open":`
+  - replace: `:`
+- M12 REQ-DEF-001.B2 skill/sdd/scripts/sdd.py
+  - find: `cell.replace("|", "\\|") for cell in cells`
+  - replace: `cell for cell in cells`
+- M13 REQ-DEF-001.B5 skill/sdd/scripts/sdd.py
+  - find: `row + "\n" if log.table else`
+  - replace: `row + "\n" if True else`
+- M14 REQ-DEF-001.S2 skill/sdd/scripts/sdd.py
+  - find: `with log.path.open("a") as handle:`
+  - replace: `with log.path.open("w") as handle:`
+- M15 REQ-EVD-005.S1 skill/sdd/scripts/sdd.py
+  - find: `if t["done"] and ref in t["refs"]]`
+  - replace: `if ref in t["refs"]]`
+- M16 REQ-EVD-005.B2 skill/sdd/scripts/sdd.py
+  - find: `for ref in ids for t in tasks`
+  - replace: `for ref in ids[:1] for t in tasks`
+- M17 REQ-EVD-005.N2 skill/sdd/scripts/sdd.py
+  - find: `names = list(dict.fromkeys(`
+  - replace: `names = list((`
+- M18 REQ-EVD-005.N2 skill/sdd/scripts/sdd.py
+  - find: `for line in lines if line.strip()))`
+  - replace: `for line in lines))`
+- M19 REQ-EVD-005.S1 skill/sdd/scripts/sdd.py
+  - find: `return 1 if counts["regression"] else 0`
+  - replace: `return 0`
+- M20 REQ-EVD-005.S2 skill/sdd/scripts/sdd.py
+  - find: `return 1 if counts["regression"] else 0`
+  - replace: `return 1 if names else 0`
+- M21 REQ-EVD-005.B3 skill/sdd/scripts/sdd.py
+  - find: `planners[0] if planners else 'no task'`
+  - replace: `planners[0]`
+- M22 REQ-EVD-005.S2 skill/sdd/scripts/sdd.py
+  - find: `counts["outside"] += 1`
+  - replace: `counts["outside"] += 0`
+- M23 REQ-EVD-005.N1 skill/sdd/scripts/sdd.py
+  - find: `except (OSError, UnicodeDecodeError) as exc:`
+  - replace: `except UnicodeDecodeError as exc:`
+- M24 REQ-DEF-002.N6 skill/sdd/scripts/sdd.py
+  - find: `raise SddError("a decision needs the operator's words`
+  - replace: `print("a decision needs the operator's words`
+- M25 REQ-DEF-002.N1 skill/sdd/scripts/sdd.py
+  - find: `p.add_argument("decision", choices=DEFECT_DECISIONS)`
+  - replace: `p.add_argument("decision")`
+- M26 REQ-DEF-002.N2 skill/sdd/scripts/sdd.py
+  - find: `if row["id"] == defect_id:`
+  - replace: `if True:`
+- M27 REQ-DEF-002.N3 skill/sdd/scripts/sdd.py
+  - find: `if not re.fullmatch(r"D\d+", defect_id):`
+  - replace: `if False:`
+- M28 REQ-DEF-002.N4 skill/sdd/scripts/sdd.py
+  - find: `raise SddError(f"{args.id} is closed: its`
+  - replace: `print(f"{args.id} is closed: its`
+- M29 REQ-DEF-002.N5 skill/sdd/scripts/sdd.py
+  - find: `if not log.exists:`
+  - replace: `if False:`
+- M30 REQ-DEF-002.B2 skill/sdd/scripts/sdd.py
+  - find: `if parts[1 + index].strip().replace("\\|", "|") != value:`
+  - replace: `if True:`
+- M31 REQ-DEF-002.B3 skill/sdd/scripts/sdd.py
+  - find: `escaped = value.replace("|", "\\|")`
+  - replace: `escaped = value`
+- M32 REQ-DEF-002.B4 skill/sdd/scripts/sdd.py
+  - find: `return re.sub(r"\r\n|\r|\n", " ", text).strip()`
+  - replace: `return text.strip()`
+- M33 REQ-DEF-002.S1 skill/sdd/scripts/sdd.py
+  - find: `{3: args.decision, 7: one_line(args.evidence)}`
+  - replace: `{3: args.decision}`
+- M34 REQ-DEF-003.S1 skill/sdd/scripts/sdd.py
+  - find: `{1: "closed", 8: one_line(args.evidence)}`
+  - replace: `{1: "closed"}`
+- M35 REQ-DEF-003.N6 skill/sdd/scripts/sdd.py
+  - find: `raise SddError("closing needs --evidence`
+  - replace: `print("closing needs --evidence`
+- M36 REQ-DEF-003.N1 skill/sdd/scripts/sdd.py
+  - find: `if row["decision"] == "undecided":`
+  - replace: `if False:`
+- M37 REQ-DEF-003.N2 skill/sdd/scripts/sdd.py
+  - find: `raise SddError(f"{args.id} is already closed")`
+  - replace: `print(f"{args.id} is already closed")`
+- M38 REQ-DEF-004.S1 skill/sdd/scripts/sdd.py
+  - find: `open_rows = [r for r in log.rows if r["status"] == "open"]`
+  - replace: `open_rows = list(log.rows)`
+- M39 REQ-DEF-004.S1 skill/sdd/scripts/sdd.py
+  - find: `"critical": sum(r["severity"] == "critical" for r in open_rows)`
+  - replace: `"critical": 0`
+- M40 REQ-DEF-004.S1 skill/sdd/scripts/sdd.py
+  - find: `"undecided": sum(r["decision"] == "undecided" for r in open_rows)`
+  - replace: `"undecided": 0`
+- M41 REQ-DEF-004.B2 skill/sdd/scripts/sdd.py
+  - find: `if not counts or not counts["open"]:`
+  - replace: `if not counts:`
+- M42 REQ-DEF-004.S1 skill/sdd/scripts/sdd.py
+  - find: `data["defects"] = defect_counts(log)`
+  - replace: `data["defects"] = None`
+- M43 REQ-DEF-004.S2 skill/sdd/scripts/sdd.py
+  - find: `, "defects": report.defects}`
+  - replace: `}`
+- M44 REQ-DEF-004.S2 skill/sdd/scripts/sdd.py
+  - find: `report.defects = defect_counts(log)`
+  - replace: `pass`
+- M45 REQ-DEF-006.N2 skill/sdd/scripts/sdd.py
+  - find: `(report.errors if report.stage == "verify" else report.warnings).append(log.problem)`
+  - replace: `report.warnings.append(log.problem)`
+- M46 REQ-DEF-006.N3 skill/sdd/scripts/sdd.py
+  - find: `(report.errors if report.stage == "verify" else report.warnings).append(log.problem)`
+  - replace: `report.errors.append(log.problem)`
+- M47 REQ-DEF-006.N4 skill/sdd/scripts/sdd.py
+  - find: `print(f"defect log: {log.problem}")`
+  - replace: `pass`
+- M48 REQ-DEF-006.N1 skill/sdd/scripts/sdd.py
+  - find: `if row[name] not in allowed:`
+  - replace: `if False:`
+- M49 REQ-DEF-006.N1 skill/sdd/scripts/sdd.py
+  - find: `if log.problem:  # an invalid log is never appended to`
+  - replace: `if False:`
+- M50 REQ-DEF-006.N5 skill/sdd/scripts/sdd.py
+  - find: `if log.problem:  # an invalid log is never rewritten`
+  - replace: `if False:`
+- M51 REQ-DEF-006.N7 skill/sdd/scripts/sdd.py
+  - find: `if table_cells(line) != DEFECT_COLUMNS:`
+  - replace: `if False:`
+- M52 REQ-DEF-006.B3 skill/sdd/scripts/sdd.py
+  - find: `if table_cells(line) != DEFECT_COLUMNS:`
+  - replace: `if line != DEFECT_HEADER:`
+- M53 REQ-DEF-006.B3 skill/sdd/scripts/sdd.py
+  - find: `re.fullmatch(r":?-+:?", cell)`
+  - replace: `re.fullmatch(r"-+", cell)`
+- M54 REQ-DEF-006.N6 skill/sdd/scripts/sdd.py
+  - find: `if len(row["cells"]) != len(DEFECT_COLUMNS):`
+  - replace: `if False:`
+- M55 REQ-DEF-006.N5 skill/sdd/scripts/sdd.py
+  - find: `if not problem and first:`
+  - replace: `if False:`
+- M56 REQ-DEF-006.B1 skill/sdd/scripts/sdd.py
+  - find: `lambda m: "\n" * m.group(0).count("\n"), self.text, flags=re.S)`
+  - replace: `lambda m: m.group(0), self.text, flags=re.S)`
+- M57 REQ-DEF-006.N8 skill/sdd/scripts/sdd.py
+  - find: `if not all(re.fullmatch(r":?-+:?", cell) for cell in table_cells(line)):`
+  - replace: `if False:`
+- M58 REQ-DEF-006.N9 skill/sdd/scripts/sdd.py
+  - find: `if not re.fullmatch(r"D\d+", row["id"]):`
+  - replace: `if False:`
+- M59 REQ-DEF-006.N10 skill/sdd/scripts/sdd.py
+  - find: `if len(self.table) == 1:`
+  - replace: `if False:`

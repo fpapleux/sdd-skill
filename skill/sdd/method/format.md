@@ -9,7 +9,7 @@ sections**, spread over a folder and read as one document:
 | --- | --- |
 | `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
 | `spec-delta.md` | Requirements, Known gaps |
-| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:` and `- Test one:`) |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`, `- Test one:` and `- Test component:`), Failure modes, Contracts |
 | `tasks.md` | Tasks, Mutations |
 | `verification.md` | Verification |
 
@@ -177,6 +177,20 @@ the size cap.
 handle. It is required at `prototype`; write `- None` if there are none. At
 other levels it's optional, and useful for things out of scope.
 
+A gap is its bullet line: `sdd.py archive` carries each gap only to the
+capabilities it concerns, and reads nothing from continuation lines. It picks
+them in this order:
+
+1. A **capability tag** ends the line: a space, then in parentheses one or
+   more names of capabilities the change touches (lowercase, comma-separated,
+   at most one space after each comma), then optionally a period:
+   `- Output is not localized (cli).` or `- Units are English only (duration, cli)`.
+   The gap goes to those capabilities with the tag removed (the period stays).
+   A tag naming a capability the change doesn't touch isn't a tag.
+2. Otherwise, the touched capabilities whose requirement IDs the gap names
+   (`REQ-DUR-001`, with or without a scenario suffix; by prefix alone).
+3. Otherwise, every capability the change touches.
+
 ## Design notes
 
 `## Design notes`: just enough "how" for a small change: files or modules
@@ -185,6 +199,51 @@ touched, approach, test strategy. It must keep a line such as
 add the command that runs **one** test: ``- Test one: `python3 -m unittest
 {name}` ``, where `{test}` is a task's whole test line, and `{file}` and
 `{name}` are its parts before and after `::`.
+
+To run the tests of one capability at a checkpoint, add a **component**
+command as a list line, one per design: ``- Test component: `python3 -m
+unittest -k REQ_{prefix}_` ``. Every `{prefix}` stands for a capability's
+requirement prefix. At the plan stage and later, `SDD check` refuses a command
+without `{prefix}`, with a quote that isn't closed, or a second
+`Test component:` line, and warns, without failing, when the design has no
+such line or an empty one (the component checkpoints are then skipped).
+
+## design.md: Failure modes and Contracts (standard)
+
+A `standard` change's `design.md` holds two checked sections. Lines inside
+HTML comments or fenced code blocks never count.
+
+```markdown
+## Components and interfaces
+- interface: parse_duration
+
+## Failure modes
+- FM1 the text has letters → REQ-DUR-001.N1, REQ-DUR-001.N2
+- FM2: the cache is stale → N/A: the parser keeps no cache
+
+## Contracts
+### parse_duration
+- Input: `parse_duration(text: str)`; output: minutes as an int
+- Errors: `ValueError` naming the bad text
+```
+
+- **Failure modes.** A bullet starts with `- ` or `* `, at any indent; other
+  lines are ignored. An entry is one line: `FM<n>` (then a space, `:` or `—`),
+  text, `→`, and an outcome. The line splits at its last `→`. An outcome is
+  scenario references separated by commas, or `N/A`, then `:` or `—` and a
+  reason of at least 3 words. A reference must name a scenario of the change
+  or of a living-spec requirement the change neither modifies nor removes.
+  FM numbers are unique and compare as integers (`FM01` is `FM1`). When
+  nothing new can fail, the section holds a single `- None — <reason>`
+  (case-sensitive, a reason of at least 3 words). At `designed` and later,
+  `SDD analyze` reports a section with no entry: an error at `production`
+  and above, a warning below.
+- **Contracts.** Each `- interface: <name>` line (key in any case, outside
+  `## Contracts`) needs one `### <name>` entry under `## Contracts`. Names
+  are trimmed of spaces, then of surrounding backticks, and must match
+  exactly; an interface listed twice needs one entry. `SDD check` reports a
+  missing, nameless or repeated entry from the plan stage on, and warns
+  about an entry no interface lists.
 
 ## Tasks
 
@@ -246,6 +305,33 @@ cap.
 - `SDD mutate` runs the tests of the tasks that plan the scenario: before the
   mutation (they must pass), then after (at least one must fail). The result
   is `caught`, `survived` or `invalid`.
+
+## The defect log (`specs/defects.md`)
+
+The project's failing tests that the operator must decide on. It belongs to
+the project, not to a change, and the script writes it: `SDD defect add`,
+`SDD defect decide` and `SDD defect close`. Don't edit it by hand.
+
+```markdown
+# Defects
+
+| ID | Status | Severity | Decision | Capability | Change | Test | Evidence | Close evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| D1 | open | critical | undecided | DUR | 0007-x | test_REQ_DUR_001_S1_parses |  |  |
+```
+
+- **ID** `D<n>`: one more than the highest number in the log, so a closed
+  defect's number is never reused.
+- **Status** `open` or `closed`; **Severity** `critical`, `major` or `minor`;
+  **Decision** `undecided`, `fix-now`, `later` or `wont-fix`.
+- **Capability**: the requirement prefix, from the first requirement ID in the
+  test name or from `--capability`. **Change**: the active change, or
+  `--change`. **Test**: the failing test's name. One test has at most one
+  open defect.
+- **Evidence**: the operator's words for the decision. **Close evidence**:
+  what fixed the defect, or why it is closed.
+- A row is `| ` and its cells joined by ` | `, then ` |`; an empty cell is two
+  spaces between pipes, and a `|` inside a cell is written `\|`.
 
 ## Test naming
 

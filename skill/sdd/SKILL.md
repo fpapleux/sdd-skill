@@ -1,9 +1,9 @@
 ---
 name: sdd
-description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, approve, implement, amend, bug, verify, archive or status, or asks to work spec-first in a repository that has a specs/ folder.
+description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, analyze, approve, implement, amend, bug, verify, archive, status or next, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
-  version: "0.16.0"
+  version: "0.19.0"
 ---
 
 # SDD — spec-driven development
@@ -38,20 +38,21 @@ prefix the operator used.
 | `clarify` | Spec Critic review round: coverage audit, at most 5 questions | `method/phases/clarify.md` |
 | `design` | `standard` only: how it will be built (`design.md`) | `method/phases/design.md` |
 | `tasks` | Plan test-first tasks, then ask for approval | `method/phases/tasks.md` |
+| `analyze` | Read-only cross-artifact check before the plan gate; routes each error to its phase | `method/phases/analyze.md` |
 | `approve` | Record the operator's approval of the pending gate (constitution, spec, plan, results, amendment) | `method/phases/approve.md` |
-| `implement [T-id\|next\|all]` | Red → green → refactor, task by task | `method/phases/implement.md` |
+| `implement [T-id\|T<a>-T<b>\|next\|all]` | Red → green → refactor, task by task; a range runs to its end on one authorization | `method/phases/implement.md` |
 | `amend "<reason>"` | Change the approved spec mid-work, with the operator's approval | `method/phases/amend.md` |
 | `bug "<symptom>"` | Defect change: reproduce, trace to the spec, regression test first | `method/phases/bug.md` |
 | `verify` | Check the work against the spec | `method/phases/verify.md` |
 | `archive` | Merge the change into the living spec | `method/phases/archive.md` |
 | `status` (or no phase) | Where things stand and the next step | `method/phases/status.md` |
+| `next` | Run the remaining steps in order, stopping at the next gate | `method/phases/next.md` |
 
 If the phase is unknown, show this table and stop.
 
-**Not built yet:** the `full` size, and the phases `analyze`, `baseline`,
-`harden` and `next`. If the operator asks for
-one, say so and offer the closest available path. For example, a large
-feature can be split into several `mini` changes.
+**Not built yet:** the `full` size, and the phases `baseline` and `harden`.
+If the operator asks for one, say so and offer the closest available path.
+For example, a large feature can be split into several `mini` changes.
 
 ## 2. On every invocation
 
@@ -84,7 +85,9 @@ feature can be split into several `mini` changes.
   locks it at approval.
 - **When something breaks: stop, analyze, think, plan, execute.** "Breaks"
   covers a test that won't go red or green as expected, a command error,
-  `SDD` refusing, or an unrelated test failing.
+  `SDD` refusing, or a regression: a test that passed before the task and
+  fails after it. A failing test of a task not done yet is expected, not a
+  break.
   1. **Stop.** Don't retry the same action, and don't stack guesses.
   2. **Analyze.** Read the whole error output, and find what changed.
   3. **Think.** Name the root cause: the test, the code, the spec, or the

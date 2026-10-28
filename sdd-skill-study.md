@@ -762,7 +762,7 @@ capabilities, size caps).
 | 3 | `clarify` + Spec Critic | A coverage audit, at most 5 questions per round, a clarifications log, and the spec gate. |
 | 4 | Subagent fan-out | The prime model orchestrates: it owns the operator conversation, the gates and the routing. Role files gain a tool-neutral tier (`strong`, `mid`, `light`), an effort level and a read-only flag; `extras/claude/agents` maps them to models. The Critic and Verifier run as read-only subagents on strong models. The Planner tags each task with a tier, and a task escalates one tier after two failed attempts. Mechanical verification evidence (replay against the base commit, mutations, coverage) moves into `sdd.py`. A fresh session stays the fallback in Codex. See §15. Followed by **dogfood run 2**. |
 | 5 | `design` + Architect, `analyze`, `next` | Design, contracts, and the failure modes the design introduces (returned as scenarios). Cross-artifact consistency. Run to the next gate. Followed by **dogfood run 3**. |
-| 6 | Releases and deploy | Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
+| 6 | Releases and deploy, with delivery profiles and install options | Delivery profiles and install options offered as a choice (the Architect presents fitting options, the operator selects one, the selection is recorded). Release record (`specs/releases/<version>/`): included changes, source revision, a candidate built once, its digest, and installed-package verification. A release approval is bound to that digest. A separate deploy lifecycle has a plan and an approval bound to the target, digest and configuration, a receipt, and rollback. Delivery depth follows assurance (`sdd-deployment-approach.md`). |
 | 7 | `production` assurance | Blocking lcov diff coverage, an adversarial probe, and the results gate. |
 | 8 | `harden <cap> --to <level>` | Turns a capability's Known gaps into a hardening change. Followed by **dogfood run 4**. |
 
@@ -855,8 +855,10 @@ contradict the role. This session's Critic prompt broke that rule (`→ fixed:`
 for unapplied fixes).
 
 ### Other recorded items
-- **Design depth** (planned): delivery profiles, install options offered as a
-  choice, failure modes the design introduces, `analyze`, `next`.
+- **Design depth** (planned, increment 5): failure modes the design
+  introduces, `analyze`, `next`. Delivery profiles and install options
+  offered as a choice moved to increment 6 with releases and deploy
+  (operator, 2026-10-20).
 - **Friction from change 0001:**
   - a prose line starting with `## ` silently splits a section, so warn about
     headings that aren't known section names;
@@ -874,6 +876,13 @@ for unapplied fixes).
   - verification round 2 cost 200k tokens and 17 minutes, most of it
     mechanical (old-code replay, 27 mutants), which supports scripting those
     parts.
+- **Visual design step (post-v1, unscheduled; operator, 2026-10-20):** a phase
+  that produces a style guide, style sheets and UI mock-ups, inserted into
+  the lifecycle at a later stage. Its place in the flow, role, artifacts and
+  assurance depth are open and need their own scope refinement.
+- **Contracts, revisit (post-v1; operator, 2026-10-20):** increment 5 starts
+  with a `## Contracts` section in `design.md` that `check` only checks for
+  presence per interface. Revisit its depth with the `full` size in v3.
 - **Subagent fan-out** (increment 4), **design depth** (5), **releases and
   deploy** (6), **`production` assurance** (7), **`harden`** (8).
 

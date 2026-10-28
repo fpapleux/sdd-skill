@@ -25,8 +25,8 @@ paperwork. Assurance decides the proof.**
 
 `full` (migrations, public APIs, security models, irreversible operations)
 isn't available yet. Use `standard`, and tell the operator once that the
-extra `full` safeguards (a design gate, contracts, decision records) are
-missing.
+extra `full` safeguards (a design gate, checked contract content, decision
+records) are missing.
 
 What the words mean:
 - **New component:** a new service, a new module boundary that others
@@ -103,10 +103,15 @@ draft ─(clarifying)─► SPEC GATE ─► spec-approved ─► design ─► 
 | `clarify` | Spec Critic, then Spec Author | `clarifying` |
 | `approve` (spec) | Operator | `spec-approved`: the spec is locked |
 | `design` | Architect | `designed` (`SDD advance designed`) |
-| `tasks` → `approve` (plan) | Planner, then the operator | `planned` |
+| `tasks` → `analyze` → `approve` (plan) | Planner, then the operator | `planned` |
 | `implement` → `verify` | Implementer, Verifier | `verifying` |
 | `approve` (results) | Operator | `verified` |
 | `archive` | Spec Steward | `archived` |
+
+A standard `design.md` lists its **failure modes**, each answered by a
+scenario or an N/A reason, and a **contract** entry for each new interface
+(`method/format.md`). `SDD analyze` checks them with the design trace, and
+the plan gate runs the same analysis.
 
 **The approved spec is locked.** Approval stores a fingerprint of Intent,
 Defect, Scope, Requirements and Known gaps. Changing any of them later is an
@@ -126,7 +131,8 @@ specs/
   changes/NNNN-slug/spec.md    # in-flight mini change
   changes/NNNN-slug/           # in-flight standard change: proposal.md (front matter,
                                #   intent, scope, approvals), spec-delta.md (requirements,
-                               #   known gaps), design.md, tasks.md, verification.md
+                               #   known gaps), design.md (with failure modes and contracts),
+                               #   tasks.md, verification.md
   archive/NNNN-slug/spec.md    # finished changes
   .sdd/active                  # the active change ID
 AGENTS.md                    # SDD section (read by Codex)
@@ -145,13 +151,17 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD next-req <PREFIX>` | Next free requirement ID |
 | `SDD round [--fresh \| --subagent <tier>]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed, headed with who runs it |
 | `SDD check [--stage spec\|plan\|implement\|verify]` | Validate the active change. Exit 1 = errors. |
+| `SDD analyze [--change <id>] [--json]` | Check's plan report plus the cross-artifact findings: design trace, failure modes and contracts (standard), clause and balance warnings. Read-only. Exit 1 = errors. |
+| `SDD next [--change <id>]` | The remaining steps to the next gate, `1. sdd <phase>` …, then a `gate:` line. Read-only. |
 | `SDD status [--json]` | Summary + next step |
-| `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `constitution` records its fingerprint (and refuses an unchanged or invalid one). `spec` (standard) or `plan` (mini) locks the spec. `results` (standard) needs a PASS verdict and marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
+| `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `constitution` records its fingerprint (and refuses an unchanged or invalid one). `spec` (standard) or `plan` (mini) locks the spec. `plan` runs the analysis and refuses on its errors. `results` (standard) needs a PASS verdict and marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
 | `SDD advance clarifying\|designed\|implementing\|verifying\|verified\|blocked\|abandoned` | Move the status (`verified` for mini only; standard uses `approve results`). A blocked change returns only to the status it had. |
 | `SDD archive` | Merge a verified change into `specs/capabilities/` (requirements, known gaps, history line) and archive it |
 | `SDD use <change-id>` | Switch the active change |
 | `SDD replay --base <rev>` | Rerun each ticked task's test at the base revision and now; report each as confirmed or a mismatch. Needs git and a `Test one:` line. |
 | `SDD mutate` | Run the planned `## Mutations`; report each as caught, survived or invalid. Needs git and a `Test one:` line. |
+| `SDD sort-failures <file> [--change <id>]` | Sort failing test names (one per line) into `regression` (a ticked task plans its scenario), `expected` (the change's scenario, task not done) and `outside`, then a `sorted:` line. Writes nothing. Exit 1 = a regression. |
+| `SDD defect add\|decide\|close` | The project's defect log, `specs/defects.md`. `add --test <name> --severity critical\|major\|minor [--capability <PREFIX>]` records an open, undecided defect for a failing test. `decide D<n> fix-now\|later\|wont-fix --evidence "<the operator's words>"` records the operator's decision. `close D<n> --evidence "…"` closes a decided defect with what fixed it, or why it is closed. |
 
 All take `--change <id>` to target a change other than the active one, where
 relevant.

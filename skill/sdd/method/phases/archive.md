@@ -7,7 +7,9 @@ Fold the verified change into the living spec. Role: **Spec Steward**
    `SDD status` and stop.
 2. Run `SDD archive`. It merges each requirement into
    `specs/capabilities/<name>/spec.md` (added, modified or removed), carries
-   the change's Known gaps over (tagged with the change ID), and adds a
+   the change's Known gaps over (tagged with the change ID, each gap into the
+   capabilities it concerns: its tag, else the requirement IDs it names, else
+   every touched capability; see `method/format.md`), and adds a
    `## Change history` line. Then it sets the status to `archived` and moves
    the change to `specs/archive/`. If anything fails, nothing is changed.
 3. Review each capability spec it touched, following the role file.

@@ -8,6 +8,146 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.19.0 — 2026-10-28
+
+An intermediary release ahead of increment 6. On larger programs a run spent
+most of its time re-running the whole suite at every task, and the failing
+tests of tasks not built yet sent the run back to the operator. Change
+0005-scoped-test-runs (a `standard` change) passed its second verification
+round and was archived. New living spec:
+[`defects`](specs/capabilities/defects/spec.md) (5 requirements); `evidence`
+gains 2. The change has 71 scenarios and 71 tasks. The suite is now 534
+tests, and all 59 planned mutations are caught.
+
+- **Behavior:** a design may name a component test command,
+  `- Test component: <command>` with `{prefix}` for the capability's
+  requirement prefix. From the plan stage, `check` reports a malformed line as
+  an error, and a missing one as a warning that the component checkpoints
+  will be skipped.
+- **Behavior:** `sdd.py sort-failures <file>` sorts failing test names, by the
+  scenario IDs they carry, into `regression` (a ticked task plans the
+  scenario), `expected` (no ticked task plans it) and `outside`. It exits 1 on
+  any regression and writes nothing.
+- **Behavior:** a defect log, `specs/defects.md`, owned by the script:
+  `defect add` (test, severity critical, major or minor, capability),
+  `defect decide D<n> fix-now|later|wont-fix --evidence "<the operator's
+  words>"` and `defect close D<n> --evidence "<why>"`. IDs are never reused,
+  and a test has at most one open defect. `status`, `check` and `analyze`
+  count the open defects. A malformed log is refused by the defect commands,
+  is an error at check's verify stage and a warning elsewhere.
+- Method: `implement` takes a range (`T1-T45`) on one authorization and runs
+  to its end. Tests run at three levels: the task's own test during
+  development, the capability's tests at the end of its tasks, and the whole
+  suite once before the run closes. Only a regression, a task's own test that
+  still fails after two planned fixes, or a wrong spec stops the run. The run
+  closes with a triage report: each failure is recorded as a defect and the
+  operator decides it. The Spec Author proposes capabilities as units of
+  coherent functional purpose, confirmed at the spec gate.
+- Upgrade: a design without `Test component:` keeps working; `check` warns and
+  the run skips the component checkpoints. No spec needs editing.
+- Moved to a follow-up change: a scripted run plan, a baseline of tests that
+  passed before the run, and defects that block results approval and archive.
+- Verification: a strong read-only Verifier subagent ran two rounds. Round 1
+  found two untested or undecided defect-log cases, closed by amendment A1;
+  round 2 passed. The change was built with its own discipline: each task ran
+  its own test, each capability its tests at its checkpoint, and the full
+  suite ran once per run.
+- Archived with the pinned 0.16.0 tool, so its known gaps were copied into
+  both touched capabilities; a follow-up change will route them.
+- Published on the `v1` branch together with 0.17.0 and 0.18.0, in the same
+  PR; not merged into `main` yet.
+
+## 0.18.0 — 2026-10-26
+
+Change 0004-archive-gap-routing (a mini change, found by the Steward reviews
+of 0002 and 0003) passed its fourth verification round and was archived. New
+living spec: [`archive`](specs/capabilities/archive/spec.md) (2
+requirements). The change has 24 scenarios and 24 tasks. The suite is now 463
+tests, and all 12 planned mutations are caught.
+
+- **Behavior:** `archive` carries each known gap only to the capabilities it
+  concerns, choosing by the first of these that applies:
+  - a capability tag ending the gap's line, such as `- Output is not localized
+    (cli).` or `(duration, cli)`. The gap goes to those capabilities, and the
+    tag is removed;
+  - the touched capabilities whose requirement IDs the gap names, such as
+    `REQ-DUR-001`, matched by prefix;
+  - every capability the change touches, as before.
+- **Behavior:** a capability reached through two prefixes gets each gap and
+  the change-history line exactly once.
+- Method: `format.md` documents the tag and the order of the rules, and the
+  `archive` phase describes the routing.
+- Upgrade: no spec needs editing. A gap with no tag and no requirement ID is
+  carried as before, which the Verifier checked byte for byte against 0.17.0.
+  The gaps that 0002 and 0003 already copied into every capability stay
+  where they are.
+- Verification: a strong read-only Verifier subagent ran four rounds. Rounds
+  1 to 3 found four gaps around the tag anchor and capabilities with two
+  prefixes, and each was closed by an amendment the operator approved (A1 to
+  A3). Round 4 passed.
+- Published on the `v1` branch together with 0.17.0, in the same PR; not
+  merged into `main` yet.
+
+## 0.17.0 — 2026-10-21
+
+Change 0003-design-depth-analyze-next (v1 increment 5) passed its second
+verification round and was archived. Living specs:
+[`analysis`](specs/capabilities/analysis/spec.md) (8 requirements, new) and
+[`orchestration`](specs/capabilities/orchestration/spec.md) (now 6
+requirements). The change has 11 requirements, 147 scenarios and 146 tasks.
+The suite is now 439 tests, and all 158 planned mutations are caught.
+
+- **Behavior:** new `sdd.py analyze [--change] [--json]`. It prints check's
+  plan-stage report headed `analyze <id>`, adds the cross-artifact findings
+  and a scenario count, and exits 1 on any error. For a `standard` change at
+  designed or later:
+  - the design must not name a requirement that doesn't exist (error), and
+    should name every requirement of the change (warning);
+  - every `- FM<n> <text> → <outcome>` failure mode, or a single
+    `- None — <reason>` line, must be well formed, and its outcome must be
+    scenario references that exist or `N/A` with a reason of at least three
+    words;
+  - at `production` and above a design with no failure modes is an error
+    (below, a warning).
+  At any size it also warns about a requirement clause no scenario exercises
+  and about a change with more happy than non-happy scenarios. Both are
+  heuristics.
+- **Behavior:** in a `standard` change, from the plan stage on, each
+  `- interface: <name>` line needs a `### <name>` entry under `## Contracts`.
+  `check` reports a missing, nameless or repeated entry as an error and an
+  entry no interface lists as a warning.
+- **Behavior:** `approve plan` runs the same analysis and refuses on any
+  analyze error. It prints the report and records nothing. Warnings don't
+  block, and a `mini` plan approval is unchanged.
+- **Behavior:** new `sdd.py next [--change]`. It lists the numbered steps to
+  the next gate for the change's size and status, then the gate line. It puts
+  a fixing step first (`specify`, `design` or `tasks`) when a report shows the
+  problem. A changed constitution, an edited approved spec, a blocked or an
+  abandoned change each print their own line. It runs nothing and writes
+  nothing.
+- **Behavior:** `status` at designed, with tasks and a clean check, now says
+  `sdd analyze, then ask for plan approval`.
+- Method: the design phase adds Failure modes, Contracts and a failure-mode
+  review by a strong read-only subagent (a fresh session in Codex). New
+  `analyze` and `next` phases. The Architect role, `format.md`, `overview.md`,
+  the `tasks` phase, `SKILL.md` and the standard design template follow.
+- Upgrade: no spec needs editing, but a `standard` change at `production`
+  that reaches the plan gate now needs a Failure modes section (or a `- None`
+  line). A change already past the plan gate sees the design findings only in
+  `analyze`.
+- Built with the 0.16.0 fan-out: the prime session routed all 146 tasks to
+  implementer subagents by tier (86 light, 43 mid, 11 strong, plus 6 light
+  repair tasks). Verification ran in a separate fresh session. Round 1 found 12 gaps, and
+  the operator chose to amend four (amendment A2: four new scenarios) and
+  accept five as known gaps. Round 2 passed.
+- Known issue: `archive` copies every known gap of a change into each
+  capability it touches, so `analysis` and `orchestration` both list all 16.
+- Roadmap: delivery profiles and install options move from increment 5 to 6,
+  with releases and deploy. A visual design step (style guide, style sheets,
+  mock-ups) is recorded as unscheduled after v1, and contract depth is to be
+  revisited with the `full` size.
+- Published on the `v1` branch; not merged into `main` yet.
+
 ## 0.16.0 — 2026-10-18
 
 Change 0002-subagent-fanout (v1 increment 4) passed verification and was

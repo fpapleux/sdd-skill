@@ -24,15 +24,23 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v1 in progress, version 0.16.0.** The `mini` and `standard` sizes
+> **Status: v1 in progress, version 0.19.0.** The `mini` and `standard` sizes
 > work end to end at every assurance level, with spec locking, amendments,
 > defect changes and a Spec Critic. Since 0.8.0, an approval covers exactly
 > what was approved: the results gate needs a PASS verdict, and edits to an
 > approved constitution are caught. Since 0.16.0, a prime model can hand each
 > role to a subagent on a model sized to the task, and the script replays red
-> evidence and runs planned mutations for the Verifier. SDD is developed with
-> SDD. Next up: design depth. See the [release notes](RELEASE_NOTES.md) and
-> the [roadmap](#roadmap).
+> evidence and runs planned mutations for the Verifier. Since 0.17.0, a
+> `standard` design lists its failure modes and contracts, `sdd analyze`
+> checks the design against the spec before the plan gate, and `sdd next`
+> lists the steps to the next gate. Since 0.18.0, `archive` carries each known
+> gap only to the capabilities it concerns. Since 0.19.0, `implement` takes a
+> range of tasks on one authorization, runs each task's own test, a
+> capability's tests at its checkpoint and the full suite once, stops only on
+> a regression, and records the failures it finds in a defect log you triage.
+> SDD is developed with SDD. Next up:
+> releases and deploy. See the [release notes](RELEASE_NOTES.md) and the
+> [roadmap](#roadmap).
 
 ---
 
@@ -124,7 +132,8 @@ Approve this spec and plan?
 /sdd archive            # merges the change into specs/capabilities/
 ```
 
-At any time, `/sdd status` shows where things stand and the single next step.
+At any time, `/sdd status` shows where things stand and the single next step,
+and `/sdd next` lists every step to the next gate.
 In Codex, type `$sdd` instead of `/sdd`.
 
 If you prefer to go step by step instead of using `quick`:
@@ -137,8 +146,9 @@ Bigger work (several areas, or a new component or interface) is a
 /sdd propose "Guest checkout"     # the agent suggests size standard; you confirm
 /sdd specify                      # requirements
 /sdd clarify                      # Spec Critic audit + its questions → you approve the SPEC (now locked)
-/sdd design                       # design.md: approach, components, test strategy
-/sdd tasks                        # test-first plan → you approve the PLAN
+/sdd design                       # design.md: approach, components, failure modes, contracts
+/sdd tasks                        # test-first plan
+/sdd analyze                      # design vs spec vs tasks → you approve the PLAN
 /sdd implement all
 /sdd verify                       # → you approve the RESULTS
 /sdd archive
@@ -310,7 +320,9 @@ Spec sizes are rough estimates.
 ### When a prototype grows up
 
 The **Known gaps** list is not waste: it is the to-do list for hardening.
-When a change is archived, its known gaps are carried into the living spec.
+When a change is archived, its known gaps are carried into the living spec of
+the capabilities they concern: a trailing tag such as `(cli)`, else the
+requirement IDs a gap names, else every capability the change touches.
 In v1, `sdd harden <capability> --to production` will turn them into
 failure-case scenarios and tests, delivered as one normal change.
 Prototypes cost nothing extra up front, and nothing is forgotten when they
@@ -331,6 +343,18 @@ become real.
 If the behavior already existed, the agent records
 `red: pre-existing — <reason>`. Such tasks are reported to you and reviewed
 by the Verifier.
+
+**Tests run at three levels.** During a run (`sdd implement T1-T45`, or
+`all`), each task runs only its own test. When the run leaves a capability,
+that capability's tests run, through the design's `Test component:` line.
+The whole suite runs once, before the run closes. A failing test of a task
+not done yet is expected and only counted; the run stops on a regression (a
+test that passed before the task and fails after it), on a task's own test
+that still fails after two planned fixes, or on a spec that is wrong.
+`sdd.py sort-failures` sorts failing test names into regression, expected and
+outside the change. What the full suite finds goes to `specs/defects.md`
+(`sdd.py defect add`); you decide each defect (fix now, later or won't fix)
+in your own words, and it is closed with the reason.
 
 **Failure cases are planned, not hoped for.** Each requirement is walked
 through the failure categories its assurance level requires:
@@ -369,6 +393,11 @@ A blank is an error, and so is a lazy "not needed".
 - a defect names the requirement it violates (or "spec gap") and carries a
   regression scenario, whose test must reproduce the bug;
 - spec size stays under the cap (200 lines for `mini`);
+- for a `standard` change from the plan stage on, every listed interface has
+  a contract entry; and `approve plan` refuses while `analyze` reports an
+  error: a design that names a requirement that doesn't exist, a malformed
+  or uncovered failure mode, or (at `production` and above) a design with no
+  failure modes;
 - a `prototype` change keeps a Known gaps list;
 - when a Critic round is required (`standard` at `internal`+, any size at
   `production`+), the latest round audits every requirement, every finding
@@ -403,10 +432,12 @@ Drafting specs for untouched existing code (`sdd baseline`) is planned for v2.
 | `sdd propose "<idea>"` | Start a change: intent and scope only |
 | `sdd specify` | Requirements, scenarios, coverage |
 | `sdd clarify` | Spec Critic review round: audits every requirement, at most 5 questions for you |
-| `sdd design` | `standard` only: approach, components, test strategy |
+| `sdd design` | `standard` only: approach, components, test strategy, failure modes, contracts; a strong reviewer looks for missed failure modes |
 | `sdd tasks` | Test-first plan, then the plan gate |
+| `sdd analyze` | Cross-artifact check: the design traces to the requirements, every failure mode has an outcome, every listed interface has a contract, plus clause and balance warnings. The plan gate runs it too. |
+| `sdd next` | List the steps to the next gate, then run them one by one; it stops at the gate |
 | `sdd approve` | Record your approval of the pending gate: constitution, spec, plan, results, or an amendment |
-| `sdd implement [T3\|next\|all]` | Red → green → refactor, task by task |
+| `sdd implement [T3\|T1-T45\|next\|all]` | Red → green → refactor, task by task; a range runs to its end on one authorization, with task, component and full-suite test levels |
 | `sdd amend "<reason>"` | Change the approved spec mid-work: logged, shown to you, approved |
 | `sdd bug "<symptom>"` | Defect change: reproduce, trace to the spec (violated requirement or spec gap), regression test first |
 | `sdd verify` | Check the work against the spec |
@@ -424,8 +455,9 @@ python3 ~/.claude/skills/sdd/scripts/sdd.py check --stage verify
 python3 ~/.claude/skills/sdd/scripts/sdd.py next-req DUR     # next free requirement ID
 ```
 
-Other commands: `init`, `new`, `round`, `approve`, `advance`, `archive`, `use`,
-`replay --base <rev>` and `mutate`. Run `sdd.py --help` for details. Exit code `1` means errors were found.
+Other commands: `init`, `new`, `round`, `analyze [--json]`, `next`, `approve`,
+`advance`, `archive`, `use`, `replay --base <rev>`, `mutate`,
+`sort-failures <file>` and `defect add|decide|close`. Run `sdd.py --help` for details. Exit code `1` means errors were found.
 
 ### Rules the agent follows
 
@@ -448,13 +480,20 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   categories and records who reviewed, but blocking coverage, the adversarial
   probe and property-based tests aren't built yet. The independent reviewer is
   recorded and warned about, not enforced.
-- No `analyze`, `baseline` or `harden` phases yet.
+- No `baseline` or `harden` phases yet.
+- `analyze` checks a contract entry's presence, not its content, and its
+  clause and balance warnings are heuristics. Design findings apply to
+  `standard` changes only.
 - Subagents are an instruction to the host, not an enforced boundary: the
   host doesn't stop a "read-only" subagent from writing, so check the diff.
   The runner and tier in review records are written by the agent and not
   verified. Without subagents (Codex), independent review means a fresh session.
 - `replay` and `mutate` need git and a `Test one:` line in the design, have no
   time limit, and plan a mutation as a single-line find and replace.
+- `sort-failures` sorts by test name only: a failing test outside the
+  change is reported as outside even if it passed before the run, and no
+  defect blocks a change yet. A baseline, a scripted run plan and blocking
+  defects are planned as a follow-up change.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
@@ -467,6 +506,7 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
 | **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; subagent fan-out (a prime model orchestrates; the Critic and Verifier run as read-only subagents on strong models, routine tasks on cheaper ones; a fresh session is the fallback in Codex); `analyze`; `bug`, `amend` and `harden` phases; install options offered as a choice; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback); `production` assurance: blocking diff coverage, adversarial probing |
 | **v2** | Opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
+| **Later** | Not scheduled, after v1: a visual design step that produces a style guide, style sheets and UI mock-ups |
 
 v1 is built in increments, each one an SDD change from increment 4 on:
 
@@ -477,8 +517,10 @@ v1 is built in increments, each one an SDD change from increment 4 on:
 | 3 | `clarify` and the Spec Critic | done (0.4) |
 | — | Defect 0001: approval integrity (PASS verdict, constitution fingerprint) | done (0.8–0.13) |
 | 4 | Subagent fan-out: prime orchestrator, role tiers, read-only Critic and Verifier subagents, scripted verification evidence | done (0.14–0.16) |
-| 5 | `design` depth with the Architect, `analyze`, `next` | planned |
-| 6 | Releases and deploy | planned |
+| 5 | `design` depth with the Architect, `analyze`, `next` | done (0.17) |
+| — | Change 0004: each known gap goes to the capability it concerns | done (0.18) |
+| — | Change 0005: scoped test runs and a defect log | done (0.19) |
+| 6 | Releases and deploy, with delivery profiles and install options | planned |
 | 7 | `production` assurance: blocking diff coverage, adversarial probe | planned |
 | 8 | `harden <capability> --to <level>` | planned |
 
