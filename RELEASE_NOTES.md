@@ -54,8 +54,8 @@ tests, and all 59 planned mutations are caught.
   suite ran once per run.
 - Archived with the pinned 0.16.0 tool, so its known gaps were copied into
   both touched capabilities; a follow-up change will route them.
-- Published on the `v1` branch together with 0.17.0 and 0.18.0, in the same
-  PR; not merged into `main` yet.
+- Merged into `main` from the `v1` branch on 2026-10-28, together with 0.17.0
+  and 0.18.0, in one PR.
 
 ## 0.18.0 — 2026-10-26
 
