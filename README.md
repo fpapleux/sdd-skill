@@ -24,7 +24,7 @@ the code, verifies the result against the spec, and merges the change into a
 - **No dependencies.** Markdown instructions plus one Python standard-library
   script.
 
-> **Status: v1 in progress, version 0.19.0.** The `mini` and `standard` sizes
+> **Status: v1 in progress, version 0.20.0.** The `mini` and `standard` sizes
 > work end to end at every assurance level, with spec locking, amendments,
 > defect changes and a Spec Critic. Since 0.8.0, an approval covers exactly
 > what was approved: the results gate needs a PASS verdict, and edits to an
@@ -38,7 +38,10 @@ the code, verifies the result against the spec, and merges the change into a
 > range of tasks on one authorization, runs each task's own test, a
 > capability's tests at its checkpoint and the full suite once, stops only on
 > a regression, and records the failures it finds in a defect log you triage.
-> SDD is developed with SDD. Next up:
+> Since 0.20.0, an open critical or major defect refuses the verify gates
+> until you decide it later or won't fix, or it is closed, and
+> `sort-failures` counts a test that passed before the run and fails now as a
+> regression. SDD is developed with SDD. Next up:
 > releases and deploy. See the [release notes](RELEASE_NOTES.md) and the
 > [roadmap](#roadmap).
 
@@ -352,9 +355,12 @@ not done yet is expected and only counted; the run stops on a regression (a
 test that passed before the task and fails after it), on a task's own test
 that still fails after two planned fixes, or on a spec that is wrong.
 `sdd.py sort-failures` sorts failing test names into regression, expected and
-outside the change. What the full suite finds goes to `specs/defects.md`
-(`sdd.py defect add`); you decide each defect (fix now, later or won't fix)
-in your own words, and it is closed with the reason.
+outside the change; given the tests that passed before the run
+(`--passed-before`), it counts each of them that now fails as a regression.
+What the full suite finds goes to `specs/defects.md` (`sdd.py defect add`);
+you decide each defect (fix now, later or won't fix) in your own words, and
+it is closed with the reason. An open critical or major defect that isn't
+decided later or won't fix refuses the change's results approval and archive.
 
 **Failure cases are planned, not hoped for.** Each requirement is walked
 through the failure categories its assurance level requires:
@@ -490,10 +496,10 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   verified. Without subagents (Codex), independent review means a fresh session.
 - `replay` and `mutate` need git and a `Test one:` line in the design, have no
   time limit, and plan a mutation as a single-line find and replace.
-- `sort-failures` sorts by test name only: a failing test outside the
-  change is reported as outside even if it passed before the run, and no
-  defect blocks a change yet. A baseline, a scripted run plan and blocking
-  defects are planned as a follow-up change.
+- `sort-failures` reads the test names it is given: it doesn't run tests,
+  and it doesn't check that the `--passed-before` list really passed. A
+  defect blocks only the change named in its row. A scripted run plan is
+  planned (change 0008).
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
@@ -520,6 +526,8 @@ v1 is built in increments, each one an SDD change from increment 4 on:
 | 5 | `design` depth with the Architect, `analyze`, `next` | done (0.17) |
 | — | Change 0004: each known gap goes to the capability it concerns | done (0.18) |
 | — | Change 0005: scoped test runs and a defect log | done (0.19) |
+| — | Changes 0006 and 0007: open defects block the verify gates; tests that passed before the run count as regressions | done (0.20) |
+| — | Changes 0008 and 0009: a scripted run plan; a change retires the known gaps it resolves | planned |
 | 6 | Releases and deploy, with delivery profiles and install options | planned |
 | 7 | `production` assurance: blocking diff coverage, adversarial probe | planned |
 | 8 | `harden <capability> --to <level>` | planned |

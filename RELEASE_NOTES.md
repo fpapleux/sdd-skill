@@ -8,6 +8,45 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.20.0 — 2026-11-03
+
+Two of the follow-ups 0.19.0 left open, each a `mini` change, verified and
+archived: open defects now block a change's verify gates, and a test that
+passed before the run counts as a regression. `defects` gains 3 requirements
+(8 in all) and `evidence` gains 1 (6). The two changes have 35 scenarios and
+31 tasks. The suite is now 562 tests, and all 23 planned mutations are caught.
+
+- **Behavior:** `approve results`, `advance verified` (also on a return from
+  blocked) and `archive` refuse while the change has a blocking defect: a
+  defect it recorded that is open, critical or major, and undecided or
+  fix-now. Minor, closed, later and wont-fix defects, and those of other
+  changes, never block. The refusal lists each one in log order, for example
+  "D1 (critical, fix-now) is open: close it, or decide later or wont-fix,
+  first", is the only refusal shown, and changes no file. An invalid
+  `specs/defects.md` refuses the same three gates (change 0006).
+- **Behavior:** `check` at the verify stage reports each blocking defect as an
+  error with the same text (change 0006).
+- **Behavior:** `sdd.py sort-failures <file> --passed-before <list>` reads a
+  file of the tests that passed before the run. A failing test on it is a
+  regression, outside the change or in a task not done yet, and its line ends
+  "passed before the run". A list that names no test prints a warning before
+  the `sorted:` line. Without the option, nothing changes (change 0007).
+- Method: before a run's first task, the agent records the tests that pass
+  and gives that list at every sort; a test on it that fails is a regression.
+  The triage step says which defects will refuse the verify gates.
+- Upgrade: nothing to edit. A project without `specs/defects.md`, or whose log
+  has no blocking defect, behaves as before, and `sort-failures` without the
+  option sorts as in 0.19.0.
+- Verification: strong read-only subagents ran two Critic rounds on each
+  change and verified each one: 0006 passed in one round; 0007 passed in its
+  second, after two test names were made to carry every scenario ID and the
+  method text was aligned. The operator rejected a third finding, on a
+  `SKILL.md` sentence that still holds.
+- Archived with the pinned 0.19.0 tool, so the gap "needs a baseline
+  (follow-up change)" stays in `evidence` and `defects` although 0007
+  resolves it. Change 0009 (planned) lets a change retire the gaps it
+  resolves. Change 0008, a scripted run plan, is specified and comes next.
+
 ## 0.19.0 — 2026-10-28
 
 An intermediary release ahead of increment 6. On larger programs a run spent

@@ -29,10 +29,17 @@ Maintained by `sdd.py archive`. Do not edit by hand. -->
 - Two defect commands run at the same moment can write the same ID (concurrency is not required at production). (0005-scoped-test-runs)
 - next-req counts requirement IDs written with hyphens in specs/defects.md test names, so it can skip a number. (0005-scoped-test-runs)
 - The method's part (implement ranges, the three test levels, the stop conditions, the triage report, what a capability is) is design work under project rule 1, verified by review and a dogfood run. (0005-scoped-test-runs)
+- sort-failures doesn't check the list, beyond warning when it names no test: that its tests passed, or that it was recorded before the run's first task. It reads the names the agent gives it. (0007-passed-before)
+- A test renamed during the run is not on the list under its new name, so REQ-EVD-005 alone sorts it. (0007-passed-before)
+- A test that passed before and fails because the change deliberately alters the behavior it checks is a regression until the Implementer updates it; the list can't mark an intended change. (0007-passed-before)
+- Without --passed-before, sort-failures sorts by name only, as in 0.19.0, and doesn't warn that no list was given. (0007-passed-before)
+- REQ-EVD-005's text doesn't mention `--passed-before`; when the option is given, REQ-EVD-006 decides the lines it changes, and REQ-EVD-005 stays as it is. (0007-passed-before)
+- The method's part (recording the list before the run's first task and giving it at every sort) is design work under project rule 1, verified by review and a dogfood run. (0007-passed-before)
 
 ## Change history
 - 0002-subagent-fanout — Subagent fan-out: prime orchestrator, role tiers, scripted verification evidence (2026-10-18): added REQ-EVD-001, added REQ-EVD-002, added REQ-EVD-003
 - 0005-scoped-test-runs — Scoped test runs and a defect log (2026-10-28): added REQ-EVD-004, added REQ-EVD-005
+- 0007-passed-before — Tests that passed before the run count as regressions (2026-11-03): added REQ-EVD-006
 
 ## Requirements
 
@@ -174,5 +181,24 @@ When `sdd.py sort-failures <file>` is run for the active change or the one `--ch
 | B2 | boundary | failed.txt listing test_REQ_DUR_001_N1_and_REQ_DUR_001_S1, carrying N1 (unticked T2) then S1 (ticked T1) | sort-failures failed.txt | "regression: test_REQ_DUR_001_N1_and_REQ_DUR_001_S1 (REQ-DUR-001.S1, T1 done)" · exit 1 · no file is changed |
 | B3 | boundary | a scenario REQ-DUR-001.S2 that no task plans, and failed.txt listing test_REQ_DUR_001_S2_x | sort-failures failed.txt | "expected: test_REQ_DUR_001_S2_x (REQ-DUR-001.S2, no task)" · exit 0 · no file is changed |
 | B4 | boundary | the S1 change and failed.txt listing "Req-Dur-001.N1 rejects letters" | sort-failures failed.txt | "expected: Req-Dur-001.N1 rejects letters (REQ-DUR-001.N1, T2 not done)" (the hyphen form, in any case) · exit 0 · no file is changed |
+
+- N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
+
+### REQ-EVD-006 Tests that passed before the run count as regressions
+Where `sdd.py sort-failures <file>` is run with `--passed-before <list>`, a file of the test names that passed before the run, one per line, read like the failing file (blank lines skipped, surrounding spaces removed), sdd.py shall first make REQ-EVD-005's own refusals (no active change, an unknown `--change`, an unreadable failing file) and read the list only after them, and when the list can't be read, print only an error naming it and exit 1. For each failing name that equals a name on the list, it shall print, in place of the line REQ-EVD-005 gives it, `regression: <name> (<text>, passed before the run)`, where `<text>` is what REQ-EVD-005 puts in that line's parentheses, or `regression: <name> (passed before the run)` for a name REQ-EVD-005 sorts outside, and count the name once, as a regression, in the unchanged `sorted:` line and exit code of REQ-EVD-005. It shall sort every other name by REQ-EVD-005. When the list names no test, it shall print `warning: <list> names no test that passed before the run` as the line just before the `sorted:` line, with the exit code unchanged. It shall change no file.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | the REQ-EVD-005 S1 change (T1 ticked planning REQ-DUR-001.S1, T2 unticked planning REQ-DUR-001.N1), failed.txt listing test_legacy_total, test_other_total and test_REQ_DUR_001_N1_rejects, and passed.txt listing test_legacy_total | sort-failures failed.txt --passed-before passed.txt | "regression: test_legacy_total (passed before the run)" · "outside: test_other_total" · "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)" · "sorted: 1 regression, 1 expected, 1 outside the change" · exit 1 · no file is changed |
+| S2 | happy | the S1 change, and failed.txt and passed.txt both listing test_REQ_DUR_001_S1_parses | sort-failures failed.txt --passed-before passed.txt | exactly "regression: test_REQ_DUR_001_S1_parses (REQ-DUR-001.S1, T1 done, passed before the run)" and "sorted: 1 regression, 0 expected, 0 outside the change" · exit 1 · no file is changed |
+| N1 | state | the S1 change, and failed.txt and passed.txt both listing test_REQ_DUR_001_N1_rejects, the scenario of unticked T2 | sort-failures failed.txt --passed-before passed.txt | exactly "regression: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done, passed before the run)" and "sorted: 1 regression, 0 expected, 0 outside the change" · exit 1 · no file is changed |
+| N2 | dependency | the S1 change, failed.txt listing test_legacy_total, and no file missing.txt | sort-failures failed.txt --passed-before missing.txt | exit 1 · the error names missing.txt · nothing else is printed (no "outside:" or "sorted:" line) · no file is created |
+| N5 | dependency | the S1 change, and no file failed.txt or passed.txt | sort-failures failed.txt --passed-before passed.txt | exit 1 · the error names failed.txt, not passed.txt (REQ-EVD-005's refusal comes first) · no "sorted:" line · no file is created |
+| N3 | validation | the S1 change, failed.txt listing test_legacy_total, and passed.txt holding only "  test_legacy_total  " and a blank line | sort-failures failed.txt --passed-before passed.txt | exactly "regression: test_legacy_total (passed before the run)" and "sorted: 1 regression, 0 expected, 0 outside the change" · exit 1 · no file is changed |
+| N4 | validation | the S1 change and failed.txt listing test_legacy_total | sort-failures failed.txt --passed-before, without a value | exit 2 · the error is argparse's "argument --passed-before: expected one argument" · no "sorted:" line · no file is changed |
+| B1 | boundary | the S1 change, failed.txt listing test_legacy_total and test_REQ_DUR_001_N1_rejects, and passed.txt holding only a blank line (it names no test) | sort-failures failed.txt --passed-before passed.txt | exactly "outside: test_legacy_total" · "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)" · "warning: passed.txt names no test that passed before the run" · "sorted: 0 regression, 1 expected, 1 outside the change", in that order · exit 0, as without the list · no file is changed |
+| B2 | boundary | the S1 change, failed.txt listing test_legacy_total, and passed.txt listing test_REQ_DUR_001_S1_parses and test_other_total, which don't fail | sort-failures failed.txt --passed-before passed.txt | exactly "outside: test_legacy_total" and "sorted: 0 regression, 0 expected, 1 outside the change" · exit 0 · no line names a test that didn't fail · no file is changed |
+| B3 | boundary | the S1 change, failed.txt listing test_legacy_total, and passed.txt listing "Test_Legacy_Total" and "test_legacy" | sort-failures failed.txt --passed-before passed.txt | "outside: test_legacy_total" (a name is on the list only when it is equal, case included) · "sorted: 0 regression, 0 expected, 1 outside the change" · exit 0 · no file is changed |
+| B4 | boundary | the S1 change with a scenario REQ-DUR-001.S2 that no task plans, and failed.txt and passed.txt both listing test_REQ_DUR_001_S2_x | sort-failures failed.txt --passed-before passed.txt | exactly "regression: test_REQ_DUR_001_S2_x (REQ-DUR-001.S2, no task, passed before the run)" and "sorted: 1 regression, 0 expected, 0 outside the change" · exit 1 · no file is changed |
 
 - N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules

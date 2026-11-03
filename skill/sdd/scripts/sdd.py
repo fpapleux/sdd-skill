@@ -1529,6 +1529,8 @@ def defect_findings(project: Project, report: Report) -> None:
     report.defects = defect_counts(log)
     if log.problem:
         (report.errors if report.stage == "verify" else report.warnings).append(log.problem)
+    elif report.stage == "verify":  # REQ-DEF-009
+        report.errors.extend(blocking_defects(log, report.change_id))
 
 
 def cmd_check(project: Project, args) -> int:
@@ -2067,6 +2069,7 @@ def cmd_approve(project: Project, args) -> int:
             raise SddError("mini changes have no results gate: use sdd.py advance verified")
         if status != "verifying":
             raise SddError(f"change is '{status}': results approval applies to a verifying change")
+        defect_gate(project, path.parent.name)
         report = analyze(project, path, "verify")
         if not report.ok:
             print(report.render())
@@ -2130,6 +2133,7 @@ def cmd_advance(project: Project, args) -> int:
     status, size = read_front_matter(text).get("status"), read_front_matter(text).get("size", "mini")
     moves = TRANSITIONS.get(size, TRANSITIONS["mini"])
     target = args.status
+    change_id = path.parent.name
     if status in TERMINAL:
         raise SddError(f"change is '{status}' and cannot move")
     if target == "abandoned":
@@ -2155,6 +2159,7 @@ def cmd_advance(project: Project, args) -> int:
     if target == "designed" and not test_command(strip_comments(change_text(path))):
         raise SddError("design.md needs a 'Test command:' line before the change is designed")
     if target == "verified":
+        defect_gate(project, change_id)
         report = analyze(project, path, "verify")
         if not report.ok:
             print(report.render())
@@ -2177,6 +2182,7 @@ def cmd_archive(project: Project, args) -> int:
     change_id = path.parent.name
     if fm.get("status") != "verified":
         raise SddError(f"archive needs a verified change (status is '{fm.get('status')}')")
+    defect_gate(project, change_id=change_id)
     report = analyze(project, path, "verify")
     if not report.ok:
         print(report.render())
@@ -2595,32 +2601,41 @@ def change_plan(path: Path) -> tuple:
     return refs, tasks
 
 
+def read_names(file) -> list[str]:
+    """The test names in the file, one per line: blank lines skipped, spaces trimmed, first of duplicates kept."""
+    try:
+        lines = Path(file).read_text().splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SddError(f"cannot read {file}: {exc.strerror if isinstance(exc, OSError) else exc}")
+    return list(dict.fromkeys(line.strip() for line in lines if line.strip()))  # file order, first kept
+
+
 def cmd_sort_failures(project: Project, args) -> int:
     project.require_init()
     path = project.current(args.change)
-    try:
-        lines = Path(args.file).read_text().splitlines()
-    except (OSError, UnicodeDecodeError) as exc:
-        raise SddError(f"cannot read {args.file}: {exc.strerror if isinstance(exc, OSError) else exc}")
-    names = list(dict.fromkeys(line.strip() for line in lines if line.strip()))  # file order, first kept
+    names = read_names(args.file)
+    passed = set(read_names(args.passed_before)) if args.passed_before is not None else set()
     refs, tasks = change_plan(path)
     counts = {"regression": 0, "expected": 0, "outside": 0}
     for name in names:
         found = sorted((m.start(), ref) for ref in refs for m in [scenario_pattern(ref).search(name)] if m)
-        if not found:
-            counts["outside"] += 1
-            print(f"outside: {name}")
-            continue
         ids = [ref for _, ref in found]
         ticked = [(ref, t) for ref in ids for t in tasks if t["done"] and ref in t["refs"]]
-        if ticked:
+        if not found:
+            kind, detail = "outside", ""
+        elif ticked:
             ref, task = ticked[0]
-            counts["regression"] += 1
-            print(f"regression: {name} ({ref}, {task['id']} done)")
+            kind, detail = "regression", f"{ref}, {task['id']} done"
         else:
             planners = [t["id"] + " not done" for t in tasks if ids[0] in t["refs"]]
-            counts["expected"] += 1
-            print(f"expected: {name} ({ids[0]}, {planners[0] if planners else 'no task'})")
+            kind, detail = "expected", f"{ids[0]}, {planners[0] if planners else 'no task'}"
+        if name in passed:
+            kind = "regression"
+            detail = detail + ", passed before the run" if detail else "passed before the run"
+        counts[kind] += 1
+        print(f"{kind}: {name} ({detail})" if detail else f"{kind}: {name}")
+    if args.passed_before is not None and not passed:
+        print(f"warning: {args.passed_before} names no test that passed before the run")
     print(f"sorted: {counts['regression']} regression, {counts['expected']} expected, "
           f"{counts['outside']} outside the change")
     return 1 if counts["regression"] else 0
@@ -2697,6 +2712,24 @@ class DefectLog:
 
 def read_defect_log(project: Project) -> DefectLog:
     return DefectLog(project.specs / "defects.md")
+
+
+def blocking_defects(log: DefectLog, change_id: str) -> list:
+    """The REQ-DEF-007 line of each blocking defect of the change, in the log's order."""
+    return [f"{r['id']} ({r['severity']}, {r['decision']}) is open: close it, or decide later or wont-fix, first"
+            for r in log.rows if r["cells"][5] == change_id and r["status"] == "open"
+            and r["severity"] in ("critical", "major") and r["decision"] in ("undecided", "fix-now")]
+
+
+def defect_gate(project: Project, change_id: str) -> None:
+    """Refuse a verify gate while the change has a blocking defect (REQ-DEF-007) or the log is invalid
+    (REQ-DEF-008); writes nothing."""
+    log = read_defect_log(project)
+    if log.problem:  # REQ-DEF-008: the gate can't show that nothing blocks
+        raise SddError(log.problem)
+    blocking = blocking_defects(log, change_id)
+    if blocking:
+        raise SddError("\n".join(blocking))
 
 
 def defect_counts(log: DefectLog):
@@ -2907,6 +2940,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sort-failures", help="sort failing tests into regressions, expected failures and the rest")
     p.add_argument("file", help="the failing test names, one per line")
     p.add_argument("--change")
+    p.add_argument("--passed-before")
     p.set_defaults(func=cmd_sort_failures)
 
     p = sub.add_parser("defect", help="record a defect in specs/defects.md")

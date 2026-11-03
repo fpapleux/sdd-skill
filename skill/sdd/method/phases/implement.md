@@ -28,13 +28,20 @@ Deliver tasks test-first. Role: **Implementer**
    - **Full:** the design's `Test command:`, once, before the run closes.
 
    A **regression** is a test that passed before the task and fails after
-   it. A failing test of a task not done yet is **expected**: count it and
-   go on; it never stops the run. At each checkpoint and at the end, write
+   it. A failing test of a task not done yet is **expected** unless it is on
+   the `--passed-before` list: count it and go on; it never stops the run. A
+   test on that list is a **regression**, even when its task isn't done yet.
+   At each checkpoint and at the end, write
    the failing test names to a file, one per line, and run
-   `SDD sort-failures <file>`. It sorts them into `regression` (a ticked
-   task plans the scenario), `expected` (no ticked task plans it) and
-   `outside` (not a scenario of this change). Judge an outside failure from
-   your own runs: if it passed before the task, it is a regression.
+   `SDD sort-failures <file> --passed-before <list>`. It sorts them into
+   `regression` (a ticked task plans the scenario, or the test is on the
+   list), `expected` (no ticked task plans it, and it is not on the list)
+   and `outside` (not a scenario of this change, not on the list). A
+   regression from the list is handled like any regression.
+
+   Before the run's first task, run the full suite and write the names of
+   the tests that pass to a file, one per line. That file is the list; give
+   it at every sort, and don't update it during the run.
 6. **Stop and ask the operator** only when:
    - the task's own test still fails, or can't be made to fail for the right
      reason, after two planned fixes;
@@ -57,7 +64,10 @@ Deliver tasks test-first. Role: **Implementer**
    - Record each decision with
      `SDD defect decide D<n> <fix-now|later|wont-fix> --evidence "<the operator's words>"`.
      A fix-now defect becomes a `bug` change (`sdd bug`) or a task of this
-     change; a later one stays open in the log.
+     change; a later one stays open in the log. A critical or major defect
+     of this change that is open, undecided or fix-now, refuses
+     `approve results`, `advance verified` and `archive` until it is closed
+     or decided later or wont-fix.
    - When a defect is fixed, or the operator accepts it as is, close it with
      `SDD defect close D<n> --evidence "<what fixed it, or why it is closed>"`.
 8. Report the tasks done (each with its red → green line), each component

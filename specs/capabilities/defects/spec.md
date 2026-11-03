@@ -20,9 +20,13 @@ Maintained by `sdd.py archive`. Do not edit by hand. -->
 - Two defect commands run at the same moment can write the same ID (concurrency is not required at production). (0005-scoped-test-runs)
 - next-req counts requirement IDs written with hyphens in specs/defects.md test names, so it can skip a number. (0005-scoped-test-runs)
 - The method's part (implement ranges, the three test levels, the stop conditions, the triage report, what a capability is) is design work under project rule 1, verified by review and a dogfood run. (0005-scoped-test-runs)
+- A defect blocks only the change its Change cell names, as written: a defect recorded under another change, a mistyped ID or an archived change blocks nothing. (0006-blocking-defects)
+- Closing a blocking defect or deciding it later or wont-fix clears the block on the agent's evidence; close doesn't check that the defect's test now passes. (0006-blocking-defects)
+- status and next count the open defects but don't name the blocking ones; check at the verify stage and the three gates do. (0006-blocking-defects)
 
 ## Change history
 - 0005-scoped-test-runs — Scoped test runs and a defect log (2026-10-28): added REQ-DEF-001, added REQ-DEF-002, added REQ-DEF-003, added REQ-DEF-004, added REQ-DEF-006
+- 0006-blocking-defects — Open defects block the verify gates (2026-11-02): added REQ-DEF-007, added REQ-DEF-008, added REQ-DEF-009
 
 ## Requirements
 
@@ -119,3 +123,53 @@ If specs/defects.md has, outside HTML comments, table lines (lines starting with
 | B1 | boundary | a valid log with a blank line and an HTML comment between its rows | defect add --test test_REQ_DUR_001_S2_x --severity minor | exit 0 · the next row is appended · the earlier lines are unchanged |
 | B2 | boundary | a log whose test cell holds an escaped pipe | check | no defect-log problem · no file is changed |
 | B3 | boundary | a valid log whose header is padded ("\| ID  \| Status  \| …") and whose separator is "\| :--- \| ------ \| …" | defect add --test test_REQ_DUR_001_S2_x --severity minor | exit 0 · the next row is appended · the header and separator lines are unchanged |
+
+### REQ-DEF-007 A blocking defect refuses the verify gates
+When `sdd.py approve results` (standard), `sdd.py advance verified` (from verifying or back from blocked) or `sdd.py archive` is run on a change that has a blocking defect, a row of a valid specs/defects.md whose Change cell is the change's ID and which is open, critical or major, and undecided or decided fix-now, sdd.py shall exit 1, print for each blocking defect, in the log's order, `D<n> (<severity>, <decision>) is open: close it, or decide later or wont-fix, first`, and change no file; this is the only refusal shown, checked right after the gate's argument, size and status checks and before the verify check, the verdict and archive's destination check; a minor or closed defect, one decided later or wont-fix, and one whose Change cell names another change never block, and no other approve or advance is refused because of the defects.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | a standard change 0007-x in verifying, verify check OK, "Verdict: PASS", a log with D1 open, critical, later and D2 open, major, wont-fix, both of 0007-x | approve results | exit 0 · status verified · one results row · specs/defects.md is byte-for-byte unchanged |
+| S2 | happy | a mini change 0007-x in verifying, verify check OK, "Verdict: PASS", a log with D1 closed, critical, fix-now, of 0007-x | advance verified | exit 0 · status verified (a closed defect never blocks) |
+| S3 | happy | a verified mini change 0007-x and the S1 log | archive | exit 0 · the change is in specs/archive/0007-x |
+| N1 | state | the S1 change and a log with D1 open, critical, fix-now, of 0007-x | approve results | exit 1 · the output has "D1 (critical, fix-now) is open: close it, or decide later or wont-fix, first" · status stays verifying · no results row · specs/defects.md is byte-for-byte unchanged |
+| N2 | state | the S2 change and a log with D1 open, major, undecided, of 0007-x | advance verified | exit 1 · the output has "D1 (major, undecided) is open: close it, or decide later or wont-fix, first" · status stays verifying · spec.md is byte-for-byte unchanged |
+| N3 | state | a verified mini change 0007-x and a log with D1, added after verified, open, critical, undecided, of 0007-x | archive | exit 1 · the output has "D1 (critical, undecided) is open: …" · status stays verified · the change stays in specs/changes · spec.md is byte-for-byte unchanged · no capability spec is written · specs/defects.md is byte-for-byte unchanged |
+| N4 | state | a verified standard change 0007-x whose verify check fails (its test file no longer names a scenario) and a log with D1 open, critical, fix-now, D2 open, minor, undecided and D3 open, major, fix-now, all of 0007-x | archive | exit 1 · the output is only the D1 and D3 lines: D1, then "D3 (major, fix-now) is open: …" (no "verify check fails") · it doesn't name D2 · status stays verified · the change stays in specs/changes · spec.md is byte-for-byte unchanged · no capability spec is written · specs/defects.md is byte-for-byte unchanged |
+| N5 | state | the N1 setup, then defect decide D1 later --evidence "After the demo" | approve results | exit 0 · status verified (deciding later clears the block) |
+| N6 | state | the N1 setup, with T1 left unticked (the verify check fails) and the latest line "Verdict: GAPS — F1" | approve results | exit 1 · the output is only the D1 refusal "D1 (critical, fix-now) is open: …" (no "verify check fails", no "GAPS") · status stays verifying · no results row |
+| N7 | state | a mini change 0007-x blocked from verified (blocked_from: verified), with T1 left unticked (the verify check fails), the latest line "Verdict: GAPS — F1", a log with D1 open, critical, undecided, of 0007-x | advance verified | exit 1 · the output is only the D1 refusal "D1 (critical, undecided) is open: …" (no "verify check fails", no "GAPS") · status stays blocked · spec.md is byte-for-byte unchanged |
+| B1 | boundary | the S2 change and no specs/defects.md | advance verified | exit 0 · status verified · no specs/defects.md is created |
+| B2 | boundary | the S1 change and a log with D1 open, minor, undecided and D2 open, minor, fix-now, both of 0007-x | approve results | exit 0 · status verified (minor never blocks) |
+| B3 | boundary | the S1 change and a log with D1 open, critical, fix-now, of 0008-y | approve results | exit 0 · status verified (another change's defect doesn't block) |
+| B4 | boundary | a mini draft 0007-x ready for plan approval and a log with D1 open, critical, undecided, of 0007-x | approve plan, then advance implementing | exit 0 each time · status implementing (the plan gate and other moves aren't refused because of defects) |
+| B5 | boundary | the N2 setup | advance implementing | exit 0 · status implementing (the way back to fix a defect isn't refused) |
+
+- N/A validation: the gates take no new argument; a log whose rows aren't valid is covered by REQ-DEF-008
+- N/A dependency: a missing log is B1; a log that can't be read as rows is covered by REQ-DEF-008
+- N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
+
+### REQ-DEF-008 An invalid defect log refuses the verify gates
+If specs/defects.md isn't valid (REQ-DEF-006) when `sdd.py approve results`, `sdd.py advance verified` or `sdd.py archive` is run, then sdd.py shall exit 1, print the problem as REQ-DEF-006 names it (specs/defects.md, the line number and the problem) and change no file, even when no row names the change; as in REQ-DEF-007, this is the only refusal shown, checked right after the gate's argument, size and status checks; no other approve or advance is refused because of the log.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| N1 | dependency | the REQ-DEF-007.S1 change and a log whose row D1, on line 5, has the severity blocker | approve results | exit 1 · the output is only that problem, naming specs/defects.md, line 5 and "blocker" · status stays verifying · no results row · specs/defects.md is byte-for-byte unchanged |
+| N2 | dependency | the REQ-DEF-007.S2 change and the N1 log | advance verified | exit 1 · the N1 problem · status stays verifying · spec.md is byte-for-byte unchanged |
+| N3 | dependency | a verified mini change 0007-x and a log with two rows D1, both of 0008-y | archive | exit 1 · the output says D1 is repeated · status stays verified · the change stays in specs/changes · spec.md is byte-for-byte unchanged · no capability spec is written · specs/defects.md is byte-for-byte unchanged |
+| B1 | boundary | the REQ-DEF-007.B4 draft and the N1 log | approve plan | exit 0 · status planned (an invalid log refuses only the verify gates) |
+| B2 | boundary | the REQ-DEF-007.S2 change and the N1 log | advance implementing | exit 0 · status implementing (no other advance is refused because of an invalid log) |
+
+### REQ-DEF-009 check lists the blocking defects at the verify stage
+When `sdd.py check` runs at the verify stage (`--stage verify`, or without `--stage` on a change in verifying or verified), sdd.py shall report each blocking defect of the change (REQ-DEF-007) as an error with the REQ-DEF-007 text, in the log's order, and exit 1; at the other stages it reports none of them, and the open defects line and `defects` key of REQ-DEF-004 are unchanged.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | a mini change 0007-x in verifying, otherwise clean, a log with D1 open, critical, later, D2 open, minor, undecided and D3 closed, critical, fix-now, of 0007-x, and D4 open, critical, fix-now, of 0008-y | check --stage verify | exit 0 · no error names a defect · "open defects: 3 (2 critical, 1 undecided)" · no file is changed |
+| N1 | state | the S1 change and a log with D1 open, critical, fix-now and D2 open, major, undecided, of 0007-x | check --stage verify | exit 1 · the errors "D1 (critical, fix-now) is open: close it, or decide later or wont-fix, first" and "D2 (major, undecided) is open: …", in that order · check --json's errors hold each of the two lines exactly once · no file is changed |
+| B1 | boundary | the N1 setup | check, without --stage | exit 1 · the N1 errors (the stage is verify) · no file is changed |
+| B2 | boundary | the N1 log, naming an otherwise clean standard change 0007-x at designed | check --stage plan | exit 0 · no error names a defect · "open defects: 2 (1 critical, 1 undecided)" · no file is changed |
+
+- N/A validation: check takes no new argument; a log whose rows aren't valid is covered by REQ-DEF-006
+- N/A dependency: a missing log gives no defect error (REQ-DEF-004.B1); an invalid one is REQ-DEF-006.N2
+- N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
