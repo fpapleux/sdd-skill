@@ -5644,5 +5644,506 @@ class DefectLogTests(DesignedBase):
         self.assertEqual(out.strip(), "error: specs/defects.md line 3: the header has no separator row after it")
 
 
+# ---------------------------------------------------------------- change 0006-blocking-defects (DEF)
+
+def drow(n, severity, decision, status="open", change="0007-x"):
+    """Defect row D<n> for a change, after d1's shape (REQ-DEF-007 fixtures)."""
+    evidence = "After the demo" if decision in ("later", "wont-fix") else ""
+    close = "Fixed" if status == "closed" else ""
+    return defect_row(f"D{n}", status, severity, decision, "DUR", change, f"test_REQ_DUR_001_S1_t{n}", evidence, close)
+
+
+def blocking_line(n, severity, decision):
+    """The REQ-DEF-007 refusal line for one blocking defect."""
+    return f"D{n} ({severity}, {decision}) is open: close it, or decide later or wont-fix, first"
+
+
+class DefectGateBase(Base):
+    """The changes and helpers of the REQ-DEF-007 to REQ-DEF-009 tests."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        for n in range(1, 7):  # so the new change is numbered 0007
+            (self.repo.root / f"specs/archive/{n:04d}-old").mkdir(parents=True)
+        self.log = self.repo.root / "specs" / "defects.md"
+
+    def standard_verifying(self):
+        """A standard change 0007-x in verifying, verify check OK, "Verdict: PASS" (REQ-DEF-007.S1)."""
+        self.repo.ok("new", "x", "--title", "X", "--size", "standard", "--capability", "duration=DUR")
+        self.dir = self.repo.root / "specs/changes/0007-x"
+        self.front = self.dir / "proposal.md"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        set_file_section(self.dir / "design.md", "Test strategy", "- Test command: `python3 -m unittest`\n")
+        self.repo.ok("advance", "designed")
+        set_file_section(self.dir / "tasks.md", "Tasks", STD_DONE_TASKS)
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        set_file_section(self.dir / "verification.md", "Verification", "Verdict: PASS\n")
+        self.repo.ok("check", "--stage", "verify")  # the verify check is OK
+
+    def mini_verifying(self):
+        """A mini change 0007-x in verifying, verify check OK, "Verdict: PASS" (REQ-DEF-007.S2)."""
+        cid = self.new("x")
+        self.assertEqual(cid, "0007-x")
+        self.dir = self.repo.root / "specs/changes" / cid
+        self.front = self.dir / "spec.md"
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)
+        self.repo.write("tests/test_dur.py", "REQ_DUR_001_S1 REQ_DUR_001_N1")
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.repo.ok("advance", "implementing")
+        self.repo.ok("advance", "verifying")
+        self.repo.ok("check", "--stage", "verify")  # the verify check is OK
+
+    def status_of(self):
+        return re.search(r"^status: (\S+)", self.front.read_text(), re.M).group(1)
+
+    def results_rows(self):
+        return self.front.read_text().count("| results |")
+
+    def break_verify_check(self, standard=True):
+        """Leave T1 unticked, so the verify check fails, and make the latest line "Verdict: GAPS — F1"."""
+        if standard:
+            set_file_section(self.dir / "tasks.md", "Tasks", STD_DONE_TASKS.replace("- [x] T1", "- [ ] T1", 1))
+            set_file_section(self.dir / "verification.md", "Verification", "Verdict: GAPS — F1\n")
+        else:
+            self.front.write_text(self.front.read_text().replace("- [x] T1", "- [ ] T1", 1))
+            self.repo.set_section("0007-x", "Verification", "Verdict: GAPS — F1\n")
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 1, out)  # the verify check fails
+
+    def verified_mini(self):
+        """A verified mini change 0007-x (REQ-DEF-007.S3)."""
+        self.mini_verifying()
+        self.repo.ok("advance", "verified")
+
+    def assert_archive_refused(self):
+        """Nothing is moved or written: the change stays verified in specs/changes (REQ-DEF-007.N3)."""
+        self.assertEqual(self.status_of(), "verified")
+        self.assertTrue(self.dir.is_dir())
+        self.assertFalse((self.repo.root / "specs/archive/0007-x").exists())
+        self.assertFalse((self.repo.root / "specs/capabilities/duration").exists())  # no capability spec
+
+
+class DefectBlockTests(DefectGateBase):
+    """REQ-DEF-007: a blocking defect refuses the verify gates."""
+
+    def test_REQ_DEF_007_N1_results_approval_refuses_a_critical_fix_now_defect(self):
+        self.standard_verifying()
+        log = defect_log(d1(decision="fix-now"))
+        self.log.write_text(log)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1, out)
+        self.assertIn(blocking_line(1, "critical", "fix-now"), out)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.results_rows(), 0)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        self.assertEqual(snapshot(self.repo.root), before)  # no file is changed
+
+    def test_REQ_DEF_007_N6_results_approval_shows_only_the_defect_refusal_before_the_verify_check_and_the_verdict(self):
+        self.standard_verifying()
+        self.break_verify_check()
+        log = defect_log(d1(decision="fix-now"))
+        self.log.write_text(log)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.strip(), "error: " + blocking_line(1, "critical", "fix-now"))
+        self.assertNotIn("verify check fails", out)
+        self.assertNotIn("GAPS", out)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.results_rows(), 0)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_DEF_007_S1_later_and_wont_fix_defects_dont_block_results_approval(self):
+        self.standard_verifying()
+        log = defect_log(drow(1, "critical", "later"), drow(2, "major", "wont-fix"))
+        self.log.write_text(log)
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+        self.assertEqual(self.results_rows(), 1)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_007_N5_deciding_later_clears_the_block(self):
+        self.standard_verifying()
+        self.log.write_text(defect_log(d1(decision="fix-now")))
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1, out)  # the N1 setup blocks
+        self.repo.ok("defect", "decide", "D1", "later", "--evidence", "After the demo")
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+
+    def test_REQ_DEF_007_N2_advance_verified_refuses_a_major_undecided_defect(self):
+        self.mini_verifying()
+        self.log.write_text(defect_log(drow(1, "major", "undecided")))
+        spec = self.front.read_bytes()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1, out)
+        self.assertIn(blocking_line(1, "major", "undecided"), out)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.front.read_bytes(), spec)
+
+    def test_REQ_DEF_007_N7_advance_verified_back_from_blocked_shows_only_the_defect_refusal_before_the_verify_check_and_the_verdict(self):
+        self.mini_verifying()
+        self.repo.ok("advance", "verified")
+        self.repo.ok("advance", "blocked")
+        self.assertIn("blocked_from: verified", self.front.read_text())
+        self.break_verify_check(standard=False)
+        self.log.write_text(defect_log(drow(1, "critical", "undecided")))
+        spec = self.front.read_bytes()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.strip(), "error: " + blocking_line(1, "critical", "undecided"))
+        self.assertNotIn("verify check fails", out)
+        self.assertNotIn("GAPS", out)
+        self.assertEqual(self.status_of(), "blocked")
+        self.assertEqual(self.front.read_bytes(), spec)
+
+    def test_REQ_DEF_007_S2_and_REQ_DEF_007_B1_a_closed_defect_or_no_log_doesnt_block_advance(self):
+        self.mini_verifying()
+        self.log.write_text(defect_log(drow(1, "critical", "fix-now", status="closed")))  # S2
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+        self.setUp()  # a fresh repository for B1
+        self.mini_verifying()
+        self.assertFalse(self.log.exists())  # B1: no specs/defects.md
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+        self.assertFalse(self.log.exists())  # none is created
+
+    def test_REQ_DEF_007_B5_advance_implementing_from_verifying_isnt_refused(self):
+        self.mini_verifying()
+        log = defect_log(drow(1, "major", "undecided"))
+        self.log.write_text(log)
+        code, out = self.repo.run("advance", "implementing")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "implementing")
+        self.assertEqual(self.log.read_bytes(), log.encode())
+
+    def test_REQ_DEF_007_N3_archive_refuses_a_defect_added_after_verified(self):
+        self.verified_mini()
+        log = defect_log(drow(1, "critical", "undecided"))
+        self.log.write_text(log)
+        before = snapshot(self.repo.root)
+        spec = self.front.read_bytes()
+        code, out = self.repo.run("archive")
+        self.assertEqual(code, 1, out)
+        self.assertIn(blocking_line(1, "critical", "undecided"), out)
+        self.assert_archive_refused()
+        self.assertEqual(self.front.read_bytes(), spec)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_DEF_007_S3_archive_passes_with_later_and_wont_fix_defects(self):
+        self.verified_mini()
+        self.log.write_text(defect_log(drow(1, "critical", "later"), drow(2, "major", "wont-fix")))
+        code, out = self.repo.run("archive")
+        self.assertEqual(code, 0, out)
+        self.assertTrue((self.repo.root / "specs/archive/0007-x").is_dir())
+        self.assertFalse(self.dir.exists())
+
+    def test_REQ_DEF_007_N4_archive_shows_only_the_blocking_defects_in_order_and_without_the_minor_before_the_verify_check(self):
+        self.standard_verifying()
+        self.repo.ok("approve", "results", "--evidence", "ok")
+        self.repo.write("tests/test_dur.py", "no scenario named here")  # the verify check fails now
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 1, out)
+        log = defect_log(drow(1, "critical", "fix-now"), drow(2, "minor", "undecided"), drow(3, "major", "fix-now"))
+        self.log.write_text(log)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("archive")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.strip(), "error: " + blocking_line(1, "critical", "fix-now") + "\n"
+                         + blocking_line(3, "major", "fix-now"))
+        self.assertNotIn("verify check fails", out)
+        self.assertNotIn("D2", out)
+        self.assertEqual(self.status_of(), "verified")
+        self.assertTrue(self.dir.is_dir())
+        self.assertFalse((self.repo.root / "specs/archive/0007-x").exists())
+        self.assertFalse((self.repo.root / "specs/capabilities/duration").exists())
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_DEF_007_B2_and_REQ_DEF_007_B3_minor_and_other_change_defects_dont_block(self):
+        self.standard_verifying()
+        self.log.write_text(defect_log(drow(1, "minor", "undecided"), drow(2, "minor", "fix-now")))  # B2
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+        self.setUp()  # a fresh repository for B3
+        self.standard_verifying()
+        self.log.write_text(defect_log(drow(1, "critical", "fix-now", change="0008-y")))
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "verified")
+
+    def test_REQ_DEF_007_B4_the_plan_gate_and_other_moves_ignore_defects(self):
+        cid = self.new("x")
+        self.assertEqual(cid, "0007-x")
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)
+        self.dir = self.repo.root / "specs/changes" / cid
+        self.front = self.dir / "spec.md"
+        self.log.write_text(defect_log(drow(1, "critical", "undecided")))
+        self.repo.ok("approve", "plan", "--evidence", "ok")
+        self.assertEqual(self.status_of(), "planned")
+        self.repo.ok("advance", "implementing")
+        self.assertEqual(self.status_of(), "implementing")
+
+
+class DefectLogGateTests(DefectGateBase):
+    """REQ-DEF-008: an invalid defect log refuses the verify gates."""
+
+    BAD_LOG = defect_log(drow(1, "blocker", "undecided"))  # row D1 is on line 5
+    BAD_LINE = 'error: specs/defects.md line 5: severity "blocker" is not critical, major or minor'
+
+    def test_REQ_DEF_008_N1_results_approval_refuses_an_invalid_log(self):
+        self.standard_verifying()
+        self.log.write_text(self.BAD_LOG)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("approve", "results", "--evidence", "ok")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.strip(), self.BAD_LINE)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.results_rows(), 0)
+        self.assertEqual(self.log.read_bytes(), self.BAD_LOG.encode())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_DEF_008_N2_advance_verified_refuses_an_invalid_log(self):
+        self.mini_verifying()
+        self.log.write_text(self.BAD_LOG)
+        spec = self.front.read_bytes()
+        code, out = self.repo.run("advance", "verified")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.strip(), self.BAD_LINE)
+        self.assertEqual(self.status_of(), "verifying")
+        self.assertEqual(self.front.read_bytes(), spec)
+
+    def test_REQ_DEF_008_N3_archive_refuses_a_repeated_defect_id(self):
+        self.verified_mini()
+        log = defect_log(drow(1, "minor", "undecided", change="0008-y"), drow(1, "minor", "undecided", change="0008-y"))
+        self.log.write_text(log)
+        before = snapshot(self.repo.root)
+        spec = self.front.read_bytes()
+        code, out = self.repo.run("archive")
+        self.assertEqual(code, 1, out)
+        self.assertIn("D1 is repeated", out)
+        self.assert_archive_refused()
+        self.assertEqual(self.front.read_bytes(), spec)
+        self.assertEqual(self.log.read_bytes(), log.encode())
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_DEF_008_B1_and_REQ_DEF_008_B2_the_plan_gate_and_advance_implementing_accept_an_invalid_log(self):
+        cid = self.new("x")  # B1: a draft ready for plan approval
+        self.repo.fill(cid, design_and_tasks=DONE_TASKS)
+        self.dir = self.repo.root / "specs/changes" / cid
+        self.front = self.dir / "spec.md"
+        self.log.write_text(self.BAD_LOG)
+        code, out = self.repo.run("approve", "plan", "--evidence", "ok")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "planned")
+        self.setUp()  # a fresh repository for B2
+        self.mini_verifying()
+        self.log.write_text(self.BAD_LOG)
+        code, out = self.repo.run("advance", "implementing")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.status_of(), "implementing")
+
+
+class DefectCheckTests(DefectGateBase):
+    """REQ-DEF-009: check lists the blocking defects at the verify stage."""
+
+    N1_LOG = defect_log(drow(1, "critical", "fix-now"), drow(2, "major", "undecided"))
+    N1_LINES = [blocking_line(1, "critical", "fix-now"), blocking_line(2, "major", "undecided")]
+
+    def test_REQ_DEF_009_N1_check_lists_each_blocking_defect_as_an_error(self):
+        self.mini_verifying()
+        self.log.write_text(self.N1_LOG)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 1, out)
+        lines = [line.strip() for line in out.splitlines()]
+        found = [line for line in lines if " is open: close it" in line]
+        self.assertEqual([line[2:] for line in found], self.N1_LINES)  # in the log's order
+        code, out = self.repo.run("check", "--stage", "verify", "--json")
+        self.assertEqual(code, 1, out)
+        errors = json.loads(out)["errors"]
+        for line in self.N1_LINES:
+            self.assertEqual(errors.count(line), 1, errors)
+        self.assertEqual([e for e in errors if " is open: " in e], self.N1_LINES)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+    def test_REQ_DEF_009_S1_check_passes_with_only_non_blocking_defects(self):
+        self.mini_verifying()
+        self.log.write_text(defect_log(drow(1, "critical", "later"), drow(2, "minor", "undecided"),
+                                       drow(3, "critical", "fix-now", status="closed"),
+                                       drow(4, "critical", "fix-now", change="0008-y")))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "verify")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn(" is open: ", out)
+        self.assertIn("open defects: 3 (2 critical, 1 undecided)", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_DEF_009_B1_and_REQ_DEF_009_B2_check_without_a_stage_lists_them_the_plan_stage_doesnt(self):
+        self.mini_verifying()
+        self.log.write_text(self.N1_LOG)
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check")  # B1: the stage is verify
+        self.assertEqual(code, 1, out)
+        found = [line.strip()[2:] for line in out.splitlines() if " is open: close it" in line]
+        self.assertEqual(found, self.N1_LINES)
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.setUp()  # a fresh repository for B2: a standard change at designed
+        self.repo.ok("new", "x", "--title", "X", "--size", "standard", "--capability", "duration=DUR")
+        self.dir = self.repo.root / "specs/changes/0007-x"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS)
+        set_file_section(self.dir / "spec-delta.md", "Known gaps", "- None\n")
+        set_file_section(self.dir / "clarifications.md", "Clarifications", ROUND_DONE)
+        self.repo.ok("approve", "spec", "--evidence", "ok")
+        set_file_section(self.dir / "design.md", "Test strategy", "- Test command: `python3 -m unittest`\n")
+        self.repo.ok("advance", "designed")
+        set_file_section(self.dir / "tasks.md", "Tasks", STD_DONE_TASKS)
+        self.log.write_text(defect_log(drow(1, "critical", "fix-now"), drow(2, "major", "undecided")))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("check", "--stage", "plan")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn(" is open: ", out)
+        self.assertIn("open defects: 2 (1 critical, 1 undecided)", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+
+# ---------------------------------------------------------------- change 0007-passed-before (EVD)
+
+class PassedBeforeTests(Base):
+    """REQ-EVD-006: with --passed-before, a failing test on the list is a regression."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        for n in range(1, 7):  # so the new change is numbered 0007
+            (self.repo.root / f"specs/archive/{n:04d}-old").mkdir(parents=True)
+        self.cid = self.new("x")
+        self.repo.fill(self.cid, design_and_tasks=SORT_TASKS)
+
+    def sort_with(self, failed, passed):
+        """Write failed.txt and passed.txt and sort with --passed-before; no file may change."""
+        failed_file = self.repo.write("failed.txt", "".join(name + "\n" for name in failed))
+        passed_file = self.repo.write("passed.txt", "".join(name + "\n" for name in passed))
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed_file), "--passed-before", str(passed_file))
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def test_REQ_EVD_006_S1_and_REQ_EVD_006_S2_a_test_that_passed_before_and_fails_is_a_regression(self):
+        # S1: an outside name on the list is a regression; the others sort as in REQ-EVD-005
+        code, lines = self.sort_with(
+            ["test_legacy_total", "test_other_total", "test_REQ_DUR_001_N1_rejects"], ["test_legacy_total"])
+        self.assertEqual(lines, ["regression: test_legacy_total (passed before the run)",
+                                 "outside: test_other_total",
+                                 "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)",
+                                 "sorted: 1 regression, 1 expected, 1 outside the change"])
+        self.assertEqual(code, 1)
+        # S2: a done task's scenario on the list keeps its parentheses text, then the suffix
+        code, lines = self.sort_with(["test_REQ_DUR_001_S1_parses"], ["test_REQ_DUR_001_S1_parses"])
+        self.assertEqual(lines, ["regression: test_REQ_DUR_001_S1_parses (REQ-DUR-001.S1, T1 done, passed before the run)",
+                                 "sorted: 1 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_006_N1_a_not_done_tasks_scenario_that_passed_before_is_a_regression(self):
+        code, lines = self.sort_with(["test_REQ_DUR_001_N1_rejects"], ["test_REQ_DUR_001_N1_rejects"])
+        self.assertEqual(lines, ["regression: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done, passed before the run)",
+                                 "sorted: 1 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_006_N2_an_unreadable_list_is_refused_and_nothing_else_is_printed(self):
+        failed_file = self.repo.write("failed.txt", "test_legacy_total\n")
+        missing = self.repo.root / "missing.txt"
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed_file), "--passed-before", str(missing))
+        self.assertEqual(code, 1)
+        self.assertTrue(out.startswith(f"error: cannot read {missing}: "), out)
+        self.assertEqual(len(out.strip().splitlines()), 1, out)
+        self.assertNotIn("outside:", out)
+        self.assertNotIn("sorted:", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertFalse(missing.exists())
+
+    def test_REQ_EVD_006_N5_an_unreadable_failing_file_is_refused_before_the_list_is_read(self):
+        failed, passed = self.repo.root / "failed.txt", self.repo.root / "passed.txt"
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed), "--passed-before", str(passed))
+        self.assertEqual(code, 1)
+        self.assertIn(f"cannot read {failed}", out)
+        self.assertNotIn(str(passed), out)
+        self.assertNotIn("sorted:", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertFalse(failed.exists())
+        self.assertFalse(passed.exists())
+
+    def test_REQ_EVD_006_N3_the_list_skips_blank_lines_and_trims_names(self):
+        failed_file = self.repo.write("failed.txt", "test_legacy_total\n")
+        passed_file = self.repo.write("passed.txt", "  test_legacy_total  \n\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed_file), "--passed-before", str(passed_file))
+        self.assertEqual(out.splitlines(), ["regression: test_legacy_total (passed before the run)",
+                                            "sorted: 1 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_006_N4_the_option_without_a_value_is_an_argparse_error(self):
+        failed_file = self.repo.write("failed.txt", "test_legacy_total\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed_file), "--passed-before")
+        self.assertEqual(code, 2)
+        self.assertIn("argument --passed-before: expected one argument", out)
+        self.assertNotIn("sorted:", out)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_006_B1_a_list_that_names_no_test_warns_before_the_sorted_line(self):
+        failed_file = self.repo.write("failed.txt", "test_legacy_total\ntest_REQ_DUR_001_N1_rejects\n")
+        passed_file = self.repo.write("passed.txt", "\n")
+        before = snapshot(self.repo.root)
+        code, out = self.repo.run("sort-failures", str(failed_file), "--passed-before", str(passed_file))
+        self.assertEqual(out.splitlines(), [
+            "outside: test_legacy_total",
+            "expected: test_REQ_DUR_001_N1_rejects (REQ-DUR-001.N1, T2 not done)",
+            f"warning: {passed_file} names no test that passed before the run",
+            "sorted: 0 regression, 1 expected, 1 outside the change"])
+        self.assertEqual(code, 0)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_006_B2_and_REQ_EVD_006_B3_and_REQ_EVD_006_B4_only_equal_failing_names_count_and_no_task_is_kept(self):
+        # B2: names on the list that don't fail are never printed
+        code, lines = self.sort_with(["test_legacy_total"], ["test_REQ_DUR_001_S1_parses", "test_other_total"])
+        self.assertEqual(lines, ["outside: test_legacy_total",
+                                 "sorted: 0 regression, 0 expected, 1 outside the change"])
+        self.assertEqual(code, 0)
+        # B3: a name is on the list only when it is equal, case included
+        code, lines = self.sort_with(["test_legacy_total"], ["Test_Legacy_Total", "test_legacy"])
+        self.assertEqual(lines, ["outside: test_legacy_total",
+                                 "sorted: 0 regression, 0 expected, 1 outside the change"])
+        self.assertEqual(code, 0)
+        # B4: a scenario no task plans keeps "no task"
+        s1 = '| S1 | happy | the string "1h30m" | parse is called | it returns 90 |'
+        reqs = VALID_REQS.replace(s1, s1 + '\n| S2 | happy | the string "2h" | parse is called | it returns 120 |')
+        self.repo.fill(self.cid, reqs=reqs, design_and_tasks=SORT_TASKS)
+        code, lines = self.sort_with(["test_REQ_DUR_001_S2_x"], ["test_REQ_DUR_001_S2_x"])
+        self.assertEqual(lines, ["regression: test_REQ_DUR_001_S2_x (REQ-DUR-001.S2, no task, passed before the run)",
+                                 "sorted: 1 regression, 0 expected, 0 outside the change"])
+        self.assertEqual(code, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
