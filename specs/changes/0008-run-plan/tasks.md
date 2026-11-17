@@ -1,17 +1,129 @@
-<!-- Planner: one task per scenario (group triangulating happy/boundary
-examples of one rule), each negative right after its happy path.
+## Tasks
 
-- [ ] T1 REQ-CHK-001.S1 Guest pays for a cart
+- [ ] T1 REQ-ORC-009.S1 REQ-ORC-009.S2 REQ-ORC-009.S3 REQ-ORC-009.B1 REQ-ORC-009.B2 REQ-ORC-009.B8 REQ-ORC-010.S1 REQ-ORC-010.B2 REQ-ORC-010.B3 REQ-ORC-010.B4 Run-plan prints the steps, forms and component checkpoints
+  - tier: strong
+  - also: tests/junit_run.py (the adapter of design.md, run as `python3 -m tests.junit_run`) and `build/` in .gitignore, so this change's own design lines run from here on
+  - test:
+  - red:
+  - green:
+- [ ] T2 REQ-ORC-009.B3 REQ-ORC-009.B4 REQ-ORC-009.B5 REQ-ORC-009.B6 REQ-ORC-009.B7 REQ-ORC-010.B5 Run-plan edge lines: nothing to run, quoting, no test line, skipped checkpoints
+  - tier: mid
+  - also: method/phases/implement.md step 5: a capability declared with two prefixes gets one checkpoint per prefix; a prefix whose tasks are split by tasks of another prefix gets one checkpoint after each of its groups
+  - test:
+  - red:
+  - green:
+- [ ] T3 REQ-ORC-009.B9 REQ-ORC-009.B10 Run-plan baseline line from baseline.txt and the Test report line
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T4 REQ-ORC-011.N11 REQ-ORC-011.N5 REQ-ORC-011.N6 REQ-ORC-011.N4 REQ-ORC-011.N1 REQ-ORC-011.N2 REQ-ORC-011.N3 Run-plan refuses no specs/, no change, a bad status, form, task or range
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T5 REQ-ORC-011.N7 REQ-ORC-011.N8 REQ-ORC-011.N9 REQ-ORC-011.N10 REQ-ORC-011.N12 Run-plan refuses a bad design line or baseline.txt
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T6 REQ-EVD-007.S1 REQ-EVD-007.S2 REQ-EVD-007.S3 REQ-EVD-007.S4 REQ-EVD-007.B3 REQ-EVD-007.B4 Test runs a step, records it and reports its exceptions
+  - tier: strong
+  - test:
+  - red:
+  - green:
+- [ ] T7 REQ-EVD-007.B1 REQ-EVD-007.B2 REQ-EVD-007.B7 REQ-EVD-007.B8 Test report: message lines, test names, project path as .
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T8 REQ-EVD-007.N1 REQ-EVD-007.N7 REQ-EVD-007.N2 REQ-EVD-007.N3 Test with no readable report: exit code and output tail
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T9 REQ-EVD-007.N6 Test warns when the exit code and the report disagree
+  - tier: light
+  - test:
+  - red:
+  - green:
+- [ ] T10 REQ-EVD-007.N4 Test refuses a command that cannot start and keeps the last run
+  - tier: light
+  - test:
+  - red:
+  - green:
+- [ ] T11 REQ-EVD-007.N5 REQ-EVD-007.B5 REQ-EVD-007.B6 Test keeps the previous last run as run-of files
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T12 REQ-EVD-008.S1 REQ-EVD-008.S2 REQ-EVD-008.B1 REQ-EVD-008.B2 Test baseline records the tests that pass before the change
+  - tier: strong
+  - test:
+  - red:
+  - green:
+- [ ] T13 REQ-EVD-008.N1 REQ-EVD-008.N2 REQ-EVD-008.N3 REQ-EVD-008.N4 REQ-EVD-008.N5 Test baseline refuses a rerun, a tick, a status, no report line, no report
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T14 REQ-EVD-009.S1 REQ-EVD-009.S2 REQ-EVD-009.S3 Test reuses the last run on unchanged code
+  - tier: strong
+  - test:
+  - red:
+  - green:
+- [ ] T15 REQ-EVD-009.B1 REQ-EVD-009.B2 REQ-EVD-009.B3 REQ-EVD-009.B4 REQ-EVD-009.B5 REQ-EVD-009.B6 REQ-EVD-009.B7 REQ-EVD-009.N1 REQ-EVD-009.N2 Reuse keys: files, commit, step, change, git state
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T16 REQ-EVD-008.B3 Test baseline from a reused full run
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T17 REQ-EVD-010.S1 REQ-EVD-010.S2 REQ-EVD-010.B1 REQ-EVD-010.B2 REQ-EVD-010.B4 Test --red and --green write the task's evidence line
+  - tier: strong
+  - test:
+  - red:
+  - green:
+- [ ] T18 REQ-EVD-010.B3 REQ-EVD-010.B5 REQ-EVD-010.B6 Evidence: name match, reused run's time, comment marker in a message
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T19 REQ-EVD-010.N1 REQ-EVD-010.N2 REQ-EVD-010.N3 REQ-EVD-010.N4 REQ-EVD-010.N5 REQ-EVD-010.N8 REQ-EVD-010.N9 Evidence refused when the run does not show the outcome
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T20 REQ-EVD-010.N6 REQ-EVD-010.N7 REQ-EVD-010.N10 Evidence refused before the run: ticked task, no red, two lines
+  - tier: light
+  - also: method/phases/implement.md (SDD run-plan before the first task, then each step through SDD test; read the report, open last-run.log only when needed; commit the run files), method/roles/implementer.md steps 2, 3, 5 and the checkpoint row, method/phases/verify.md and method/roles/verifier.md step 1 (SDD test full --rerun), method/format.md, method/overview.md, SKILL.md implement row, templates/standard/design.md and templates/mini-spec.md (- Test report:), all as design.md Method changes
+  - test:
+  - red:
+  - green:
+- [ ] T21 REQ-EVD-011.N1 REQ-EVD-011.N2 REQ-EVD-011.N3 REQ-EVD-011.N4 REQ-EVD-011.N5 REQ-EVD-011.N13 Test refuses no specs/, no change, a bad status or step, in order
+  - tier: mid
+  - test:
+  - red:
+  - green:
+- [ ] T22 REQ-EVD-011.N6 REQ-EVD-011.N7 REQ-EVD-011.N8 REQ-EVD-011.N9 Test refuses an unknown task or prefix and misused --red or --green
+  - tier: light
+  - test:
+  - red:
+  - green:
+- [ ] T23 REQ-EVD-011.N10 REQ-EVD-011.N11 REQ-EVD-011.N12 REQ-EVD-011.N16 REQ-EVD-011.N17 REQ-EVD-011.N18 Test refuses a bad design line, test line or baseline.txt
+  - tier: light
+  - test:
+  - red:
+  - green:
+- [ ] T24 REQ-EVD-011.N14 REQ-EVD-011.N15 REQ-EVD-011.N19 REQ-EVD-011.N20 REQ-EVD-011.N21 Test refuses a Test report path that is unsafe
   - tier: mid
   - test:
   - red:
   - green:
 
-When the constitution asks for a mutation check, add a "## Mutations"
-section after the tasks (format: method/format.md):
-- M1 REQ-CHK-001.N1 src/cart.py
-  - find: `if not items:`
-  - replace: `if False:`
--->
+## Mutations
 
-## Tasks
+<!-- New rules: the Implementer adds one entry each once its task is green (planner.md), listed in design.md Mutations guidance. -->

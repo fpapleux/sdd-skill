@@ -51,7 +51,7 @@ Pick the size by asking from the top, and stop at the first "yes":
 | Failure categories required | none: keep a **Known gaps** list | validation, state, dependency | + boundary, access | + concurrency, combination, invariant |
 | A failure scenario's Then asserts | — | The error + nothing else happened | The error + no side effects + state unchanged | Same as production |
 | Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage. A Critic round (`clarify`) is required for `standard` changes. | Critic round required at any size, by a strong subagent or in a fresh session | Same as production, every round |
-| Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v1)* | + mutation and property-based tests *(v1)* |
+| Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v2)* | + mutation and property-based tests *(v3)* |
 
 `SDD check` enforces the category requirements at **every** level. Independent
 review at `production` (a strong subagent or a fresh session) is recorded and
