@@ -40,7 +40,7 @@ prefix the operator used.
 | `tasks` | Plan test-first tasks, then ask for approval | `method/phases/tasks.md` |
 | `analyze` | Read-only cross-artifact check before the plan gate; routes each error to its phase | `method/phases/analyze.md` |
 | `approve` | Record the operator's approval of the pending gate (constitution, spec, plan, results, amendment) | `method/phases/approve.md` |
-| `implement [T-id\|T<a>-T<b>\|next\|all]` | Red → green → refactor, task by task; a range runs to its end on one authorization | `method/phases/implement.md` |
+| `implement [T-id\|T<a>-T<b>\|next\|all]` | Red → green → refactor, task by task, following `SDD run-plan` and running each step with `SDD test`; a range runs to its end on one authorization | `method/phases/implement.md` |
 | `amend "<reason>"` | Change the approved spec mid-work, with the operator's approval | `method/phases/amend.md` |
 | `bug "<symptom>"` | Defect change: reproduce, trace to the spec, regression test first | `method/phases/bug.md` |
 | `verify` | Check the work against the spec | `method/phases/verify.md` |

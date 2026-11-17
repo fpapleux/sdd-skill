@@ -1,129 +1,582 @@
 ## Tasks
 
-- [ ] T1 REQ-ORC-009.S1 REQ-ORC-009.S2 REQ-ORC-009.S3 REQ-ORC-009.B1 REQ-ORC-009.B2 REQ-ORC-009.B8 REQ-ORC-010.S1 REQ-ORC-010.B2 REQ-ORC-010.B3 REQ-ORC-010.B4 Run-plan prints the steps, forms and component checkpoints
+- [x] T1 REQ-ORC-009.S1 REQ-ORC-009.S2 REQ-ORC-009.S3 REQ-ORC-009.B1 REQ-ORC-009.B2 REQ-ORC-009.B8 REQ-ORC-010.S1 REQ-ORC-010.B2 REQ-ORC-010.B3 REQ-ORC-010.B4 Run-plan prints the steps, forms and component checkpoints
   - tier: strong
   - also: tests/junit_run.py (the adapter of design.md, run as `python3 -m tests.junit_run`) and `build/` in .gitignore, so this change's own design lines run from here on
-  - test:
-  - red:
-  - green:
-- [ ] T2 REQ-ORC-009.B3 REQ-ORC-009.B4 REQ-ORC-009.B5 REQ-ORC-009.B6 REQ-ORC-009.B7 REQ-ORC-010.B5 Run-plan edge lines: nothing to run, quoting, no test line, skipped checkpoints
+  - test: tests/test_sdd.py::RunPlanStepTests
+  - red: AssertionError: Lists differ: ['usage: sdd.py [-h] [--root ROOT]', ...] != ['plan for 0001-x (T1-T3): 2 to do, 1 done', ...] (10 tests, failures=10: sdd.py has no run-plan command)
+  - green: Ran 10 tests in 0.413s OK
+- [x] T2 REQ-ORC-009.B3 REQ-ORC-009.B4 REQ-ORC-009.B5 REQ-ORC-009.B6 REQ-ORC-009.B7 REQ-ORC-010.B5 Run-plan edge lines: nothing to run, quoting, no test line, skipped checkpoints
   - tier: mid
   - also: method/phases/implement.md step 5: a capability declared with two prefixes gets one checkpoint per prefix; a prefix whose tasks are split by tasks of another prefix gets one checkpoint after each of its groups
-  - test:
-  - red:
-  - green:
-- [ ] T3 REQ-ORC-009.B9 REQ-ORC-009.B10 Run-plan baseline line from baseline.txt and the Test report line
+  - test: tests/test_sdd.py::RunPlanEdgeTests
+  - red: AssertionError: Lists differ: ['1. full suite: runner tests'] != ['nothing to run: no task to do in the range'] (5 of 6 failed; ORC-009.B5 pre-existing (after T1): shlex.join quotes)
+  - green: Ran 6 tests in 0.254s OK
+- [x] T3 REQ-ORC-009.B9 REQ-ORC-009.B10 Run-plan baseline line from baseline.txt and the Test report line
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T4 REQ-ORC-011.N11 REQ-ORC-011.N5 REQ-ORC-011.N6 REQ-ORC-011.N4 REQ-ORC-011.N1 REQ-ORC-011.N2 REQ-ORC-011.N3 Run-plan refuses no specs/, no change, a bad status, form, task or range
+  - test: tests/test_sdd.py::RunPlanBaselineTests
+  - red: AssertionError: Lists differ: ['pla[45 chars]ine: none (a task is ticked; runs sort without[110 chars]sts'] != ['pla[45 chars]ine: recorded 2026-11-16T09:00:00Z', '1. T2: r[93 chars]sts'] (2 tests, failures=2)
+  - green: Ran 2 tests in 0.098s OK
+- [x] T4 REQ-ORC-011.N11 REQ-ORC-011.N5 REQ-ORC-011.N6 REQ-ORC-011.N4 REQ-ORC-011.N1 REQ-ORC-011.N2 REQ-ORC-011.N3 Run-plan refuses no specs/, no change, a bad status, form, task or range
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T5 REQ-ORC-011.N7 REQ-ORC-011.N8 REQ-ORC-011.N9 REQ-ORC-011.N10 REQ-ORC-011.N12 Run-plan refuses a bad design line or baseline.txt
+  - test: tests/test_sdd.py::RunPlanRefusalTests
+  - red: AssertionError: 0 != 1 (4 of 7 failed: N1, N2, N3, N4; N11, N5, N6 pre-existing (after T1): require_init and current already refuse)
+  - green: Ran 7 tests in 0.382s OK
+- [x] T5 REQ-ORC-011.N7 REQ-ORC-011.N8 REQ-ORC-011.N9 REQ-ORC-011.N10 REQ-ORC-011.N12 Run-plan refuses a bad design line or baseline.txt
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T6 REQ-EVD-007.S1 REQ-EVD-007.S2 REQ-EVD-007.S3 REQ-EVD-007.S4 REQ-EVD-007.B3 REQ-EVD-007.B4 Test runs a step, records it and reports its exceptions
+  - test: tests/test_sdd.py::RunPlanDesignRefusalTests
+  - red: AssertionError: 0 != 1 (6 tests, failures=6: run-plan printed a plan for each bad design line and baseline.txt)
+  - green: Ran 6 tests in 0.433s OK
+- [x] T6 REQ-EVD-007.S1 REQ-EVD-007.S2 REQ-EVD-007.S3 REQ-EVD-007.S4 REQ-EVD-007.B3 REQ-EVD-007.B4 Test runs a step, records it and reports its exceptions
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T7 REQ-EVD-007.B1 REQ-EVD-007.B2 REQ-EVD-007.B7 REQ-EVD-007.B8 Test report: message lines, test names, project path as .
+  - test: tests/test_sdd.py::TestStepTests
+  - red: AssertionError: 'usage: sdd.py [-h] [--root ROOT]' != 'test full: … fake.py all' (6 tests, failures=6: sdd.py has no test command)
+  - green: Ran 6 tests in 3.438s OK
+- [x] T7 REQ-EVD-007.B1 REQ-EVD-007.B2 REQ-EVD-007.B7 REQ-EVD-007.B8 Test report: message lines, test names, project path as .
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T8 REQ-EVD-007.N1 REQ-EVD-007.N7 REQ-EVD-007.N2 REQ-EVD-007.N3 Test with no readable report: exit code and output tail
+  - test: tests/test_sdd.py::TestReportTests
+  - red: AssertionError: '  detail 5' != 'expected' (4 tests, failures=4: no 5-line cap, 'None.test_c', no '(no message)', path not written as '.')
+  - green: Ran 4 tests in 2.459s OK
+- [x] T8 REQ-EVD-007.N1 REQ-EVD-007.N7 REQ-EVD-007.N2 REQ-EVD-007.N3 Test with no readable report: exit code and output tail
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T9 REQ-EVD-007.N6 Test warns when the exit code and the report disagree
+  - test: tests/test_sdd.py::NoReportTests
+  - red: AssertionError: Lists differ: ['tes[69 chars]ll', 'result: 0 passed, 0 failed, 0 errors, 0 [209 chars]log'] != ['tes[69 chars]ll', "result: exit 3, no test report: each tes[316 chars]log'] (4 tests, failures=4; N3 first errored on ParseError, stubbed the catch)
+  - green: Ran 4 tests in 2.743s OK
+- [x] T9 REQ-EVD-007.N6 Test warns when the exit code and the report disagree
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T10 REQ-EVD-007.N4 Test refuses a command that cannot start and keeps the last run
+  - test: tests/test_sdd.py::ExitWarningTests
+  - red: AssertionError: Lists differ: [... 'log: specs/.sdd/runs/last-run.log'] != [... 'warning: the command exited 2 but the rep[54 chars]log'] (1 test, failures=1)
+  - green: Ran 1 test in 0.6s OK
+- [x] T10 REQ-EVD-007.N4 Test refuses a command that cannot start and keeps the last run
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T11 REQ-EVD-007.N5 REQ-EVD-007.B5 REQ-EVD-007.B6 Test keeps the previous last run as run-of files
+  - test: tests/test_sdd.py::CannotStartTests
+  - red: AssertionError: 'no-such-runner' not found in 'error: the step failed' (1 test; first an uncaught FileNotFoundError, stubbed the catch)
+  - green: Ran 1 test in 0.535s OK
+- [x] T11 REQ-EVD-007.N5 REQ-EVD-007.B5 REQ-EVD-007.B6 Test keeps the previous last run as run-of files
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T12 REQ-EVD-008.S1 REQ-EVD-008.S2 REQ-EVD-008.B1 REQ-EVD-008.B2 Test baseline records the tests that pass before the change
+  - test: tests/test_sdd.py::RunOfFilesTests
+  - red: AssertionError: 'run-of-2026-11-16T09-00-00Z-2.json' not found in ['.gitignore', 'last-run.json', 'last-run.log', 'run-of-2026-11-16T09-00-00Z.json'] (4 tests, failures=4: no rename, no warning)
+  - green: Ran 4 tests in 3.229s OK
+- [x] T12 REQ-EVD-008.S1 REQ-EVD-008.S2 REQ-EVD-008.B1 REQ-EVD-008.B2 Test baseline records the tests that pass before the change
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T13 REQ-EVD-008.N1 REQ-EVD-008.N2 REQ-EVD-008.N3 REQ-EVD-008.N4 REQ-EVD-008.N5 Test baseline refuses a rerun, a tick, a status, no report line, no report
+  - test: tests/test_sdd.py::BaselineRecordTests
+  - red: AssertionError: 'error: "baseline" is not a step test take[45 chars]line' != 'test baseline: /Library/Developer/Command[33 chars] all' (4 tests, failures=4)
+  - green: Ran 4 tests in 2.382s OK
+- [x] T13 REQ-EVD-008.N1 REQ-EVD-008.N2 REQ-EVD-008.N3 REQ-EVD-008.N4 REQ-EVD-008.N5 Test baseline refuses a rerun, a tick, a status, no report line, no report
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T14 REQ-EVD-009.S1 REQ-EVD-009.S2 REQ-EVD-009.S3 Test reuses the last run on unchanged code
+  - test: tests/test_sdd.py::BaselineRefusalTests
+  - red: AssertionError (after T12): Lists differ: ['all'] != [] (5 tests, failures=5: baseline ran despite each refusal; N5 first errored on TypeError, stubbed `or []`)
+  - green: Ran 5 tests in 0.378s OK
+- [x] T14 REQ-EVD-009.S1 REQ-EVD-009.S2 REQ-EVD-009.S3 Test reuses the last run on unchanged code
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T15 REQ-EVD-009.B1 REQ-EVD-009.B2 REQ-EVD-009.B3 REQ-EVD-009.B4 REQ-EVD-009.B5 REQ-EVD-009.B6 REQ-EVD-009.B7 REQ-EVD-009.N1 REQ-EVD-009.N2 Reuse keys: files, commit, step, change, git state
+  - test: tests/test_sdd.py::ReuseTests
+  - red: AssertionError: Lists differ: ['all', 'all'] != ['all'] (3 tests, failures=3: the step ran again; --rerun refused by argparse)
+  - green: Ran 3 tests in 2.108s OK
+- [x] T15 REQ-EVD-009.B1 REQ-EVD-009.B2 REQ-EVD-009.B3 REQ-EVD-009.B4 REQ-EVD-009.B5 REQ-EVD-009.B6 REQ-EVD-009.B7 REQ-EVD-009.N1 REQ-EVD-009.N2 Reuse keys: files, commit, step, change, git state
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T16 REQ-EVD-008.B3 Test baseline from a reused full run
+  - test: tests/test_sdd.py::ReuseKeyTests
+  - red: AssertionError (after T14): 1 != 2 (5 of 9 failed: B1, B2, B5, B6, B7 reused; B3, B4, N1, N2 pre-existing (after T14): reuse already needs the same non-null commit, and nothing else is compared yet)
+  - green: Ran 9 tests in 6.445s OK
+- [x] T16 REQ-EVD-008.B3 Test baseline from a reused full run
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T17 REQ-EVD-010.S1 REQ-EVD-010.S2 REQ-EVD-010.B1 REQ-EVD-010.B2 REQ-EVD-010.B4 Test --red and --green write the task's evidence line
+  - test: tests/test_sdd.py::BaselineReuseTests
+  - red: pre-existing (after T15) — reuse covers every step including baseline, and write_baseline takes the reused record's time and commit
+  - green: Ran 1 test in 0.581s OK
+- [x] T17 REQ-EVD-010.S1 REQ-EVD-010.S2 REQ-EVD-010.B1 REQ-EVD-010.B2 REQ-EVD-010.B4 Test --red and --green write the task's evidence line
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T18 REQ-EVD-010.B3 REQ-EVD-010.B5 REQ-EVD-010.B6 Evidence: name match, reused run's time, comment marker in a message
+  - test: tests/test_sdd.py::RedGreenTests
+  - red: AssertionError: '…[535 chars] red:\n  - green:\n\n' != '…[535 chars] red: failed: AssertionError: 1 != 2 (sdd test[34 chars]\n\n' (5 tests, failures=5: no line written; --red/--green stubbed in argparse first)
+  - green: Ran 5 tests in 3.226s OK
+- [x] T18 REQ-EVD-010.B3 REQ-EVD-010.B5 REQ-EVD-010.B6 Evidence: name match, reused run's time, comment marker in a message
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T19 REQ-EVD-010.N1 REQ-EVD-010.N2 REQ-EVD-010.N3 REQ-EVD-010.N4 REQ-EVD-010.N5 REQ-EVD-010.N8 REQ-EVD-010.N9 Evidence refused when the run does not show the outcome
+  - test: tests/test_sdd.py::EvidenceMatchTests
+  - red: AssertionError: '…[542 chars]ailed: expected[comment opener] x (sdd test 2026-11-17T10:[19 chars]\n\n' != '…[542 chars]ailed (sdd test 2026-11-17T10:00:00Z)\n  - green:\n\n' (1 of 3 failed: B6; B3, B5 pre-existing (after T17): the match is equals or ends with "." and the part, and a reused record carries its own time)
+  - green: Ran 3 tests in 2.614s OK
+- [x] T19 REQ-EVD-010.N1 REQ-EVD-010.N2 REQ-EVD-010.N3 REQ-EVD-010.N4 REQ-EVD-010.N5 REQ-EVD-010.N8 REQ-EVD-010.N9 Evidence refused when the run does not show the outcome
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T20 REQ-EVD-010.N6 REQ-EVD-010.N7 REQ-EVD-010.N10 Evidence refused before the run: ticked task, no red, two lines
+  - test: tests/test_sdd.py::EvidenceRefusalTests
+  - red: AssertionError: 0 != 1 (7 tests, failures=7: no error for any outcome; N5 exited 1 with no error line)
+  - green: Ran 7 tests in 5.213s OK
+- [x] T20 REQ-EVD-010.N6 REQ-EVD-010.N7 REQ-EVD-010.N10 Evidence refused before the run: ticked task, no red, two lines
   - tier: light
   - also: method/phases/implement.md (SDD run-plan before the first task, then each step through SDD test; read the report, open last-run.log only when needed; commit the run files), method/roles/implementer.md steps 2, 3, 5 and the checkpoint row, method/phases/verify.md and method/roles/verifier.md step 1 (SDD test full --rerun), method/format.md, method/overview.md, SKILL.md implement row, templates/standard/design.md and templates/mini-spec.md (- Test report:), all as design.md Method changes
-  - test:
-  - red:
-  - green:
-- [ ] T21 REQ-EVD-011.N1 REQ-EVD-011.N2 REQ-EVD-011.N3 REQ-EVD-011.N4 REQ-EVD-011.N5 REQ-EVD-011.N13 Test refuses no specs/, no change, a bad status or step, in order
+  - test: tests/test_sdd.py::EvidenceBeforeRunTests
+  - red: AssertionError: Lists differ: ['test_REQ_DUR_001_N1_x'] != [] (3 tests, failures=3: the step ran; N10 exited 0)
+  - green: Ran 3 tests in 1.849s OK
+- [x] T21 REQ-EVD-011.N1 REQ-EVD-011.N2 REQ-EVD-011.N3 REQ-EVD-011.N4 REQ-EVD-011.N5 REQ-EVD-011.N13 Test refuses no specs/, no change, a bad status or step, in order
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T22 REQ-EVD-011.N6 REQ-EVD-011.N7 REQ-EVD-011.N8 REQ-EVD-011.N9 Test refuses an unknown task or prefix and misused --red or --green
+  - test: tests/test_sdd.py::StepRefusalTests
+  - red: AssertionError: 0 != 1 (2 of 6 failed: N4 ran at draft, N13 named the step; N1, N2, N3, N5 pre-existing (after T6): the earlier refusals already cover them)
+  - green: Ran 6 tests in 3.0s OK
+- [x] T22 REQ-EVD-011.N6 REQ-EVD-011.N7 REQ-EVD-011.N8 REQ-EVD-011.N9 Test refuses an unknown task or prefix and misused --red or --green
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T23 REQ-EVD-011.N10 REQ-EVD-011.N11 REQ-EVD-011.N12 REQ-EVD-011.N16 REQ-EVD-011.N17 REQ-EVD-011.N18 Test refuses a bad design line, test line or baseline.txt
+  - test: tests/test_sdd.py::StepKindRefusalTests
+  - red: AssertionError: 'T9' not found in 'error: stub' (4 tests, failures=4: KeyError for T9 and full --red first, stubbed to an error; N7 and N9 exited 0)
+  - green: Ran 4 tests in 4.2s OK
+- [x] T23 REQ-EVD-011.N10 REQ-EVD-011.N11 REQ-EVD-011.N12 REQ-EVD-011.N16 REQ-EVD-011.N17 REQ-EVD-011.N18 Test refuses a bad design line, test line or baseline.txt
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T24 REQ-EVD-011.N14 REQ-EVD-011.N15 REQ-EVD-011.N19 REQ-EVD-011.N20 REQ-EVD-011.N21 Test refuses a Test report path that is unsafe
+  - test: tests/test_sdd.py::StepDesignRefusalTests
+  - red: AssertionError: 'Test component:' not found in 'error: stub' (5 of 6 failed: IndexError, ValueError and TypeError first, stubbed to an error; N18 pre-existing (after T5): read_baseline already refuses a bad header before the run)
+  - green: Ran 6 tests in 5.0s OK
+- [x] T24 REQ-EVD-011.N14 REQ-EVD-011.N15 REQ-EVD-011.N19 REQ-EVD-011.N20 REQ-EVD-011.N21 Test refuses a Test report path that is unsafe
   - tier: mid
-  - test:
-  - red:
-  - green:
+  - test: tests/test_sdd.py::ReportPathRefusalTests
+  - red: AssertionError: Lists differ: ['all'] != [] (6 tests, failures=6: the step ran; N20 hit a PermissionError deleting the folder, stubbed to an error)
+  - green: Ran 6 tests in 6.3s OK
 
 ## Mutations
 
 <!-- New rules: the Implementer adds one entry each once its task is green (planner.md), listed in design.md Mutations guidance. -->
+- M1 REQ-ORC-009.S3 skill/sdd/scripts/sdd.py
+  - find: `if not t["done"]][:1]`
+  - replace: `if not t["done"]][:2]`
+- M2 REQ-ORC-009.S1 skill/sdd/scripts/sdd.py
+  - find: `tasks[ids.index(first):ids.index(last) + 1]`
+  - replace: `tasks[ids.index(first):ids.index(last)]`
+- M3 REQ-ORC-009.S2 skill/sdd/scripts/sdd.py
+  - find: `if any(t["done"] for t in tasks):`
+  - replace: `if any(t["done"] for t in selection):`
+- M4 REQ-ORC-009.S1 skill/sdd/scripts/sdd.py
+  - find: `if task["done"]:  # listed, but`
+  - replace: `if False:  # listed, but`
+- M5 REQ-ORC-009.S2 skill/sdd/scripts/sdd.py
+  - find: `{len(selection) - len(todo)} done`
+  - replace: `{len(tasks) - len(todo)} done`
+- M6 REQ-ORC-009.B2 skill/sdd/scripts/sdd.py
+  - find: `p.add_argument("form", nargs="?", default="next"`
+  - replace: `p.add_argument("form", nargs="?", default="all"`
+- M7 REQ-ORC-010.S1 skill/sdd/scripts/sdd.py
+  - find: `if component and prefix and group and prefix != group:`
+  - replace: `if False:`
+- M8 REQ-ORC-010.S1 skill/sdd/scripts/sdd.py
+  - find: `    if component and group:`
+  - replace: `    if False:`
+- M9 REQ-ORC-010.S1 skill/sdd/scripts/sdd.py
+  - find: `return template.replace("{prefix}", prefix)`
+  - replace: `return template`
+- M10 REQ-ORC-010.B3 skill/sdd/scripts/sdd.py
+  - find: `group = prefix or group`
+  - replace: `group = prefix`
+- M11 REQ-ORC-010.B4 skill/sdd/scripts/sdd.py
+  - find: `if task["done"]:  # listed, but neither joins nor ends a group`
+  - replace: `if task["done"] and task_prefix(task) in (group, None):`
+- M12 REQ-ORC-009.B7 skill/sdd/scripts/sdd.py
+  - find: `if not evidence_present(line):`
+  - replace: `if False:`
+- M13 REQ-ORC-009.B6 skill/sdd/scripts/sdd.py
+  - find: `return shlex.join(argv) if argv else`
+  - replace: `return shlex.join(argv or []) if True else`
+- M14 REQ-ORC-009.B5 skill/sdd/scripts/sdd.py
+  - find: `return shlex.join(argv) if argv`
+  - replace: `return " ".join(argv or []) if argv`
+- M15 REQ-ORC-009.B7 skill/sdd/scripts/sdd.py
+  - find: `return f"{one} (no test line yet)"`
+  - replace: `return f"{one}"`
+- M16 REQ-ORC-009.B3 skill/sdd/scripts/sdd.py
+  - find: `    if not todo:`
+  - replace: `    if False:`
+- M17 REQ-ORC-010.B5 skill/sdd/scripts/sdd.py
+  - find: `    if not component:`
+  - replace: `    if False:`
+- M18 REQ-ORC-010.B5 skill/sdd/scripts/sdd.py
+  - find: `if component and prefix and group and prefix != group:`
+  - replace: `if prefix and group and prefix != group:`
+- M19 REQ-ORC-010.B5 skill/sdd/scripts/sdd.py
+  - find: `    if component and group:`
+  - replace: `    if group:`
+- M20 REQ-ORC-009.B9 skill/sdd/scripts/sdd.py
+  - find: `    if baseline:`
+  - replace: `    if False:`
+- M21 REQ-ORC-009.B9 skill/sdd/scripts/sdd.py
+  - find: `lines.append(f"- baseline: recorded {baseline[0]}")`
+  - replace: `lines.append(f"- baseline: recorded {baseline[1]}")`
+- M22 REQ-ORC-009.B10 skill/sdd/scripts/sdd.py
+  - find: `elif not design_line(design, "Test report"):`
+  - replace: `elif False:`
+- M23 REQ-ORC-009.B9 skill/sdd/scripts/sdd.py
+  - find: `if not path.is_file():`
+  - replace: `if True:`
+- M24 REQ-ORC-009.B9 skill/sdd/scripts/sdd.py
+  - find: `match = re.match(r"^# baseline (\S+) (\S+)\s*$", lines[0]) if lines else None`
+  - replace: `match = None`
+- M25 REQ-ORC-011.N4 skill/sdd/scripts/sdd.py
+  - find: `if status not in ("planned", "implementing"):`
+  - replace: `if False:`
+- M26 REQ-ORC-011.N1 skill/sdd/scripts/sdd.py
+  - find: `span = re.match(r"^(T\d+)-(T\d+)$", form)`
+  - replace: `span = re.match(r"^(T\d+)-(T\d+)", form)`
+- M27 REQ-ORC-011.N1 skill/sdd/scripts/sdd.py
+  - find: `not span and not re.match(r"^T\d+$", form):`
+  - replace: `not span and not re.match(r"^T\d+", form):`
+- M28 REQ-ORC-011.N3 skill/sdd/scripts/sdd.py
+  - find: `if task_id not in ids:`
+  - replace: `if False:`
+- M29 REQ-ORC-011.N2 skill/sdd/scripts/sdd.py
+  - find: `if ids.index(first) > ids.index(last):`
+  - replace: `if ids.index(first) < ids.index(last):`
+- M30 REQ-ORC-011.N1 skill/sdd/scripts/sdd.py
+  - find: `if form not in ("all", "next") and`
+  - replace: `if False and`
+- M31 REQ-ORC-011.N7 skill/sdd/scripts/sdd.py
+  - find: `if not design_line(design, key):`
+  - replace: `if False:`
+- M32 REQ-ORC-011.N9 skill/sdd/scripts/sdd.py
+  - find: `shlex.split(design_line(design, key))`
+  - replace: `design_line(design, key)`
+- M33 REQ-ORC-011.N12 skill/sdd/scripts/sdd.py
+  - find: `baseline = read_baseline(path.parent)`
+  - replace: `baseline = None`
+- M34 REQ-ORC-011.N7 skill/sdd/scripts/sdd.py
+  - find: `raise SddError(f'no "{key}:" line in the design (or it is empty)')`
+  - replace: `pass`
+- M35 REQ-ORC-011.N12 skill/sdd/scripts/sdd.py
+  - find: `raise SddError('baseline.txt does not start with a "# baseline <time> <commit>" line')`
+  - replace: `return None`
+- M36 REQ-EVD-007.S2 skill/sdd/scripts/sdd.py
+  - find: `command = component_command(design_line(design, "Test component"), component.group(1))`
+  - replace: `command = design_line(design, "Test component")`
+- M37 REQ-EVD-007.S3 skill/sdd/scripts/sdd.py
+  - find: `return shlex.join(argv), argv`
+  - replace: `return shlex.join(argv), argv[:-1]`
+- M38 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `cwd=project.root, stdout=subprocess.PIPE`
+  - replace: `cwd=project.specs, stdout=subprocess.PIPE`
+- M39 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `outcome = JUNIT_OUTCOMES[child.tag]`
+  - replace: `outcome = "failed"`
+- M40 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `lines = [line.rstrip() for line in text.splitlines() if line.strip()]`
+  - replace: `lines = []`
+- M41 REQ-EVD-007.B3 skill/sdd/scripts/sdd.py
+  - find: `{count['skipped']} skipped ({len(tests)} tests)`
+  - replace: `{count['skipped']} skipped ({count['passed']} tests)`
+- M42 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `bad = [t for t in tests if t["outcome"] in ("failed", "error")]`
+  - replace: `bad = [t for t in tests if t["outcome"] in ("failed", "skipped")]`
+- M43 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `    if baseline is None and record["step"] != "baseline":`
+  - replace: `    if False:`
+- M44 REQ-EVD-007.S4 skill/sdd/scripts/sdd.py
+  - find: `return lines, 1 if counts["regression"] or silent else 0`
+  - replace: `return lines, 0`
+- M45 REQ-EVD-007.S4 skill/sdd/scripts/sdd.py
+  - find: `sort, counts = sort_lines(names, set(baseline[2]) if baseline else set(), refs, tasks)`
+  - replace: `sort, counts = sort_lines(names, set(), refs, [])`
+- M46 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `write_atomic(ignore, "run-of-*\n")`
+  - replace: `pass`
+- M47 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `write_atomic(self.folder / "last-run.log", log)`
+  - replace: `write_atomic(self.folder / "last-run.log", "")`
+- M48 REQ-EVD-007.S2 skill/sdd/scripts/sdd.py
+  - find: `"step": step, "command": hide(command),`
+  - replace: `"step": "full", "command": hide(command),`
+- M49 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `commit = (head.stdout.strip() or None) if head.returncode == 0 else None`
+  - replace: `commit = None`
+- M50 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `record = {"time": now_utc(),`
+  - replace: `record = {"time": today(),`
+- M51 REQ-EVD-007.S1 skill/sdd/scripts/sdd.py
+  - find: `lines = [f"test {record['step']}: {record['command']}",`
+  - replace: `lines = [f"test {record['step']}:",`
+- M52 REQ-EVD-007.B1 skill/sdd/scripts/sdd.py
+  - find: `if line.strip()][:5]`
+  - replace: `if line.strip()][:6]`
+- M53 REQ-EVD-007.B2 skill/sdd/scripts/sdd.py
+  - find: `if classname else case.get("name")`
+  - replace: `if True else case.get("name")`
+- M54 REQ-EVD-007.B7 skill/sdd/scripts/sdd.py
+  - find: `or ["  (no message)"]`
+  - replace: `or []`
+- M55 REQ-EVD-007.B8 skill/sdd/scripts/sdd.py
+  - find: `lambda text: pattern.sub(".", text)`
+  - replace: `lambda text: text`
+- M56 REQ-EVD-007.B8 skill/sdd/scripts/sdd.py
+  - find: `+ r")(?=[/\\]|$)"`
+  - replace: `+ r")"`
+- M57 REQ-EVD-007.N1 skill/sdd/scripts/sdd.py
+  - find: `if record["tests"] is None:`
+  - replace: `if False:`
+- M58 REQ-EVD-007.N1 skill/sdd/scripts/sdd.py
+  - find: `1 if record["exit"] != 0 else 0`
+  - replace: `0`
+- M59 REQ-EVD-007.N1 skill/sdd/scripts/sdd.py
+  - find: `output.splitlines()[-20:]`
+  - replace: `output.splitlines()[-19:]`
+- M60 REQ-EVD-007.N2 skill/sdd/scripts/sdd.py
+  - find: `(project.root / report).unlink()`
+  - replace: `pass`
+- M61 REQ-EVD-007.N3 skill/sdd/scripts/sdd.py
+  - find: `except (OSError, ET.ParseError):`
+  - replace: `except OSError:`
+- M62 REQ-EVD-007.N3 skill/sdd/scripts/sdd.py
+  - find: `if root.tag not in ("testsuites", "testsuite"):`
+  - replace: `if False:`
+- M63 REQ-EVD-007.N7 skill/sdd/scripts/sdd.py
+  - find: `    if report:`
+  - replace: `    if True:`
+- M64 REQ-EVD-007.N6 skill/sdd/scripts/sdd.py
+  - find: `silent = record["exit"] != 0 and not bad`
+  - replace: `silent = record["exit"] != 0`
+- M65 REQ-EVD-007.N6 skill/sdd/scripts/sdd.py
+  - find: `return lines, 1 if counts["regression"] or silent else 0`
+  - replace: `return lines, 1 if counts["regression"] else 0`
+- M66 REQ-EVD-007.N4 skill/sdd/scripts/sdd.py
+  - find: `cannot start "{argv[0]}"`
+  - replace: `cannot run "{argv[0]}"`
+- M67 REQ-EVD-007.N4 skill/sdd/scripts/sdd.py
+  - find: `cannot start "{argv[0]}"`
+  - replace: `cannot start ""`
+- M68 REQ-EVD-007.N4 skill/sdd/scripts/sdd.py
+  - find: `    except OSError as exc:`
+  - replace: `    except ZeroDivisionError as exc:`
+- M69 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `stem = "run-of-unreadable-" + now_utc().replace(":", "-")`
+  - replace: `stem = "run-of-unreadable"`
+- M70 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `kept as {name}.json")`
+  - replace: `kept as {stem}.json")`
+- M71 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `if not isinstance(record, dict) or not all(key in record for key in RUN_KEYS):`
+  - replace: `if False:`
+- M72 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `except (OSError, ValueError):`
+  - replace: `except OSError:`
+- M73 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `        if previous is None:`
+  - replace: `        if False:`
+- M74 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `        if not path.exists():`
+  - replace: `        if False:`
+- M75 REQ-EVD-007.B6 skill/sdd/scripts/sdd.py
+  - find: `            number += 1`
+  - replace: `            number += 2`
+- M76 REQ-EVD-007.B6 skill/sdd/scripts/sdd.py
+  - find: `for ext in (".json", ".log")):`
+  - replace: `for ext in (".json",)):`
+- M77 REQ-EVD-007.N5 skill/sdd/scripts/sdd.py
+  - find: `if (self.folder / f"last-run{ext}").exists():`
+  - replace: `if True:`
+- M78 REQ-EVD-007.B5 skill/sdd/scripts/sdd.py
+  - find: `previous["time"].replace(":", "-")`
+  - replace: `previous["time"]`
+- M79 REQ-EVD-008.S1 skill/sdd/scripts/sdd.py
+  - find: `if step in ("full", "baseline"):`
+  - replace: `if step == "full":`
+- M80 REQ-EVD-008.S1 skill/sdd/scripts/sdd.py
+  - find: ` and record["step"] != "baseline":`
+  - replace: `:`
+- M81 REQ-EVD-008.S1 skill/sdd/scripts/sdd.py
+  - find: `write_baseline(path.parent, record)`
+  - replace: `pass`
+- M82 REQ-EVD-008.S1 skill/sdd/scripts/sdd.py
+  - find: `if t["outcome"] == "passed"))`
+  - replace: `if True))`
+- M83 REQ-EVD-008.B2 skill/sdd/scripts/sdd.py
+  - find: `record['commit'] or 'none'`
+  - replace: `record['commit']`
+- M84 REQ-EVD-008.B1 skill/sdd/scripts/sdd.py
+  - find: `{len(passed)} tests passed`
+  - replace: `{len(record['tests'])} tests passed`
+- M85 REQ-EVD-008.N1 skill/sdd/scripts/sdd.py
+  - find: `refuse_baseline(path, tasks, design)`
+  - replace: `pass`
+- M86 REQ-EVD-008.N1 skill/sdd/scripts/sdd.py
+  - find: `    if recorded:`
+  - replace: `    if False:`
+- M87 REQ-EVD-008.N2 skill/sdd/scripts/sdd.py
+  - find: `if any(task["done"] for task in tasks):`
+  - replace: `if False:`
+- M88 REQ-EVD-008.N3 skill/sdd/scripts/sdd.py
+  - find: `if status not in BASELINE_STATUSES:`
+  - replace: `if False:`
+- M89 REQ-EVD-008.N3 skill/sdd/scripts/sdd.py
+  - find: `BASELINE_STATUSES = ("planned", "implementing")`
+  - replace: `BASELINE_STATUSES = ("planned", "implementing", "verifying")`
+- M90 REQ-EVD-008.N4 skill/sdd/scripts/sdd.py
+  - find: `    if not design_line(design, "Test report"):`
+  - replace: `    if False:`
+- M91 REQ-EVD-008.N5 skill/sdd/scripts/sdd.py
+  - find: `    if tests is None:`
+  - replace: `    if False:`
+- M92 REQ-EVD-009.S3 skill/sdd/scripts/sdd.py
+  - find: `last = None if args.rerun else RunStore(project).load()`
+  - replace: `last = RunStore(project).load()`
+- M93 REQ-EVD-009.S1 skill/sdd/scripts/sdd.py
+  - find: `record = last if reused else run_step(`
+  - replace: `record = run_step(`
+- M94 REQ-EVD-009.S1 skill/sdd/scripts/sdd.py
+  - find: `{record['seconds']:.1f}s{again}"]`
+  - replace: `{record['seconds']:.1f}s"]`
+- M95 REQ-EVD-009.S1 skill/sdd/scripts/sdd.py
+  - find: `(reused from {record['time']})`
+  - replace: `(reused from {now_utc()})`
+- M96 REQ-EVD-009.B5 skill/sdd/scripts/sdd.py
+  - find: ` and last["step"] == step and last["command"] == command`
+  - replace: ``
+- M97 REQ-EVD-009.B7 skill/sdd/scripts/sdd.py
+  - find: `last["change"] == change_id`
+  - replace: `True`
+- M98 REQ-EVD-009.B1 skill/sdd/scripts/sdd.py
+  - find: `(last["commit"], last["digest"]) == keys)`
+  - replace: `last["commit"] == keys[0])`
+- M99 REQ-EVD-009.N1 skill/sdd/scripts/sdd.py
+  - find: `commit is not None and digest is not None and last`
+  - replace: `last`
+- M100 REQ-EVD-009.B3 skill/sdd/scripts/sdd.py
+  - find: `if rel.split("/")[0] != "specs"`
+  - replace: `if True`
+- M101 REQ-EVD-009.B2 skill/sdd/scripts/sdd.py
+  - find: `for extra in ([], ["--others", "--exclude-standard"]):`
+  - replace: `for extra in ([],):`
+- M102 REQ-EVD-009.B3 skill/sdd/scripts/sdd.py
+  - find: `["--others", "--exclude-standard"]`
+  - replace: `["--others"]`
+- M103 REQ-EVD-009.B1 skill/sdd/scripts/sdd.py
+  - find: `{hashlib.sha256(content).hexdigest()}`
+  - replace: `{len(content)}`
+- M104 REQ-EVD-008.B3 skill/sdd/scripts/sdd.py
+  - find: `f"# baseline {record['time']} {`
+  - replace: `f"# baseline {now_utc()} {`
+- M105 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `part = task["test"].rsplit("::", 1)[-1]`
+  - replace: `part = task["test"]`
+- M106 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `or t["name"].endswith("." + part)]`
+  - replace: `]`
+- M107 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `text = f"failed: {first}"`
+  - replace: `text = f"failed"`
+- M108 REQ-EVD-010.B2 skill/sdd/scripts/sdd.py
+  - find: `test["lines"][0] if test["lines"] else ""`
+  - replace: `test["lines"][0]`
+- M109 REQ-EVD-010.S2 skill/sdd/scripts/sdd.py
+  - find: `text = "passed"`
+  - replace: `text = "failed"`
+- M110 REQ-EVD-010.B1 skill/sdd/scripts/sdd.py
+  - find: `        lines[at] = new`
+  - replace: `        lines.insert(at, new)`
+- M111 REQ-EVD-010.B4 skill/sdd/scripts/sdd.py
+  - find: `lines.insert(at + 1, new)`
+  - replace: `lines.insert(at, new)`
+- M112 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `if any(a <= start < b for a, b in comments):`
+  - replace: `if False:`
+- M113 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `bullet + f"{kind}: {text}"`
+  - replace: `f"{kind}: {text}"`
+- M114 REQ-EVD-010.S1 skill/sdd/scripts/sdd.py
+  - find: `        write_evidence(tasks_file, step, kind,`
+  - replace: `        (tasks_file, step, kind,`
+- M115 REQ-EVD-010.B6 skill/sdd/scripts/sdd.py
+  - find: `, first) else "failed"`
+  - replace: `, "") else "failed"`
+- M116 REQ-EVD-010.B6 skill/sdd/scripts/sdd.py
+  - find: `|\(after T"`
+  - replace: `"`
+- M117 REQ-EVD-010.B3 skill/sdd/scripts/sdd.py
+  - find: `t["name"].endswith("." + part)`
+  - replace: `t["name"].endswith(part)`
+- M118 REQ-EVD-010.B5 skill/sdd/scripts/sdd.py
+  - find: `(sdd test {record['time']})`
+  - replace: `(sdd test {now_utc()})`
+- M119 REQ-EVD-010.N5 skill/sdd/scripts/sdd.py
+  - find: `    if report is None:`
+  - replace: `    if False:`
+- M120 REQ-EVD-010.N3 skill/sdd/scripts/sdd.py
+  - find: `    if not matches:`
+  - replace: `    if False:`
+- M121 REQ-EVD-010.N8 skill/sdd/scripts/sdd.py
+  - find: `    if len(matches) > 1:`
+  - replace: `    if False:`
+- M122 REQ-EVD-010.N8 skill/sdd/scripts/sdd.py
+  - find: `{matches[0]['name']} and {matches[1]['name']}`
+  - replace: `{matches[0]['name']}`
+- M123 REQ-EVD-010.N2 skill/sdd/scripts/sdd.py
+  - find: `    if outcome == "error":`
+  - replace: `    if False:`
+- M124 REQ-EVD-010.N9 skill/sdd/scripts/sdd.py
+  - find: `    if outcome == "skipped":`
+  - replace: `    if False:`
+- M125 REQ-EVD-010.N1 skill/sdd/scripts/sdd.py
+  - find: `    if kind == "red" and outcome == "passed":`
+  - replace: `    if False:`
+- M126 REQ-EVD-010.N1 skill/sdd/scripts/sdd.py
+  - find: `is recorded by hand as \"red: pre-existing`
+  - replace: `is recorded by hand as \"red: x`
+- M127 REQ-EVD-010.N4 skill/sdd/scripts/sdd.py
+  - find: `    if kind == "green" and outcome == "failed":`
+  - replace: `    if False:`
+- M128 REQ-EVD-010.N6 skill/sdd/scripts/sdd.py
+  - find: `raise SddError(f"{task['id']} is ticked: its red and green lines are not written again")`
+  - replace: `pass`
+- M129 REQ-EVD-010.N6 skill/sdd/scripts/sdd.py
+  - find: `        refuse_evidence(tasks_file, {t["id"]: t for t in tasks}[step], kind)`
+  - replace: `        pass`
+- M130 REQ-EVD-010.N10 skill/sdd/scripts/sdd.py
+  - find: `    if len(found[kind]) > 1:`
+  - replace: `    if False:`
+- M131 REQ-EVD-010.N10 skill/sdd/scripts/sdd.py
+  - find: `lines, '{first}' and '{second}'`
+  - replace: `lines, '{first}'`
+- M132 REQ-EVD-010.N7 skill/sdd/scripts/sdd.py
+  - find: `    if kind == "green" and not evidence_present(task["red"]):`
+  - replace: `    if False:`
+- M133 REQ-EVD-010.N7 skill/sdd/scripts/sdd.py
+  - find: `(sdd test {task['id']} --red, `
+  - replace: `(`
+- M134 REQ-EVD-011.N4 skill/sdd/scripts/sdd.py
+  - find: `if status not in TEST_STATUSES:`
+  - replace: `if False:`
+- M135 REQ-EVD-011.N4 skill/sdd/scripts/sdd.py
+  - find: `TEST_STATUSES = ("planned", "implementing", "verifying")`
+  - replace: `TEST_STATUSES = ("planned", "implementing", "verifying", "draft")`
+- M136 REQ-EVD-011.N5 skill/sdd/scripts/sdd.py
+  - find: `if not STEP_FORM.match(step):`
+  - replace: `if False:`
+- M137 REQ-EVD-011.N13 skill/sdd/scripts/sdd.py
+  - find: `    refuse_status(path)`
+  - replace: `    pass`
+- M138 REQ-EVD-011.N6 skill/sdd/scripts/sdd.py
+  - find: `if re.match(r"^T\d+$", step) and step not in {t["id"] for t in tasks}:`
+  - replace: `if False:`
+- M139 REQ-EVD-011.N7 skill/sdd/scripts/sdd.py
+  - find: `if step[10:] not in declared:`
+  - replace: `if False:`
+- M140 REQ-EVD-011.N8 skill/sdd/scripts/sdd.py
+  - find: `if (args.red or args.green) and not re.match(r"^T\d+$", step):`
+  - replace: `if False:`
+- M141 REQ-EVD-011.N9 skill/sdd/scripts/sdd.py
+  - find: `if args.red and args.green:`
+  - replace: `if False:`
+- M142 REQ-EVD-011.N10 skill/sdd/scripts/sdd.py
+  - find: `if not given:`
+  - replace: `if False:`
+- M143 REQ-EVD-011.N11 skill/sdd/scripts/sdd.py
+  - find: `        shlex.split(given)`
+  - replace: `        pass`
+- M144 REQ-EVD-011.N12 skill/sdd/scripts/sdd.py
+  - find: `        if kind == "none":`
+  - replace: `        if False:`
+- M145 REQ-EVD-011.N16 skill/sdd/scripts/sdd.py
+  - find: `if kind == "no-colons":`
+  - replace: `if False:`
+- M146 REQ-EVD-011.N18 skill/sdd/scripts/sdd.py
+  - find: `baseline = read_baseline(folder)`
+  - replace: `baseline = None`
+- M147 REQ-EVD-011.N15 skill/sdd/scripts/sdd.py
+  - find: `if rel.replace("\\", "/").startswith("/") or re.match(r"^[A-Za-z]:", rel):`
+  - replace: `if False:`
+- M148 REQ-EVD-011.N14 skill/sdd/scripts/sdd.py
+  - find: `if target != root and root not in target.parents:`
+  - replace: `if False:`
+- M149 REQ-EVD-011.N19 skill/sdd/scripts/sdd.py
+  - find: `if tracked is not None and tracked.returncode == 0 and tracked.stdout.strip("\0"):`
+  - replace: `if False:`
+- M150 REQ-EVD-011.N20 skill/sdd/scripts/sdd.py
+  - find: `if target.is_dir():`
+  - replace: `if False:`
+- M151 REQ-EVD-011.N21 skill/sdd/scripts/sdd.py
+  - find: `target = (root / rel).resolve()`
+  - replace: `target = root / rel`

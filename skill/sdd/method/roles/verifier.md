@@ -13,7 +13,9 @@ evidence; accept a ticked checkbox as proof.
 
 ## Checklist
 
-1. Run the full test command (from Design notes) and record the result.
+1. Run the full suite with `SDD test full --rerun`, which runs the design's
+   `Test command:` again instead of reusing the last run, and record its
+   `result:` line.
 2. Run `SDD check --stage verify` and record the result.
 3. **Each scenario:** open the test that names it. Confirm that it sets up the
    Given, performs the When, and asserts **every** part of the Then. For

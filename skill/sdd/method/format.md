@@ -9,7 +9,7 @@ sections**, spread over a folder and read as one document:
 | --- | --- |
 | `proposal.md` | front matter, Intent, Defect, Scope, Open questions, Amendments, Approvals |
 | `spec-delta.md` | Requirements, Known gaps |
-| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`, `- Test one:` and `- Test component:`), Failure modes, Contracts |
+| `design.md` | Approach, Components and interfaces, Test strategy (with `- Test command:`, `- Test one:`, `- Test component:` and `- Test report:`), Failure modes, Contracts |
 | `tasks.md` | Tasks, Mutations |
 | `verification.md` | Verification |
 
@@ -208,6 +208,35 @@ without `{prefix}`, with a quote that isn't closed, or a second
 `Test component:` line, and warns, without failing, when the design has no
 such line or an empty one (the component checkpoints are then skipped).
 
+To let `SDD test` read each test's outcome, add the path of the **JUnit
+XML report** the runner writes: ``- Test report: `build/junit.xml` ``. The
+path is relative to the folder that holds `specs/`, and should be
+git-ignored, or no run is ever reused. `SDD test` deletes it before each
+run and refuses a path that is absolute, leads outside the project (its
+folders' symlinks followed), is tracked by git or names a folder. Without
+the line, or with an empty one, a run reports only its exit code and last
+20 output lines: no per-test outcome, no sort and no red or green line.
+
+`SDD run-plan` and `SDD test` read each of the four lines (`Test command:`,
+`Test one:`, `Test component:`, `Test report:`) from the design's first
+list line with that key, without backticks; a mention in prose doesn't
+count.
+
+## Run files
+
+- `specs/.sdd/runs/` holds the last run of `SDD test`: `last-run.json` (its
+  change, step, command, commit, digest, exit code, time, each test's
+  outcome and the last 20 output lines) and `last-run.log` (the whole
+  output), with the project folder's path written as `.`. The previous
+  last run is renamed `run-of-<time>`, which the folder's `.gitignore`
+  (`run-of-*`) keeps out of git. Commit `last-run.json` and `last-run.log`
+  with the work.
+- `baseline.txt`, in the change folder, is written once by
+  `SDD test baseline`, before the first task is ticked, and never rewritten:
+  a `# baseline <time> <commit>` line (`none` without a commit), then the
+  name of each test that passed, one per line. `SDD test` sorts each run's
+  failures against it.
+
 ## design.md: Failure modes and Contracts (standard)
 
 A `standard` change's `design.md` holds two checked sections. Lines inside
@@ -283,6 +312,11 @@ HTML comments or fenced code blocks never count.
     earlier task's code. `SDD replay` then checks it in the working tree
     only.
   - `green:` is the passing run.
+  - `SDD test T<n> --red` writes the red line from the run as
+    `red: failed: <the first line of its message> (sdd test <time>)`, or
+    `red: failed (sdd test <time>)` when there is no message or the line
+    holds a comment marker or `(after T`; `SDD test T<n> --green` writes
+    `green: passed (sdd test <time>)`. The time is the run's own.
 
 ## Mutations
 

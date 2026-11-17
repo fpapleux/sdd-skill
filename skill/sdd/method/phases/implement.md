@@ -11,37 +11,59 @@ Deliver tasks test-first. Role: **Implementer**
    unticked task. `all` means every unticked task in order. The operator
    authorizes the selection once: the run goes on to its last task without
    asking again, unless a stop condition (step 6) occurs.
+
+   Before the first task, run `SDD run-plan <selection>`. It prints the
+   run's steps: the baseline, each task, the component checkpoints and the
+   full suite. Follow them in order, and run each one through `SDD test`.
 3. For each task, run the TDD loop from the role file and record its evidence
-   in the task's `test:` / `red:` / `green:` lines. Tick the box only after
-   green.
+   in the task's `test:` / `red:` / `green:` lines: `SDD test T<n> --red`
+   writes the red line, then write the code, then `SDD test T<n> --green`
+   writes the green line. A `red: pre-existing — <why>` line and a red that
+   holds only after an earlier task (`(after T<n>)`) are still written by
+   hand. Tick the box only after green.
 4. After each task, run `SDD check`. It must show no error about that task.
 5. **Run the tests at three levels.**
    - **Task:** the task's own test, with the design's `Test one:` command, at
-     red and at green. During development this is the only test you run.
+     red and at green (`SDD test T<n>`). During development this is the only
+     test you run.
    - **Component:** the tests of one capability, with the design's
      `Test component:` command, `{prefix}` replaced by the capability's
      requirement prefix. Run it at the end of that capability's tasks in the
      run: when the next task has another requirement prefix, or when the run
-     ends inside it. One checkpoint per prefix. If the design has no
-     `Test component:` line, skip the component checkpoints and say so in
-     the report.
-   - **Full:** the design's `Test command:`, once, before the run closes.
+     ends inside it. A capability declared with two prefixes gets one
+     checkpoint per prefix; a prefix whose tasks are split by tasks of
+     another prefix gets one checkpoint after each of its groups. If the
+     design has no `Test component:` line, skip the component checkpoints and say so in
+     the report. Run each checkpoint with `SDD test component <PREFIX>`
+     where the plan puts it.
+   - **Full:** the design's `Test command:`, once, before the run closes
+     (`SDD test full`).
+
+   Read the report `SDD test` prints: the result line, each failure with its
+   message, and the sort. Open `specs/.sdd/runs/last-run.log` only when the
+   report's lines don't explain a failure. Commit the run files
+   (`specs/.sdd/runs/`, and the change's `baseline.txt`) with the work.
 
    A **regression** is a test that passed before the task and fails after
    it. A failing test of a task not done yet is **expected** unless it is on
    the `--passed-before` list: count it and go on; it never stops the run. A
    test on that list is a **regression**, even when its task isn't done yet.
-   At each checkpoint and at the end, write
+   The `SDD test` report sorts the failures against the change's
+   `baseline.txt`. When the design has no `Test report:` line, the run has
+   no per-test outcome: at each checkpoint and at the end, write
    the failing test names to a file, one per line, and run
-   `SDD sort-failures <file> --passed-before <list>`. It sorts them into
+   `SDD sort-failures <file> --passed-before <list>`. Both sort them into
    `regression` (a ticked task plans the scenario, or the test is on the
    list), `expected` (no ticked task plans it, and it is not on the list)
    and `outside` (not a scenario of this change, not on the list). A
    regression from the list is handled like any regression.
 
-   Before the run's first task, run the full suite and write the names of
-   the tests that pass to a file, one per line. That file is the list; give
-   it at every sort, and don't update it during the run.
+   At the plan's baseline step, before the run's first task, run
+   `SDD test baseline`: it runs the full suite once and writes the tests
+   that pass to `baseline.txt`, which is never rerun. With no
+   `Test report:` line, run the full suite and write the names of the tests
+   that pass to a file, one per line. That file is the list; give it at
+   every sort, and don't update it during the run.
 6. **Stop and ask the operator** only when:
    - the task's own test still fails, or can't be made to fail for the right
      reason, after two planned fixes;
@@ -53,7 +75,8 @@ Deliver tasks test-first. Role: **Implementer**
    Explain the problem and propose the smallest fix. If the fix changes the
    spec, run the `amend` phase (`method/phases/amend.md`). The spec is locked,
    so a quiet edit makes `SDD check` fail.
-7. **Before the run closes,** run the full suite and sort its failures.
+7. **Before the run closes,** run the full suite (`SDD test full`) and sort
+   its failures.
    - Record each failure that isn't expected with
      `SDD defect add --test <name> --severity <critical|major|minor>`, with
      the severity you suggest. Add `--capability <PREFIX>` when the name

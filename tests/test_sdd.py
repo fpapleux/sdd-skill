@@ -3489,6 +3489,14 @@ class FailureModeTests(DesignedBase):
         self.assertEqual(snapshot(self.repo.root), before)
         return code, out.splitlines()
 
+    def refused(self, *args):
+        """Run run-plan expecting a refusal: exit 1, no plan line, no file changed; returns the text."""
+        code, lines = self.plan(*args)
+        text = "\n".join(lines)
+        self.assertEqual(code, 1)
+        self.assertNotIn("plan for", text)
+        return text
+
     def test_REQ_ANL_003_N1_failure_mode_without_arrow_has_no_outcome(self):
         self.designed(design=fm_design("- FM1 the queue is full"))
         code, lines = self.analyze_unchanged()
@@ -6143,6 +6151,1476 @@ class PassedBeforeTests(Base):
         self.assertEqual(lines, ["regression: test_REQ_DUR_001_S2_x (REQ-DUR-001.S2, no task, passed before the run)",
                                  "sorted: 1 regression, 0 expected, 0 outside the change"])
         self.assertEqual(code, 1)
+
+
+# ---------------------------------------------------------------- run-plan
+
+RUN_PLAN_DESIGN = """\
+- Test command: `runner tests`
+- Test one: `runner {file} {name}`
+- Test component: `runner -k REQ_{prefix}_`
+- Test report: `build/junit.xml`
+"""
+
+
+def plan_tasks(*tasks):
+    """A ## Tasks body: each task is (ref or None, ticked, test line)."""
+    lines = []
+    for n, (ref, ticked, test) in enumerate(tasks, 1):
+        lines.append(f"- [{'x' if ticked else ' '}] T{n} {ref + ' ' if ref else ''}Task {n}")
+        lines += [f"  - test: {test}", "  - red:", "  - green:"]
+    return "\n".join(lines) + "\n"
+
+
+S1_TASKS = plan_tasks(("REQ-DUR-001.S1", True, "tests/t_x.py::test_a"),
+                      ("REQ-DUR-001.N1", False, "tests/t_x.py::test_b"),
+                      ("REQ-DUR-001.S2", False, "tests/t_x.py::test_c"))
+
+
+class RunPlanBase(Base):
+    """A standard change 0001-x at planned with the REQ-ORC-009.S1 design lines and tasks."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+        self.repo.ok("new", "x", "--title", "X", "--size", "standard", "--capability", "duration=DUR")
+        self.cid = "0001-x"
+        self.dir = self.repo.root / "specs/changes" / self.cid
+        self.set_status("planned")
+        self.design()
+        self.tasks()
+
+    def set_status(self, status, path=None):
+        path = path or self.dir / "proposal.md"
+        path.write_text(sdd.set_front_matter(path.read_text(), "status", status))
+
+    def design(self, lines=RUN_PLAN_DESIGN):
+        set_file_section(self.dir / "design.md", "Test strategy", "- Unit tests\n" + lines)
+
+    def tasks(self, body=S1_TASKS):
+        set_file_section(self.dir / "tasks.md", "Tasks", body)
+
+    def plan(self, *args):
+        """Run run-plan: no command is run and no file is changed; returns (code, lines)."""
+        before = snapshot(self.repo.root)
+        with mock.patch.object(sdd.subprocess, "Popen") as popen, \
+                mock.patch.object(sdd.subprocess, "run") as run:
+            code, out = self.repo.run("run-plan", *args)
+        popen.assert_not_called()
+        run.assert_not_called()
+        self.assertEqual(snapshot(self.repo.root), before)
+        return code, out.splitlines()
+
+    def refused(self, *args):
+        """Run run-plan expecting a refusal: exit 1, no plan line, no file changed; returns the text."""
+        code, lines = self.plan(*args)
+        text = "\n".join(lines)
+        self.assertEqual(code, 1)
+        self.assertNotIn("plan for", text)
+        return text
+
+
+S2_STEPS = ["1. T2: runner tests/t_x.py test_b",
+            "2. component DUR: runner -k REQ_DUR_",
+            "3. full suite: runner tests"]
+TICKED_BASELINE = "- baseline: none (a task is ticked; runs sort without one)"
+
+
+class RunPlanStepTests(RunPlanBase):
+    """REQ-ORC-009 and REQ-ORC-010 (T1): run-plan prints the steps, forms and component checkpoints."""
+
+    def test_REQ_ORC_009_S1_a_range_prints_its_steps_and_checkpoint(self):
+        code, lines = self.plan("T1-T3")
+        self.assertEqual(lines, ["plan for 0001-x (T1-T3): 2 to do, 1 done",
+                                 TICKED_BASELINE,
+                                 "- T1: done",
+                                 "1. T2: runner tests/t_x.py test_b",
+                                 "2. T3: runner tests/t_x.py test_c",
+                                 "3. component DUR: runner -k REQ_DUR_",
+                                 "4. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_S2_change_names_a_change_that_is_not_active(self):
+        self.repo.ok("new", "y", "--title", "Y")
+        self.assertEqual((self.repo.root / "specs/.sdd/active").read_text().strip(), "0002-y")
+        code, lines = self.plan("T2", "--change", "0001-x")
+        self.assertEqual(lines, ["plan for 0001-x (T2): 1 to do, 0 done", TICKED_BASELINE, *S2_STEPS])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_S3_next_is_the_first_unticked_task(self):
+        code, lines = self.plan("next")
+        self.assertEqual(lines, ["plan for 0001-x (next): 1 to do, 0 done", TICKED_BASELINE, *S2_STEPS])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B1_a_one_task_range_is_not_reversed(self):
+        code, lines = self.plan("T2-T2")
+        self.assertEqual(lines, ["plan for 0001-x (T2-T2): 1 to do, 0 done", TICKED_BASELINE, *S2_STEPS])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B2_next_is_the_default_form(self):
+        code, lines = self.plan()
+        self.assertEqual(lines, ["plan for 0001-x (next): 1 to do, 0 done", TICKED_BASELINE, *S2_STEPS])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B8_a_mini_change_reads_its_design_notes(self):
+        self.repo.root.joinpath("specs/changes/0001-x").rename(self.repo.root / "specs/changes/0009-old")
+        cid = self.new("x")  # a mini change, numbered after 0009-old
+        mini = self.repo.root / "specs/changes" / cid
+        mini.rename(self.repo.root / "specs/changes/0001-x")
+        __import__("shutil").rmtree(self.repo.root / "specs/changes/0009-old")
+        self.repo.ok("use", "0001-x")
+        self.repo.fill("0001-x", design_and_tasks=RUN_PLAN_DESIGN + "\n## Tasks\n" + S1_TASKS)
+        spec = self.repo.spec("0001-x")
+        self.set_status("implementing", spec)
+        code, lines = self.plan("T2")
+        self.assertEqual(lines, ["plan for 0001-x (T2): 1 to do, 0 done", TICKED_BASELINE, *S2_STEPS])
+        self.assertEqual(code, 0)
+        self.assertIn("status: implementing", spec.read_text())
+
+
+    def test_REQ_ORC_010_S1_a_checkpoint_at_a_prefix_change_and_at_the_range_end(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", False, "t.py::t1"), ("REQ-DUR-001.N1", False, "t.py::t2"),
+                              ("REQ-CLI-001.S1", False, "t.py::t3"), ("REQ-CLI-001.N1", False, "t.py::t4")))
+        code, lines = self.plan("T1-T3")
+        self.assertEqual(lines, ["plan for 0001-x (T1-T3): 3 to do, 0 done",
+                                 "1. baseline: runner tests",
+                                 "2. T1: runner t.py t1",
+                                 "3. T2: runner t.py t2",
+                                 "4. component DUR: runner -k REQ_DUR_",
+                                 "5. T3: runner t.py t3",
+                                 "6. component CLI: runner -k REQ_CLI_",
+                                 "7. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_010_B2_a_split_prefix_gets_a_checkpoint_after_each_group(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", False, "t.py::t1"), ("REQ-CLI-001.S1", False, "t.py::t2"),
+                              ("REQ-DUR-001.N1", False, "t.py::t3")))
+        code, lines = self.plan("all")
+        self.assertEqual(lines, ["plan for 0001-x (all): 3 to do, 0 done",
+                                 "1. baseline: runner tests",
+                                 "2. T1: runner t.py t1",
+                                 "3. component DUR: runner -k REQ_DUR_",
+                                 "4. T2: runner t.py t2",
+                                 "5. component CLI: runner -k REQ_CLI_",
+                                 "6. T3: runner t.py t3",
+                                 "7. component DUR: runner -k REQ_DUR_",
+                                 "8. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_010_B3_a_task_with_no_scenario_reference_keeps_the_group_open(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", False, "t.py::t1"), (None, False, "t.py::t2"),
+                              ("REQ-DUR-001.N1", False, "t.py::t3"), (None, False, "t.py::t4"),
+                              ("REQ-CLI-001.S1", False, "t.py::t5")))
+        code, lines = self.plan("all")
+        self.assertEqual(lines, ["plan for 0001-x (all): 5 to do, 0 done",
+                                 "1. baseline: runner tests",
+                                 "2. T1: runner t.py t1",
+                                 "3. T2: runner t.py t2",
+                                 "4. T3: runner t.py t3",
+                                 "5. T4: runner t.py t4",
+                                 "6. component DUR: runner -k REQ_DUR_",
+                                 "7. T5: runner t.py t5",
+                                 "8. component CLI: runner -k REQ_CLI_",
+                                 "9. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_010_B4_a_ticked_task_neither_joins_nor_ends_a_group(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", False, "t.py::t1"), ("REQ-CLI-001.S1", True, "t.py::t2"),
+                              ("REQ-DUR-001.N1", False, "t.py::t3")))
+        code, lines = self.plan("all")
+        self.assertEqual(lines, ["plan for 0001-x (all): 2 to do, 1 done",
+                                 TICKED_BASELINE,
+                                 "1. T1: runner t.py t1",
+                                 "- T2: done",
+                                 "2. T3: runner t.py t3",
+                                 "3. component DUR: runner -k REQ_DUR_",
+                                 "4. full suite: runner tests"])
+        self.assertNotIn("component CLI", "\n".join(lines))
+        self.assertEqual(code, 0)
+
+
+class RunPlanEdgeTests(RunPlanBase):
+    """REQ-ORC-009 and REQ-ORC-010 (T2): nothing to run, quoting, no test line, skipped checkpoints."""
+
+    def all_ticked(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", True, "tests/t_x.py::test_a"),
+                              ("REQ-DUR-001.N1", True, "tests/t_x.py::test_b"),
+                              ("REQ-DUR-001.S2", True, "tests/t_x.py::test_c")))
+
+    def test_REQ_ORC_009_B3_a_range_with_nothing_to_do_prints_no_step(self):
+        self.all_ticked()
+        code, lines = self.plan("all")
+        self.assertEqual(lines, ["plan for 0001-x (all): 0 to do, 3 done", TICKED_BASELINE,
+                                 "- T1: done", "- T2: done", "- T3: done",
+                                 "nothing to run: no task to do in the range"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B4_next_with_every_task_ticked_has_nothing_to_run(self):
+        self.all_ticked()
+        code, lines = self.plan("next")
+        self.assertEqual(lines, ["plan for 0001-x (next): 0 to do, 0 done", TICKED_BASELINE,
+                                 "nothing to run: no task to do in the range"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B5_a_word_with_a_quote_is_single_quoted(self):
+        self.design(RUN_PLAN_DESIGN.replace("runner {file} {name}", "runner {test}"))
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", True, "tests/t_x.py::test_a"),
+                              ("REQ-DUR-001.N1", False, "tests/it's x.py")))
+        code, lines = self.plan("T2")
+        self.assertIn("1. T2: runner 'tests/it'\"'\"'s x.py'", lines)
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B6_a_test_line_without_colons_has_no_command(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", True, "tests/t_x.py::test_a"),
+                              ("REQ-DUR-001.N1", False, "tests/t_x.py")))
+        code, lines = self.plan("T2")
+        self.assertEqual(lines[2:], ['1. T2: no command (the test line has no "::")',
+                                     "2. component DUR: runner -k REQ_DUR_", "3. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B7_a_task_with_no_test_line_shows_the_template(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.S1", True, "tests/t_x.py::test_a"),
+                              ("REQ-DUR-001.N1", False, "")))
+        code, lines = self.plan("T2")
+        self.assertEqual(lines[2:], ["1. T2: runner {file} {name} (no test line yet)",
+                                     "2. component DUR: runner -k REQ_DUR_", "3. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_010_B5_no_component_line_skips_the_checkpoints(self):
+        self.design("- Test command: `runner tests`\n- Test one: `runner {file} {name}`\n"
+                    "- Test report: `build/junit.xml`\n")
+        self.tasks(plan_tasks(*[(ref, False, f"t.py::t{n}") for n, ref in
+                                enumerate(["REQ-DUR-001.S1", "REQ-DUR-001.N1", "REQ-CLI-001.S1", "REQ-CLI-001.N1"], 1)]))
+        code, lines = self.plan("all")
+        self.assertEqual(lines, ["plan for 0001-x (all): 4 to do, 0 done",
+                                 'component checkpoints skipped: the design has no "Test component:" line',
+                                 "1. baseline: runner tests",
+                                 "2. T1: runner t.py t1", "3. T2: runner t.py t2",
+                                 "4. T3: runner t.py t3", "5. T4: runner t.py t4",
+                                 "6. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+
+class RunPlanBaselineTests(RunPlanBase):
+    """REQ-ORC-009 (T3): the baseline line, from baseline.txt and the Test report line."""
+
+    def test_REQ_ORC_009_B9_a_recorded_baseline_shows_its_time(self):
+        (self.dir / "baseline.txt").write_text("# baseline 2026-11-16T09:00:00Z abc1234\nt.test_a\n")
+        code, lines = self.plan("T2")
+        self.assertEqual(lines, ["plan for 0001-x (T2): 1 to do, 0 done",
+                                 "- baseline: recorded 2026-11-16T09:00:00Z",
+                                 "1. T2: runner tests/t_x.py test_b",
+                                 "2. component DUR: runner -k REQ_DUR_",
+                                 "3. full suite: runner tests"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_ORC_009_B10_no_test_report_line_means_no_baseline(self):
+        self.design("- Test command: `runner tests`\n- Test one: `runner {file} {name}`\n"
+                    "- Test component: `runner -k REQ_{prefix}_`\n")
+        self.tasks(plan_tasks(*[("REQ-DUR-001.S1" if n == 1 else "REQ-DUR-001.N1", False,
+                                 f"tests/t_x.py::test_{'abc'[n - 1]}") for n in (1, 2, 3)]))
+        code, lines = self.plan("T2")
+        self.assertEqual(lines[:3], ["plan for 0001-x (T2): 1 to do, 0 done",
+                                     '- baseline: none (the design has no "Test report:" line)',
+                                     "1. T2: runner tests/t_x.py test_b"])
+        self.assertEqual(code, 0)
+
+
+class RunPlanRefusalTests(RunPlanBase):
+    """REQ-ORC-011 (T4): run-plan refuses no specs/, no change, a bad status, form, task or range."""
+
+    def test_REQ_ORC_011_N11_no_specs_folder(self):
+        bare = Repo()
+        self.addCleanup(bare.close)
+        code, out = bare.run("run-plan", "T2")
+        self.assertEqual(code, 1)
+        self.assertIn("not initialized", out)
+        self.assertNotIn("plan for", out)
+        self.assertEqual(list(bare.root.iterdir()), [])
+
+    def test_REQ_ORC_011_N5_no_active_change(self):
+        (self.repo.root / "specs/.sdd/active").unlink()
+        self.assertIn("no active change", self.refused("T2"))
+
+    def test_REQ_ORC_011_N6_a_change_that_does_not_exist(self):
+        self.assertIn("9999-none", self.refused("T2", "--change", "9999-none"))
+
+    def test_REQ_ORC_011_N4_a_change_at_draft(self):
+        self.set_status("draft")
+        text = self.refused("T2")
+        self.assertIn("draft", text)
+        self.assertIn("planned or implementing", text)
+        self.assertIn("draft", self.refused("T1-"))  # the status comes before the form
+
+    def test_REQ_ORC_011_N1_a_form_run_plan_does_not_take(self):
+        text = self.refused("T1-")
+        for part in ("T1-", "T<n>", "T<a>-T<b>", "next", "all"):
+            self.assertIn(part, text)
+        self.assertIn('"T1-"', self.refused("T1-", "--change", "0001-x"))
+        self.assertIn('"T9-"', self.refused("T9-"))  # the form comes before the task IDs
+        for form in ("T1-T2x", "xT1-T2", "T1x", "xT1", "T1-T2-T3", "T", "first"):
+            self.assertIn(f'"{form}"', self.refused(form))
+
+    def test_REQ_ORC_011_N2_a_reversed_range(self):
+        text = self.refused("T3-T1")
+        self.assertIn("T3 comes after T1 in the plan", text)
+
+    def test_REQ_ORC_011_N3_a_task_that_is_not_in_the_plan(self):
+        self.assertIn("T9", self.refused("T2-T9"))
+        self.assertIn("T9", self.refused("T9-T1"))  # an unknown task comes before the range
+
+
+class RunPlanDesignRefusalTests(RunPlanBase):
+    """REQ-ORC-011 (T5): run-plan refuses a bad design line or baseline.txt."""
+
+    def test_REQ_ORC_011_N7_no_test_one_line(self):
+        self.design("- Test command: `runner tests`\n- Test component: `runner -k REQ_{prefix}_`\n")
+        self.assertIn("Test one:", self.refused("T2"))
+
+    def test_REQ_ORC_011_N8_an_empty_test_command_line_is_not_read_from_prose(self):
+        self.design("- Test command:\n- Test one: `runner {file} {name}`\n")
+        proposal = self.dir / "proposal.md"
+        proposal.write_text(proposal.read_text() + "\nThe Test command: `runner tests` runs it all.\n")
+        self.assertIn("Test command:", self.refused("T2"))
+
+    def test_REQ_ORC_011_N9_a_test_one_quote_that_is_not_closed(self):
+        self.design(RUN_PLAN_DESIGN.replace("runner {file} {name}", "runner '{name}"))
+        text = self.refused("T2")
+        self.assertIn("Test one:", text)
+        self.assertIn("quote", text)
+        self.assertIn("not closed", text)
+
+    def test_REQ_ORC_011_N10_a_test_command_quote_that_is_not_closed(self):
+        self.design(RUN_PLAN_DESIGN.replace("runner tests", "runner 'tests"))
+        text = self.refused("T2")
+        self.assertIn("Test command:", text)
+        self.assertIn("quote", text)
+        self.assertIn("not closed", text)
+
+    def test_REQ_ORC_011_N12_a_baseline_file_with_no_header(self):
+        (self.dir / "baseline.txt").write_text("<<<<<<< HEAD\nt.test_a\n")
+        text = self.refused("T2")
+        self.assertIn("baseline.txt", text)
+        self.assertIn("# baseline <time> <commit>", text)
+
+    def test_REQ_ORC_011_N7_design_line_refusals_come_in_the_spec_order(self):
+        (self.dir / "baseline.txt").write_text("<<<<<<< HEAD\n")
+        self.design("- Test command:\n")
+        self.assertIn("Test one:", self.refused("T2"))
+        self.design("- Test one: `runner {file} {name}`\n- Test command:\n")
+        self.assertIn("Test command:", self.refused("T2"))
+        self.design("- Test one: `runner '{name}`\n- Test command:\n")
+        self.assertIn("Test command:", self.refused("T2"))  # a missing line comes before a quote
+        self.design("- Test one: `runner '{name}`\n- Test command: `runner tests`\n")
+        self.assertIn("Test one:", self.refused("T2"))
+        self.design()
+        self.assertIn("baseline.txt", self.refused("T2"))
+
+
+
+# ---------------------------------------------------------------- test (REQ-EVD-007 to 011)
+
+FAKE_RUNNER = """\
+import json, pathlib, sys
+PLAN = json.loads({plan!r})
+with open(PLAN["counter"], "a") as counter:
+    counter.write(" ".join(sys.argv[1:]) + "\\n")
+for line in PLAN["lines"]:
+    print(line)
+if PLAN["report"] is not None:
+    path = pathlib.Path(PLAN["path"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(PLAN["report"])
+sys.exit(PLAN["exit"])
+"""
+PY = shlex.quote(sys.executable)
+
+
+def junit(*cases):
+    """A JUnit report: each case is (classname or None, name, outcome, message, text)."""
+    body = []
+    for classname, name, outcome, message, text in cases:
+        attrs = (f' classname="{classname}"' if classname is not None else "") + f' name="{name}"'
+        if outcome == "passed":
+            body.append(f"<testcase{attrs}/>")
+        else:
+            tag = {"failed": "failure", "error": "error", "skipped": "skipped"}[outcome]
+            msg = f' message="{message}"' if message is not None else ""
+            body.append(f"<testcase{attrs}><{tag}{msg}>{text}</{tag}></testcase>")
+    return '<?xml version="1.0"?>\n<testsuites><testsuite name="t">' + "".join(body) + "</testsuite></testsuites>\n"
+
+
+S1_REPORT = junit(("t", "test_a", "passed", None, ""),
+                  ("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", ""),
+                  ("t", "test_b", "skipped", "", ""))
+EVD_DESIGN = f"- Test command: `{PY} fake.py all`\n- Test report: `out/junit.xml`\n"
+EVD_TASKS = plan_tasks(("REQ-DUR-001.N1", False, "t.py::test_REQ_DUR_001_N1_x"))
+RESULT = re.compile(r"^result: (\d+) passed, (\d+) failed, (\d+) errors, (\d+) skipped \((\d+) tests\) in \d+\.\ds$")
+
+
+class RunnerBase(Base):
+    """A standard change 0001-x at implementing with the REQ-EVD-007.S1 design, a fake runner
+    and a temp git repository committed before each run."""
+
+    def setUp(self):
+        super().setUp()
+        self.scratch = Path(tempfile.mkdtemp(prefix="sdd-test-runner-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.scratch, ignore_errors=True))
+        env = mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": str(self.repo.root.parent)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.init()
+        self.repo.ok("new", "x", "--title", "X", "--size", "standard", "--capability", "duration=DUR")
+        self.cid = "0001-x"
+        self.dir = self.repo.root / "specs/changes" / self.cid
+        self.runs = self.repo.root / "specs/.sdd/runs"
+        set_file_section(self.dir / "spec-delta.md", "Requirements", VALID_REQS)
+        self.set_status("implementing")
+        self.design()
+        self.tasks()
+        self.fake()
+        self.repo.write("t.py", "# the code under test\n")
+        self.repo.write(".gitignore", "out/\n")  # the report path: git must not track it (REQ-EVD-011)
+
+    def set_status(self, status):
+        path = self.dir / "proposal.md"
+        path.write_text(sdd.set_front_matter(path.read_text(), "status", status))
+
+    def design(self, lines=EVD_DESIGN):
+        set_file_section(self.dir / "design.md", "Test strategy", "- Unit tests\n" + lines)
+
+    def tasks(self, body=EVD_TASKS):
+        set_file_section(self.dir / "tasks.md", "Tasks", body)
+
+    def fake(self, report=S1_REPORT, lines=("running 3 tests", "FAILED (failures=1)"), exit=1,
+             path="out/junit.xml"):
+        plan = {"counter": str(self.scratch / "runs.txt"), "lines": list(lines), "report": report,
+                "path": path, "exit": exit}
+        self.repo.write("fake.py", FAKE_RUNNER.format(plan=json.dumps(plan)))
+
+    def commit(self):
+        root = self.repo.root
+        if not (root / ".git").exists():
+            git(root, "init", "-q")
+        git(root, "add", "-A")
+        git(root, "commit", "-qm", "work", "--allow-empty")
+        return git(root, "rev-parse", "HEAD").strip()
+
+    def fake_runs(self):
+        counter = self.scratch / "runs.txt"
+        return counter.read_text().splitlines() if counter.exists() else []
+
+    def outside_runs(self, report="out/junit.xml"):
+        """Every file outside .git, specs/.sdd/runs/ and the report path, with its bytes."""
+        return {rel: data for rel, data in snapshot(self.repo.root).items()
+                if not rel.startswith((".git/", "specs/.sdd/runs/")) and rel != report}
+
+    def step_run(self, *args, now="2026-11-17T10:00:00Z"):
+        """Run `sdd.py test` with a fixed time; returns (code, lines)."""
+        with mock.patch.object(sdd, "now_utc", return_value=now):
+            code, out = self.repo.run("test", *args)
+        return code, out.splitlines()
+
+    def record(self):
+        return json.loads((self.runs / "last-run.json").read_text())
+
+
+NO_BASELINE = "warning: no baseline recorded; a test that passed before the change is sorted as outside"
+S1_SORT = ["expected: t.test_REQ_DUR_001_N1_x (REQ-DUR-001.N1, T1 not done)", NO_BASELINE,
+           "sorted: 0 regression, 1 expected, 0 outside the change"]
+
+
+class TestStepTests(RunnerBase):
+    """REQ-EVD-007 (T6): test runs a step, records the last run and prints its report."""
+
+    def assert_s1_report(self, lines, first):
+        self.assertEqual(lines[0], first)
+        self.assertRegex(lines[1], RESULT)
+        self.assertEqual(RESULT.match(lines[1]).groups(), ("1", "1", "0", "1", "3"))
+        self.assertEqual(lines[2:], ["failed: t.test_REQ_DUR_001_N1_x", "  AssertionError: 1 != 2",
+                                     *S1_SORT, "log: specs/.sdd/runs/last-run.log"])
+
+    def test_REQ_EVD_007_S1_full_runs_the_suite_records_it_and_reports_its_failures(self):
+        commit = self.commit()
+        before = self.outside_runs()
+        code, lines = self.step_run("full")
+        self.assert_s1_report(lines, f"test full: {PY} fake.py all")
+        self.assertFalse(any(line.startswith("warning: the command exited") for line in lines))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fake_runs(), ["all"])
+        self.assertEqual((self.runs / "last-run.log").read_text(), "running 3 tests\nFAILED (failures=1)\n")
+        record = self.record()
+        self.assertEqual({k: record[k] for k in ("time", "change", "step", "command", "commit", "exit")},
+                         {"time": "2026-11-17T10:00:00Z", "change": "0001-x", "step": "full",
+                          "command": f"{PY} fake.py all", "commit": commit, "exit": 1})
+        self.assertEqual([(t["name"], t["outcome"]) for t in record["tests"]],
+                         [("t.test_a", "passed"), ("t.test_REQ_DUR_001_N1_x", "failed"),
+                          ("t.test_b", "skipped")])
+        self.assertIn("digest", record)
+        self.assertIsInstance(record["seconds"], (int, float))
+        self.assertEqual((self.runs / ".gitignore").read_text(), "run-of-*\n")
+        status = git(self.repo.root, "status", "--porcelain", "--untracked-files=all").splitlines()
+        self.assertIn("?? specs/.sdd/runs/last-run.json", status)
+        self.assertIn("?? specs/.sdd/runs/last-run.log", status)
+        self.assertEqual(self.outside_runs(), before)
+
+    def test_REQ_EVD_007_S2_component_runs_the_component_command(self):
+        self.design(EVD_DESIGN + f"- Test component: `{PY} fake.py -k REQ_{{prefix}}_`\n")
+        self.commit()
+        code, lines = self.step_run("component", "DUR")
+        self.assert_s1_report(lines, f"test component DUR: {PY} fake.py -k REQ_DUR_")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fake_runs(), ["-k REQ_DUR_"])
+        self.assertEqual(self.record()["step"], "component DUR")
+
+    def test_REQ_EVD_007_S3_a_task_step_runs_the_task_test(self):
+        self.design(EVD_DESIGN + f"- Test one: `{PY} fake.py {{name}}`\n")
+        self.commit()
+        tasks_before = (self.dir / "tasks.md").read_text()
+        code, lines = self.step_run("T1")
+        self.assert_s1_report(lines, f"test T1: {PY} fake.py test_REQ_DUR_001_N1_x")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fake_runs(), ["test_REQ_DUR_001_N1_x"])
+        self.assertEqual(self.record()["step"], "T1")
+        self.assertEqual((self.dir / "tasks.md").read_text(), tasks_before)
+
+    def test_REQ_EVD_007_S4_a_failure_of_a_ticked_task_is_a_regression(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", True, "t.py::test_REQ_DUR_001_N1_x")))
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertIn("regression: t.test_REQ_DUR_001_N1_x (REQ-DUR-001.N1, T1 done)", lines)
+        self.assertIn("sorted: 1 regression, 0 expected, 0 outside the change", lines)
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_007_B3_a_report_with_no_testcase(self):
+        self.fake(report=junit(), lines=("ran 0 tests",), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertRegex(lines[1], RESULT)
+        self.assertEqual(RESULT.match(lines[1]).groups(), ("0", "0", "0", "0", "0"))
+        self.assertIn("sorted: 0 regression, 0 expected, 0 outside the change", lines)
+        self.assertFalse(any(line.startswith(("failed:", "error:", "warning: the command")) for line in lines))
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B4_verifying_runs_and_keeps_the_status(self):
+        self.set_status("verifying")
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assert_s1_report(lines, f"test full: {PY} fake.py all")
+        self.assertEqual(code, 0)
+        status = sdd.read_front_matter((self.dir / "proposal.md").read_text()).get("status")
+        self.assertEqual(status, "verifying")
+
+
+class TestReportTests(RunnerBase):
+    """REQ-EVD-007 (T7): the report's message lines, test names and the project path."""
+
+    def failure_lines(self, lines):
+        start = next(i for i, line in enumerate(lines) if line.startswith(("failed:", "error:")))
+        return lines[start:]
+
+    def test_REQ_EVD_007_B1_a_failure_message_is_cut_at_five_lines(self):
+        text = "\n".join(f"detail {n}" for n in range(1, 8))
+        self.fake(report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", text)), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        start = lines.index("failed: t.test_REQ_DUR_001_N1_x")
+        self.assertEqual(lines[start + 1:start + 6], ["  AssertionError: 1 != 2", "  detail 1", "  detail 2",
+                                                       "  detail 3", "  detail 4"])
+        self.assertEqual(lines[start + 6].split(":")[0], "expected")
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B2_a_test_with_no_classname_is_named_by_its_name(self):
+        self.fake(report=junit((None, "test_c", "error", "ImportError: x", "")), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines[2:5], ["error: test_c", "  ImportError: x", "outside: test_c"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B7_a_failure_with_no_message_and_no_text(self):
+        self.fake(report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", None, "")), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines[2:4], ["failed: t.test_REQ_DUR_001_N1_x", "  (no message)"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B8_the_project_path_is_written_as_a_dot(self):
+        real = self.repo.root.resolve()
+        self.fake(lines=[f"{real}/t.py", f"at {real}", f"{real}-old/t.py"],
+                  report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", f"AssertionError: {real}/t.py", "")),
+                  exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertIn("  AssertionError: ./t.py", lines)
+        log = (self.runs / "last-run.log").read_text()
+        self.assertEqual(log.splitlines(), ["./t.py", "at .", f"{real}-old/t.py"])  # a sibling is untouched
+        blob = "\n".join(lines) + log + (self.runs / "last-run.json").read_text()
+        self.assertNotIn(f"{real}/", blob)
+        self.assertNotIn(f"at {real}", blob)
+        self.assertEqual(code, 0)
+
+
+class NoReportTests(RunnerBase):
+    """REQ-EVD-007 (T8): with no readable report, the exit code and the output tail."""
+
+    NO_REPORT = "result: exit {}, no test report: each test's outcome is unknown"
+
+    def test_REQ_EVD_007_N1_no_report_line_in_the_design(self):
+        self.design(f"- Test command: `{PY} fake.py all`\n")
+        out = [f"line {n}" for n in range(1, 31)]
+        self.fake(report=None, lines=out, exit=3)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines, [f"test full: {PY} fake.py all", self.NO_REPORT.format(3),
+                                 *[f"  {line}" for line in out[-20:]], "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_007_N7_an_empty_report_line_reads_as_absent(self):
+        self.design(f"- Test command: `{PY} fake.py all`\n- Test report:\n")
+        self.fake(report=None, lines=("done",), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines, [f"test full: {PY} fake.py all", self.NO_REPORT.format(0), "  done",
+                                 "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_N2_a_stale_report_is_deleted_and_not_read(self):
+        self.repo.write("out/junit.xml", S1_REPORT)
+        self.fake(report=None, lines=(), exit=0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines, [f"test full: {PY} fake.py all", self.NO_REPORT.format(0),
+                                 "log: specs/.sdd/runs/last-run.log"])
+        self.assertFalse((self.repo.root / "out/junit.xml").exists())
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_N3_a_malformed_report_is_no_report(self):
+        self.fake(report="<testsuite", lines=("boom",), exit=1)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines, [f"test full: {PY} fake.py all", self.NO_REPORT.format(1), "  boom",
+                                 "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(code, 1)
+        record = self.record()
+        self.assertEqual((record["step"], record["exit"], record["tests"]), ("full", 1, None))
+        self.fake(report="<html><body/></html>", lines=("boom",), exit=1)  # well formed, not JUnit
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines[1], self.NO_REPORT.format(1))
+        self.assertEqual(code, 1)
+
+
+class ExitWarningTests(RunnerBase):
+    """REQ-EVD-007 (T9): a non-zero exit with no failure in the report is a warning and exit 1."""
+
+    def test_REQ_EVD_007_N6_the_command_fails_but_the_report_shows_no_failure(self):
+        self.fake(report=junit(("t", "test_a", "passed", None, ""), ("t", "test_b", "passed", None, ""),
+                               ("t", "test_c", "passed", None, "")), exit=2)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertRegex(lines[1], RESULT)
+        self.assertEqual(RESULT.match(lines[1]).groups(), ("3", "0", "0", "0", "3"))
+        self.assertEqual(lines[2:], [NO_BASELINE, "sorted: 0 regression, 0 expected, 0 outside the change",
+                                     "warning: the command exited 2 but the report shows no failure",
+                                     "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(code, 1)
+        self.fake(report=S1_REPORT, exit=1)  # a failed test explains the exit code: no warning
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertFalse(any(line.startswith("warning: the command exited") for line in lines))
+        self.assertEqual(code, 0)
+
+
+def last_run_files(runs, time="2026-11-16T09:00:00Z"):
+    """Write a readable last run (last-run.json and .log) into the runs folder."""
+    runs.mkdir(parents=True, exist_ok=True)
+    record = {"time": time, "change": "0001-x", "step": "full", "command": "earlier", "commit": None,
+              "digest": None, "exit": 0, "seconds": 0.1, "tests": [], "tail": []}
+    (runs / "last-run.json").write_text(json.dumps(record, indent=2) + "\n")
+    (runs / "last-run.log").write_text("earlier output\n")
+
+
+class CannotStartTests(RunnerBase):
+    """REQ-EVD-007 (T10): a command that cannot start is an error that records and renames nothing."""
+
+    def test_REQ_EVD_007_N4_a_command_that_cannot_start(self):
+        self.design("- Test command: `no-such-runner all`\n- Test report: `out/junit.xml`\n")
+        last_run_files(self.runs)
+        self.commit()
+        before = snapshot(self.runs)
+        code, lines = self.step_run("full")
+        self.assertEqual(code, 1)
+        text = "\n".join(lines)
+        self.assertIn("no-such-runner", text)
+        self.assertIn("cannot start", text)
+        self.assertFalse(any(line.startswith("result:") for line in lines))
+        self.assertEqual(snapshot(self.runs), before)  # not renamed, nothing recorded
+        self.assertEqual(sorted(p.name for p in self.runs.iterdir()), ["last-run.json", "last-run.log"])
+
+
+class RunOfFilesTests(RunnerBase):
+    """REQ-EVD-007 (T11): the previous last run is kept as run-of files, git-ignored."""
+
+    COMPONENT = f"- Test component: `{PY} fake.py -k REQ_{{prefix}}_`\n"
+
+    def names(self):
+        return sorted(p.name for p in self.runs.iterdir())
+
+    def ignored(self, name):
+        proc = subprocess.run(["git", "check-ignore", "-q", f"specs/.sdd/runs/{name}"], cwd=self.repo.root)
+        return proc.returncode == 0
+
+    def test_REQ_EVD_007_N5_an_unreadable_last_run_is_kept_as_run_of_unreadable(self):
+        self.runs.mkdir(parents=True)
+        (self.runs / "last-run.json").write_text("<<<<<<< HEAD\n")
+        (self.runs / "last-run.log").write_text("earlier output\n")
+        self.commit()
+        code, lines = self.step_run("full")
+        kept = "run-of-unreadable-2026-11-17T10-00-00Z"
+        self.assertEqual(lines[0], f"warning: last-run.json could not be read; kept as {kept}.json")
+        self.assertEqual(lines[1], f"test full: {PY} fake.py all")
+        self.assertEqual(lines[-1], "log: specs/.sdd/runs/last-run.log")
+        self.assertEqual((self.runs / f"{kept}.json").read_text(), "<<<<<<< HEAD\n")
+        self.assertEqual((self.runs / f"{kept}.log").read_text(), "earlier output\n")
+        self.assertEqual(self.record()["time"], "2026-11-17T10:00:00Z")
+        self.assertEqual(self.record()["step"], "full")
+        self.assertEqual(code, 0)
+        # parses as JSON but is no run record, and has no log: kept too, under the next free name
+        (self.runs / "last-run.json").write_text("{}\n")
+        (self.runs / "last-run.log").unlink()
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertEqual(lines[0], f"warning: last-run.json could not be read; kept as {kept}-2.json")
+        self.assertEqual((self.runs / f"{kept}-2.json").read_text(), "{}\n")
+        self.assertFalse((self.runs / f"{kept}-2.log").exists())
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B5_the_previous_run_is_renamed_to_run_of_its_time(self):
+        self.design(EVD_DESIGN + self.COMPONENT)
+        self.commit()
+        _, first = self.step_run("full", now="2026-11-16T09:00:00Z")  # the first run: nothing to rename
+        self.assertFalse(any(line.startswith("warning: last-run") for line in first))
+        old = "run-of-2026-11-16T09-00-00Z"
+        self.assertEqual(self.names(), [".gitignore", "last-run.json", "last-run.log"])
+        old_json = (self.runs / "last-run.json").read_text()
+        self.repo.write("t.py", "# changed\n")
+        self.commit()
+        code, lines = self.step_run("component", "DUR")
+        self.assertEqual(self.names(), [".gitignore", "last-run.json", "last-run.log", f"{old}.json", f"{old}.log"])
+        self.assertEqual((self.runs / f"{old}.json").read_text(), old_json)
+        self.assertEqual((self.runs / f"{old}.log").read_text(), "running 3 tests\nFAILED (failures=1)\n")
+        self.assertTrue(self.ignored(f"{old}.json") and self.ignored(f"{old}.log"))
+        self.assertFalse(self.ignored("last-run.json") or self.ignored("last-run.log"))
+        self.assertEqual(self.record()["step"], "component DUR")
+        self.assertEqual(self.record()["time"], "2026-11-17T10:00:00Z")
+        self.assertFalse(any(line.startswith("warning: last-run") for line in lines))
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B6_a_run_of_name_that_is_taken_gets_a_number(self):
+        self.design(EVD_DESIGN + self.COMPONENT)
+        last_run_files(self.runs)
+        taken = self.runs / "run-of-2026-11-16T09-00-00Z.json"
+        taken.write_text("already here\n")
+        self.commit()
+        code, _ = self.step_run("component", "DUR")
+        old = "run-of-2026-11-16T09-00-00Z"
+        self.assertEqual(taken.read_text(), "already here\n")
+        self.assertFalse((self.runs / f"{old}.log").exists())
+        self.assertIn(f"{old}-2.json", self.names())
+        self.assertEqual(json.loads((self.runs / f"{old}-2.json").read_text())["time"], "2026-11-16T09:00:00Z")
+        self.assertEqual((self.runs / f"{old}-2.log").read_text(), "earlier output\n")
+        self.assertEqual(self.record()["step"], "component DUR")
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_007_B6_a_taken_log_name_also_moves_both_files_on(self):
+        self.design(EVD_DESIGN + self.COMPONENT)
+        last_run_files(self.runs)
+        (self.runs / "run-of-2026-11-16T09-00-00Z.log").write_text("already here\n")
+        (self.runs / "run-of-2026-11-16T09-00-00Z-2.json").write_text("already here too\n")
+        self.commit()
+        self.step_run("component", "DUR")
+        old = "run-of-2026-11-16T09-00-00Z"
+        self.assertIn(f"{old}-3.json", self.names())
+        self.assertEqual(json.loads((self.runs / f"{old}-3.json").read_text())["time"], "2026-11-16T09:00:00Z")
+        self.assertEqual((self.runs / f"{old}-3.log").read_text(), "earlier output\n")
+        self.assertEqual((self.runs / f"{old}.log").read_text(), "already here\n")
+
+
+
+LEGACY_REPORT = junit(("t", "test_a", "passed", None, ""), ("t", "test_legacy", "passed", None, ""),
+                      ("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", ""))
+
+
+class BaselineRecordTests(RunnerBase):
+    """REQ-EVD-008 (T12): test baseline runs the full suite once and records the tests that pass."""
+
+    def setUp(self):
+        super().setUp()
+        self.set_status("planned")
+        self.fake(report=LEGACY_REPORT)
+
+    def baseline_file(self):
+        return (self.dir / "baseline.txt").read_text()
+
+    def test_REQ_EVD_008_S1_baseline_records_the_tests_that_pass(self):
+        commit = self.commit()
+        code, lines = self.step_run("baseline")
+        self.assertEqual(lines[0], f"test baseline: {PY} fake.py all")
+        self.assertRegex(lines[1], RESULT)
+        self.assertEqual(RESULT.match(lines[1]).groups(), ("2", "1", "0", "0", "3"))
+        self.assertEqual(lines[2:], ["failed: t.test_REQ_DUR_001_N1_x", "  AssertionError: 1 != 2",
+                                     "expected: t.test_REQ_DUR_001_N1_x (REQ-DUR-001.N1, T1 not done)",
+                                     "sorted: 0 regression, 1 expected, 0 outside the change",
+                                     "log: specs/.sdd/runs/last-run.log",
+                                     "baseline: 2 tests passed, recorded 2026-11-17T10:00:00Z"])
+        self.assertNotIn(NO_BASELINE, lines)
+        self.assertEqual(self.baseline_file(), f"# baseline 2026-11-17T10:00:00Z {commit}\nt.test_a\nt.test_legacy\n")
+        self.assertEqual(self.record()["step"], "baseline")
+        self.assertEqual(code, 0)
+        status = sdd.read_front_matter((self.dir / "proposal.md").read_text()).get("status")
+        self.assertEqual(status, "planned")
+
+    def test_REQ_EVD_008_S2_a_later_run_sorts_against_the_baseline(self):
+        self.commit()
+        self.assertEqual(self.step_run("baseline", now="2026-11-16T09:00:00Z")[0], 0)
+        before = self.baseline_file()
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", True, "t.py::test_REQ_DUR_001_N1_x")))
+        self.fake(report=junit(("t", "test_a", "passed", None, ""),
+                               ("t", "test_legacy", "failed", "AssertionError: legacy", ""),
+                               ("t", "test_REQ_DUR_001_N1_x", "passed", None, "")))
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertIn("regression: t.test_legacy (passed before the run)", lines)
+        self.assertIn("sorted: 1 regression, 0 expected, 0 outside the change", lines)
+        self.assertNotIn(NO_BASELINE, lines)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.baseline_file(), before)
+
+    def test_REQ_EVD_008_B2_baseline_outside_a_git_repository(self):
+        code, lines = self.step_run("baseline")
+        self.assertEqual(lines[-1], "baseline: 2 tests passed, recorded 2026-11-17T10:00:00Z")
+        self.assertEqual(self.baseline_file().splitlines()[0], "# baseline 2026-11-17T10:00:00Z none")
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_008_B1_a_baseline_with_no_test_that_passed(self):
+        self.fake(report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", ""),
+                               ("t", "test_c", "failed", "AssertionError: c", "")))
+        commit = self.commit()
+        code, lines = self.step_run("baseline")
+        self.assertEqual(lines[-1], "baseline: 0 tests passed, recorded 2026-11-17T10:00:00Z")
+        self.assertEqual(self.baseline_file(), f"# baseline 2026-11-17T10:00:00Z {commit}\n")
+        self.assertEqual(code, 0)
+        self.commit()
+        code, lines = self.step_run("full")
+        self.assertNotIn(NO_BASELINE, lines)
+        self.assertIn("sorted: 0 regression, 1 expected, 1 outside the change", lines)
+        self.assertEqual(code, 0)
+
+
+class BaselineRefusalTests(RunnerBase):
+    """REQ-EVD-008 (T13): test baseline refuses a rerun, a tick, a status and a missing report."""
+
+    TICKED = plan_tasks(("REQ-DUR-001.N1", True, "t.py::test_REQ_DUR_001_N1_x"))
+    NO_REPORT_LINE = f"- Test command: `{PY} fake.py all`\n"
+
+    def setUp(self):
+        super().setUp()
+        self.set_status("planned")
+        self.fake(report=LEGACY_REPORT)
+
+    def refused(self):
+        """Run test baseline expecting a refusal before anything runs; returns the output."""
+        before = snapshot(self.repo.root)
+        code, lines = self.step_run("baseline")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.fake_runs(), [])
+        self.assertEqual(snapshot(self.repo.root), before)
+        return "\n".join(lines)
+
+    def test_REQ_EVD_008_N1_a_baseline_is_never_rerun(self):
+        (self.dir / "baseline.txt").write_text("# baseline 2026-11-16T09:00:00Z abc1234\nt.test_a\n")
+        text = self.refused()
+        self.assertIn("2026-11-16T09:00:00Z", text)
+        self.assertIn("never rerun", text)
+        self.tasks(self.TICKED)  # the recorded baseline is named first, before the other refusals
+        self.set_status("verifying")
+        self.design(self.NO_REPORT_LINE)
+        text = self.refused()
+        self.assertIn("never rerun", text)
+
+    def test_REQ_EVD_008_N2_a_baseline_after_a_task_is_ticked(self):
+        self.tasks(self.TICKED)
+        text = self.refused()
+        self.assertIn("a task is ticked", text)
+        self.assertIn("already changed", text)
+        self.set_status("verifying")  # the tick is named before the status and the report line
+        self.design(self.NO_REPORT_LINE)
+        self.assertIn("a task is ticked", self.refused())
+
+    def test_REQ_EVD_008_N3_a_baseline_at_verifying(self):
+        self.set_status("verifying")
+        text = self.refused()
+        self.assertIn("verifying", text)
+        self.assertIn("planned or implementing", text)
+        self.assertIn("baseline", text)
+        self.design(self.NO_REPORT_LINE)  # the status is named before the report line
+        self.assertIn("verifying", self.refused())
+
+    def test_REQ_EVD_008_N4_a_baseline_needs_a_test_report_line(self):
+        self.design(self.NO_REPORT_LINE)
+        text = self.refused()
+        self.assertIn("baseline", text)
+        self.assertIn('"Test report:" line', text)
+
+    def test_REQ_EVD_008_N5_a_baseline_run_that_leaves_no_report(self):
+        self.fake(report=None, lines=("boom",), exit=1)
+        code, lines = self.step_run("baseline")
+        self.assertEqual(lines[:4], [f"test baseline: {PY} fake.py all",
+                                     "result: exit 1, no test report: each test's outcome is unknown",
+                                     "  boom", "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(len(lines), 5)
+        self.assertTrue(lines[4].startswith("error:"))
+        self.assertIn("baseline needs a test report", lines[4])
+        self.assertFalse((self.dir / "baseline.txt").exists())
+        self.assertEqual(code, 1)
+
+
+REUSED = re.compile(RESULT.pattern[:-1] + r" \(reused from (\S+)\)$")
+
+
+class ReuseBase(RunnerBase):
+    """The REQ-EVD-009.S1 setup: the report path git-ignored, a commit, then a test full
+    recorded at 2026-11-16T09:00:00Z."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo.write(".gitignore", "out/\n")
+        self.repo.write("t2.py", "# more code under test\n")
+
+    def first_run(self, *step):
+        self.commit()
+        code, _ = self.step_run(*(step or ("full",)), now="2026-11-16T09:00:00Z")
+        self.assertEqual(len(self.fake_runs()), 1)
+        return code
+
+    def assert_reused(self, lines, runs=1):
+        self.assertEqual(len(self.fake_runs()), runs)
+        result = next(line for line in lines if line.startswith("result:"))
+        self.assertRegex(result, REUSED)
+        self.assertEqual(REUSED.match(result).group(6), "2026-11-16T09:00:00Z")
+
+    def assert_run(self, lines, runs=2):
+        self.assertEqual(len(self.fake_runs()), runs)
+        result = next(line for line in lines if line.startswith("result:"))
+        self.assertNotIn("reused", result)
+        self.assertRegex(result, RESULT)
+
+
+class ReuseTests(ReuseBase):
+    """REQ-EVD-009 (T14): test reuses the last run on unchanged code; --rerun runs it anyway."""
+
+    def test_REQ_EVD_009_S1_the_last_run_is_reused_on_unchanged_code(self):
+        self.first_run()
+        before = snapshot(self.repo.root)
+        code, lines = self.step_run("full")
+        self.assertEqual(self.fake_runs(), ["all"])
+        self.assertEqual(lines[0], f"test full: {PY} fake.py all")
+        self.assertRegex(lines[1], REUSED)
+        self.assertEqual(REUSED.match(lines[1]).groups(), ("1", "1", "0", "1", "3", "2026-11-16T09:00:00Z"))
+        self.assertEqual(lines[2:], ["failed: t.test_REQ_DUR_001_N1_x", "  AssertionError: 1 != 2",
+                                     *S1_SORT, "log: specs/.sdd/runs/last-run.log"])
+        self.assertEqual(code, 0)
+        self.assertEqual(snapshot(self.repo.root), before)
+
+    def test_REQ_EVD_009_S2_a_reused_run_is_sorted_against_the_current_tasks(self):
+        self.first_run()
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", True, "t.py::test_REQ_DUR_001_N1_x")))
+        code, lines = self.step_run("full")
+        self.assert_reused(lines)
+        self.assertIn("regression: t.test_REQ_DUR_001_N1_x (REQ-DUR-001.N1, T1 done)", lines)
+        self.assertIn("sorted: 1 regression, 0 expected, 0 outside the change", lines)
+        self.assertEqual(code, 1)
+
+    def test_REQ_EVD_009_S3_rerun_runs_the_step_anyway(self):
+        self.first_run()
+        code, lines = self.step_run("full", "--rerun")
+        self.assert_run(lines)
+        self.assertEqual(self.record()["time"], "2026-11-17T10:00:00Z")
+        self.assertEqual(code, 0)
+
+
+class ReuseKeyTests(ReuseBase):
+    """REQ-EVD-009 (T15): a run is reused only for the same files, commit, step and change, in git."""
+
+    def test_REQ_EVD_009_B1_a_changed_byte_runs_the_step(self):
+        self.first_run()
+        self.repo.write("t.py", "# the code under tesT\n")
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+
+    def test_REQ_EVD_009_B2_a_new_untracked_file_runs_the_step(self):
+        self.first_run()
+        self.repo.write("src/new.py", "x = 1\n")
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+
+    def test_REQ_EVD_009_B3_a_new_ignored_file_keeps_the_reuse(self):
+        self.first_run()
+        self.repo.write("out/extra.txt", "ignored\n")
+        code, lines = self.step_run("full")
+        self.assert_reused(lines)
+
+    def test_REQ_EVD_009_B4_a_new_commit_with_no_content_change_runs_the_step(self):
+        self.first_run()
+        git(self.repo.root, "commit", "-qm", "empty", "--allow-empty")
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+
+    def test_REQ_EVD_009_B5_only_the_last_run_is_reused_and_only_for_its_step(self):
+        self.design(EVD_DESIGN + f"- Test component: `{PY} fake.py -k REQ_{{prefix}}_`\n")
+        self.first_run()
+        self.step_run("component", "DUR", now="2026-11-16T09:30:00Z")
+        self.assertEqual(self.fake_runs(), ["all", "-k REQ_DUR_"])
+        code, lines = self.step_run("full")
+        self.assert_run(lines, runs=3)
+        self.assertEqual(self.fake_runs()[-1], "all")
+
+    def test_REQ_EVD_009_B6_a_deleted_tracked_file_runs_the_step(self):
+        self.first_run()
+        (self.repo.root / "t2.py").unlink()
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+
+    def test_REQ_EVD_009_B7_a_last_run_of_another_change_runs_the_step(self):
+        self.first_run()
+        record = self.record()
+        record["change"] = "0002-y"
+        (self.runs / "last-run.json").write_text(json.dumps(record, indent=2) + "\n")
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+        self.assertEqual(self.record()["change"], "0001-x")
+
+    def test_REQ_EVD_009_N1_outside_a_git_repository_every_step_runs(self):
+        self.step_run("full", now="2026-11-16T09:00:00Z")
+        self.assertTrue((self.runs / "last-run.json").exists())
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_009_N2_before_the_first_commit_every_step_runs(self):
+        git(self.repo.root, "init", "-q")
+        self.step_run("full", now="2026-11-16T09:00:00Z")
+        self.assertTrue((self.runs / "last-run.json").exists())
+        code, lines = self.step_run("full")
+        self.assert_run(lines)
+        self.assertEqual(code, 0)
+
+
+class BaselineReuseTests(ReuseBase):
+    """REQ-EVD-008 (T16): a reused test baseline run counts as the baseline's run."""
+
+    def test_REQ_EVD_008_B3_a_baseline_from_a_reused_run(self):
+        self.set_status("planned")
+        self.fake(report=LEGACY_REPORT)
+        self.first_run("baseline")
+        (self.dir / "baseline.txt").unlink()
+        code, lines = self.step_run("baseline")
+        self.assert_reused(lines)
+        self.assertEqual(lines[-1], "baseline: 2 tests passed, recorded 2026-11-16T09:00:00Z")
+        first = (self.dir / "baseline.txt").read_text().splitlines()[0]
+        self.assertTrue(first.startswith("# baseline 2026-11-16T09:00:00Z "), first)
+        self.assertEqual(self.record()["time"], "2026-11-16T09:00:00Z")
+        self.assertEqual(code, 0)
+
+
+EVD_ONE_DESIGN = EVD_DESIGN + f"- Test one: `{PY} fake.py {{name}}`\n"
+PASS_REPORT = junit(("t", "test_a", "passed", None, ""), ("t", "test_REQ_DUR_001_N1_x", "passed", None, ""))
+RED_S1 = "  - red: failed: AssertionError: 1 != 2 (sdd test 2026-11-17T10:00:00Z)"
+
+
+class EvidenceBase(ReuseBase):
+    """The REQ-EVD-010.S1 change: the REQ-EVD-007.S3 design (a Test one line), T1's red line
+    empty, fake.py failing t.test_REQ_DUR_001_N1_x with "AssertionError: 1 != 2"."""
+
+    def setUp(self):
+        super().setUp()
+        self.design(EVD_ONE_DESIGN)
+
+    def tasks_text(self):
+        return (self.dir / "tasks.md").read_text()
+
+    def edited(self, before, old, new):
+        """before with the first old in its ## Tasks section (after the template comment) made new."""
+        head, sep, body = before.partition("## Tasks\n")
+        self.assertIn(old, body)
+        return head + sep + body.replace(old, new, 1)
+
+    def evidence(self, *args, now="2026-11-17T10:00:00Z"):
+        """Commit, then run `test T1 <args>`; returns (code, lines)."""
+        self.commit()
+        return self.step_run("T1", *args, now=now)
+
+    def check_about_t1(self):
+        """The check lines about T1's red line once T1 is ticked with a green line (tasks.md is
+        restored after): none means check accepts the red line."""
+        path, before = self.dir / "tasks.md", self.tasks_text()
+        ticked = self.edited(self.edited(before, "- [ ] T1 ", "- [x] T1 "), "  - green:\n", "  - green: passed\n")
+        path.write_text(ticked)
+        _, out = self.repo.run("check")
+        path.write_text(before)
+        self.assertIn("T1", out)  # check reads the ticked task (it reports its missing tier)
+        return [line for line in out.splitlines() if re.search(r"\bT1\b.*\b(red|green)\b", line)]
+
+
+class RedGreenTests(EvidenceBase):
+    """REQ-EVD-010 (T17): test --red and --green write the task's red or green line."""
+
+    def test_REQ_EVD_010_S1_red_writes_the_failure_message(self):
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.fake_runs(), ["test_REQ_DUR_001_N1_x"])
+        self.assertEqual(self.tasks_text(), self.edited(before, "  - red:\n", RED_S1 + "\n"))
+        self.assertEqual(self.check_about_t1(), [])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_S2_green_writes_passed_and_keeps_the_red_line(self):
+        self.evidence("--red")
+        after_red = self.tasks_text()
+        self.fake(report=PASS_REPORT, lines=("ok",), exit=0)
+        code, lines = self.evidence("--green", now="2026-11-17T11:00:00Z")
+        self.assertEqual(self.tasks_text(), self.edited(after_red,
+            "  - green:\n", "  - green: passed (sdd test 2026-11-17T11:00:00Z)\n"))
+        self.assertIn(RED_S1 + "\n", self.tasks_text())
+        self.assertIn("- [ ] T1 ", self.tasks_text())
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_B1_the_old_red_text_is_replaced_and_a_line_without_colons_is_the_name(self):
+        self.design(EVD_DESIGN + f"- Test one: `{PY} fake.py {{test}}`\n")
+        self.tasks("- [ ] T1 REQ-DUR-001.N1 Task 1\n  - test: test_REQ_DUR_001_N1_x\n"
+                   "  - red: AssertionError: old\n  - green:\n")
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.tasks_text(), self.edited(before, "  - red: AssertionError: old\n", RED_S1 + "\n"))
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_B2_a_failure_with_no_message_writes_failed(self):
+        self.fake(report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", None, "")))
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.tasks_text(), self.edited(before,
+            "  - red:\n", "  - red: failed (sdd test 2026-11-17T10:00:00Z)\n"))
+        self.assertEqual(self.check_about_t1(), [])
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_B4_a_missing_red_line_is_inserted_after_the_test_line(self):
+        self.tasks("- [ ] T1 REQ-DUR-001.N1 Task 1\n  - test: t.py::test_REQ_DUR_001_N1_x\n"
+                   "- [ ] T2 REQ-DUR-001.S1 Task 2\n  - test: t.py::test_REQ_DUR_001_S1_y\n  - red:\n  - green:\n")
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.tasks_text(), self.edited(before,
+            "  - test: t.py::test_REQ_DUR_001_N1_x\n",
+            "  - test: t.py::test_REQ_DUR_001_N1_x\n" + RED_S1 + "\n"))
+        self.assertEqual(code, 0)
+
+
+class EvidenceMatchTests(EvidenceBase):
+    """REQ-EVD-010 (T18): the name match, a reused run's time, a comment marker in a message."""
+
+    def test_REQ_EVD_010_B3_a_name_that_only_ends_with_the_part_does_not_match(self):
+        self.fake(report=junit(("t", "other_test_REQ_DUR_001_N1_x", "passed", None, ""),
+                               ("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", "")))
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.tasks_text(), self.edited(before, "  - red:\n", RED_S1 + "\n"))
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_B5_a_reused_run_writes_the_line_with_its_time(self):
+        self.first_run("T1")
+        before = self.tasks_text()
+        code, lines = self.step_run("T1", "--red")
+        self.assert_reused(lines)
+        self.assertEqual(self.tasks_text(), self.edited(
+            before, "  - red:\n", "  - red: failed: AssertionError: 1 != 2 (sdd test 2026-11-16T09:00:00Z)\n"))
+        self.assertEqual(code, 0)
+
+    def test_REQ_EVD_010_B6_a_message_with_a_comment_marker_writes_failed(self):
+        before = self.tasks_text()
+        for message in ("expected&lt;!-- x", "expected --&gt; x", "1 != 2 (after T3)"):
+            self.fake(report=junit(("t", "test_REQ_DUR_001_N1_x", "failed", message, "")))
+            self.tasks(EVD_TASKS)
+            code, lines = self.evidence("--red")
+            self.assertEqual(self.tasks_text(), self.edited(
+                before, "  - red:\n", "  - red: failed (sdd test 2026-11-17T10:00:00Z)\n"), message)
+            self.assertEqual(code, 0)
+
+
+
+class EvidenceRefusalTests(EvidenceBase):
+    """REQ-EVD-010 (T19): no red or green line when the run doesn't show the outcome."""
+
+    def refused(self, *args, report=None, exit=1):
+        """Run test T1 <args> with fake.py writing report: exit 1, tasks.md unchanged; returns the error."""
+        if report is not None:
+            self.fake(report=report, exit=exit)
+        before = self.tasks_text()
+        code, lines = self.evidence(*args)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.tasks_text(), before)
+        self.assertTrue(lines[-1].startswith("error: "), lines)
+        return lines[-1]
+
+    def test_REQ_EVD_010_N1_red_refused_when_the_test_passes(self):
+        error = self.refused("--red", report=PASS_REPORT, exit=0)
+        self.assertIn("passes", error)
+        self.assertIn("red: pre-existing", error)
+
+    def test_REQ_EVD_010_N2_red_refused_when_the_test_errors(self):
+        error = self.refused("--red", report=junit(("t", "test_REQ_DUR_001_N1_x", "error", "ImportError: x", "")))
+        self.assertIn("errored", error)
+        self.assertIn("assertion", error)
+
+    def test_REQ_EVD_010_N3_red_refused_when_the_test_is_not_in_the_report(self):
+        error = self.refused("--red", report=junit(("t", "test_a", "failed", "AssertionError: 1 != 2", "")))
+        self.assertIn("test_REQ_DUR_001_N1_x", error)
+        self.assertIn("not in the report", error)
+
+    def test_REQ_EVD_010_N4_green_refused_when_the_test_still_fails(self):
+        self.evidence("--red")
+        self.assertIn(RED_S1 + "\n", self.tasks_text())
+        error = self.refused("--green")
+        self.assertIn("fails", error)
+
+    def test_REQ_EVD_010_N5_red_refused_when_the_run_has_no_test_report(self):
+        self.design(f"- Test command: `{PY} fake.py all`\n- Test one: `{PY} fake.py {{name}}`\n")
+        error = self.refused("--red")
+        self.assertIn("no test report", error)
+
+    def test_REQ_EVD_010_N8_red_refused_when_two_tests_match(self):
+        error = self.refused("--red", report=junit(
+            ("t", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", ""),
+            ("u", "test_REQ_DUR_001_N1_x", "failed", "AssertionError: 1 != 2", "")))
+        self.assertIn("t.test_REQ_DUR_001_N1_x", error)
+        self.assertIn("u.test_REQ_DUR_001_N1_x", error)
+
+    def test_REQ_EVD_010_N9_red_refused_when_the_test_is_skipped(self):
+        error = self.refused("--red", report=junit(("t", "test_REQ_DUR_001_N1_x", "skipped", "no db", "")), exit=0)
+        self.assertIn("skipped", error)
+
+
+class EvidenceBeforeRunTests(EvidenceBase):
+    """REQ-EVD-010 (T20): refused before anything is run: a ticked task, green with no red, two lines."""
+
+    def refused(self, *args):
+        """Run test T1 <args>: exit 1, nothing run, no file changed; returns the error."""
+        self.commit()
+        before = snapshot(self.repo.root)
+        code, lines = self.step_run("T1", *args)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.fake_runs(), [])
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("error: "), lines)
+        return lines[0]
+
+    def test_REQ_EVD_010_N6_a_ticked_task_is_refused(self):
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", True, "t.py::test_REQ_DUR_001_N1_x")))
+        self.assertIn("T1 is ticked", self.refused("--red"))
+
+    def test_REQ_EVD_010_N7_green_with_an_empty_red_line_is_refused(self):
+        error = self.refused("--green")
+        self.assertIn("record red first", error)
+        self.assertIn("--red", error)
+        self.assertIn("red: pre-existing", error)
+
+    def test_REQ_EVD_010_N10_two_red_lines_are_refused(self):
+        self.tasks("- [ ] T1 REQ-DUR-001.N1 Task 1\n  - test: t.py::test_REQ_DUR_001_N1_x\n"
+                   "  - red: AssertionError: one\n  - red: AssertionError: two\n  - green:\n")
+        error = self.refused("--red")
+        self.assertIn("- red: AssertionError: one", error)
+        self.assertIn("- red: AssertionError: two", error)
+
+class RunnerRefusalBase(RunnerBase):
+    """Refusals of test before anything is run: exit 1, one error line, nothing run, no file changed."""
+
+    def refused(self, *args):
+        self.commit()
+        before = snapshot(self.repo.root)
+        code, lines = self.step_run(*args)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.fake_runs(), [])
+        self.assertEqual(snapshot(self.repo.root), before)
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("error: "), lines)
+        return lines[0]
+
+
+class StepRefusalTests(RunnerRefusalBase):
+    """REQ-EVD-011 (T21): test refuses no specs/, no change, a bad status or step, in order."""
+
+    def test_REQ_EVD_011_N1_no_specs_folder(self):
+        bare = Repo()
+        self.addCleanup(bare.close)
+        code, out = bare.run("test", "full")
+        self.assertEqual(code, 1)
+        self.assertIn("not initialized", out)
+        self.assertEqual(list(bare.root.iterdir()), [])
+
+    def test_REQ_EVD_011_N2_no_active_change(self):
+        (self.repo.root / "specs/.sdd/active").unlink()
+        self.assertIn("no active change", self.refused("full"))
+
+    def test_REQ_EVD_011_N3_a_change_that_does_not_exist(self):
+        self.assertIn("9999-none", self.refused("full", "--change", "9999-none"))
+
+    def test_REQ_EVD_011_N4_a_change_at_draft(self):
+        self.set_status("draft")
+        error = self.refused("full")
+        for part in ("draft", "planned", "implementing", "verifying"):
+            self.assertIn(part, error)
+
+    def test_REQ_EVD_011_N5_a_step_test_does_not_take(self):
+        error = self.refused("everything")
+        for part in ("everything", "T<n>", "component <PREFIX>", "full", "baseline"):
+            self.assertIn(part, error)
+        self.assertIn("component", self.refused("component"))
+        self.assertIn("full extra", self.refused("full", "extra"))
+        self.assertIn('"everything"', self.refused("everything", "--red"))  # the step comes before --red
+
+    def test_REQ_EVD_011_N13_the_status_comes_before_the_step(self):
+        self.set_status("draft")
+        error = self.refused("everything")
+        self.assertIn("draft", error)
+        self.assertNotIn("everything", error)
+
+
+class StepKindRefusalTests(RunnerRefusalBase):
+    """REQ-EVD-011 (T22): test refuses an unknown task or prefix and misused --red or --green."""
+
+    COMPONENT = f"- Test component: `{PY} fake.py -k REQ_{{prefix}}_`\n"
+
+    def setUp(self):
+        super().setUp()
+        self.design(EVD_ONE_DESIGN + self.COMPONENT)
+
+    def test_REQ_EVD_011_N6_a_task_that_is_not_in_the_plan(self):
+        self.assertIn("T9", self.refused("T9"))
+        self.assertIn("T9", self.refused("T9", "--red", "--green"))  # before the flags
+
+    def test_REQ_EVD_011_N7_a_prefix_the_change_does_not_declare(self):
+        error = self.refused("component", "CLI")
+        self.assertIn("CLI", error)
+        self.assertIn("DUR", error)
+        self.design(EVD_DESIGN)  # the prefix comes before the design line
+        self.assertIn("CLI", self.refused("component", "CLI"))
+
+    def test_REQ_EVD_011_N8_red_needs_a_task_step(self):
+        self.assertIn("--red needs a task step", self.refused("full", "--red"))
+        self.assertIn("--green needs a task step", self.refused("component", "DUR", "--green"))
+        self.assertIn("--red needs a task step", self.refused("full", "--red", "--green"))  # before "not both"
+
+    def test_REQ_EVD_011_N9_red_and_green_together(self):
+        self.assertIn("--red and --green can't be given together", self.refused("T1", "--red", "--green"))
+
+
+class StepDesignRefusalTests(RunnerRefusalBase):
+    """REQ-EVD-011 (T23): test refuses a bad design line, test line or baseline.txt."""
+
+    def test_REQ_EVD_011_N10_no_test_component_line(self):
+        self.assertIn("Test component:", self.refused("component", "DUR"))
+        self.design(EVD_DESIGN + "- Test component:\n")  # an empty line is the same
+        self.assertIn("Test component:", self.refused("component", "DUR"))
+
+    def test_REQ_EVD_011_N11_a_test_command_quote_that_is_not_closed(self):
+        self.design(f"- Test command: `{PY} 'fake.py`\n- Test report: `out/junit.xml`\n")
+        error = self.refused("full")
+        self.assertIn("Test command:", error)
+        self.assertIn("quote", error)
+        self.assertIn("not closed", error)
+        self.assertIn("Test command:", self.refused("baseline"))
+        self.design(f"- Test report: `out/junit.xml`\n- Test command:\n")  # a missing line comes first
+        self.assertIn("Test command:", self.refused("full"))
+
+    def test_REQ_EVD_011_N12_a_task_with_no_test_line(self):
+        self.design(EVD_ONE_DESIGN)
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", False, "")))
+        self.assertIn("T1 has no test line", self.refused("T1"))
+
+    def test_REQ_EVD_011_N17_a_placeholder_test_line(self):
+        self.design(EVD_ONE_DESIGN)
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", False, "tbd")))
+        self.assertIn("T1 has no test line", self.refused("T1"))
+        (self.dir / "baseline.txt").write_text("<<<<<<< HEAD\n")  # the test line comes before baseline.txt
+        self.assertIn("T1 has no test line", self.refused("T1"))
+        self.design(f"- Test report: `out/junit.xml`\n- Test one:\n")  # the design line comes before the test line
+        self.assertIn("Test one:", self.refused("T1"))
+
+    def test_REQ_EVD_011_N16_a_test_line_with_no_double_colon(self):
+        self.design(EVD_DESIGN + f"- Test one: `{PY} fake.py {{file}} {{name}}`\n")
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", False, "t.py")))
+        error = self.refused("T1")
+        self.assertIn("T1", error)
+        self.assertIn('no "::"', error)
+
+    def test_REQ_EVD_011_N18_a_baseline_file_with_no_header(self):
+        (self.dir / "baseline.txt").write_text("<<<<<<< HEAD\nt.test_a\n")
+        error = self.refused("full")
+        self.assertIn("baseline.txt", error)
+        self.assertIn("# baseline <time> <commit>", error)
+
+
+class ReportPathRefusalTests(RunnerRefusalBase):
+    """REQ-EVD-011 (T24): test refuses a Test report path that is unsafe."""
+
+    def report(self, path):
+        self.design(f"- Test command: `{PY} fake.py all`\n- Test report: `{path}`\n")
+
+    def test_REQ_EVD_011_N14_a_path_outside_the_project(self):
+        outside = self.repo.root.parent / "junit.xml"
+        outside.write_text("<testsuites/>\n")
+        self.addCleanup(lambda: outside.exists() and outside.unlink())
+        self.report("../junit.xml")
+        error = self.refused("full")
+        self.assertIn("Test report:", error)
+        self.assertIn("outside the project", error)
+        self.assertTrue(outside.exists())
+
+    def test_REQ_EVD_011_N15_an_absolute_path(self):
+        self.report("/tmp/junit.xml")
+        error = self.refused("full")
+        self.assertIn("Test report:", error)
+        self.assertIn("absolute", error)
+
+    def test_REQ_EVD_011_N19_a_file_git_tracks(self):
+        self.report("t.py")
+        error = self.refused("full")
+        self.assertIn("Test report:", error)
+        self.assertIn("git tracks t.py", error)
+        self.assertTrue((self.repo.root / "t.py").exists())
+
+    def test_REQ_EVD_011_N20_a_folder(self):
+        (self.repo.root / "out").mkdir()
+        self.report("out")
+        error = self.refused("full")
+        self.assertIn("Test report:", error)
+        self.assertIn("folder", error)
+
+    def test_REQ_EVD_011_N21_a_symlink_that_leads_outside_the_project(self):
+        outside = self.scratch / "elsewhere"
+        outside.mkdir()
+        (outside / "junit.xml").write_text("<testsuites/>\n")
+        os.symlink(outside, self.repo.root / "link")
+        self.report("link/junit.xml")
+        error = self.refused("full")
+        self.assertIn("Test report:", error)
+        self.assertIn("outside the project", error)
+        self.assertTrue((outside / "junit.xml").exists())
+
+    def test_REQ_EVD_011_N14_the_path_is_read_after_the_design_line_and_before_the_test_line(self):
+        self.design("- Test report: `/tmp/junit.xml`\n")
+        self.assertIn("Test command:", self.refused("full"))
+        self.design(f"- Test report: `../junit.xml`\n- Test one: `{PY} fake.py {{name}}`\n")
+        self.tasks(plan_tasks(("REQ-DUR-001.N1", False, "tbd")))
+        self.assertIn("Test report:", self.refused("T1"))
 
 
 if __name__ == "__main__":

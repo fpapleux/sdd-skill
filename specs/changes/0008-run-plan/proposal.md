@@ -4,7 +4,7 @@ title: A scripted plan of a run's steps and checkpoints
 type: feature
 size: standard
 assurance: production
-status: planned
+status: implementing
 capabilities: orchestration=ORC, evidence=EVD
 created: 2026-10-30
 spec_hash: 3c20b8dc26d5

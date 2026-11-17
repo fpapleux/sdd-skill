@@ -21,8 +21,12 @@ evidence; skip the failing run; work on a change that isn't `planned` or
    unchanged.
 2. **Run it and watch it fail for the right reason.** The failure must be an
    assertion about the behavior, not an import error, a typo or a missing
-   fixture. Fix the test until it fails correctly. Record the key failure line
-   as `red:`.
+   fixture. Fix the test until it fails correctly. Run it with
+   `SDD test T<n> --red`: when the test fails, it writes the red line as
+   `red: failed: <the first line of its message> (sdd test <time>)`; when
+   the test passes, errors, is skipped or isn't in the report, it writes
+   nothing and says so. With no `Test report:` line in the design, run the
+   `Test one:` command and record the key failure line as `red:` by hand.
    - **If it passes at once,** first make sure the test isn't weak (does it
      assert the whole Then?), and strengthen it if so. If the behavior
      really already exists (existing code, or code written for an earlier
@@ -32,12 +36,16 @@ evidence; skip the failing run; work on a change that isn't `planned` or
      in your report. `SDD check` accepts this and reports it, and the
      Verifier reviews it. Never fake a red run.
 3. **Write the minimal code** that makes it pass. Run the task's own test
-   only (the design's `Test one:` command); the component and full levels
-   run at the checkpoints of the implement phase. Record the summary line as
-   `green:`.
+   only, with `SDD test T<n> --green`, which writes
+   `green: passed (sdd test <time>)`; the component and full levels run at
+   the checkpoints of the implement phase. With no `Test report:` line,
+   run the `Test one:` command and record the summary line as `green:` by
+   hand.
 4. **Refactor** while the tests stay green.
-5. Fill `test:` with `path::name` (one test: replay runs the line as one
-   test), tick `[x]`, and run `SDD check`.
+5. Fill `test:` with `path::name` before the red run, since `SDD test T<n>`
+   runs it (one test: replay runs the line as one test). The test in the
+   report must be named the part after `::`, or end with a dot and that
+   part. Tick `[x]`, and run `SDD check`.
 6. If the plan has `## Mutations` and this task's rule has no entry yet, add
    one now that the code exists (`method/roles/planner.md`).
 
@@ -62,7 +70,7 @@ usual cases in this role:
 | --- | --- | --- |
 | Red fails with an import, syntax or fixture error | The test can't run yet | Add the minimal stub so the **assertion** fails, then record that red |
 | Green won't come after the minimal change | Wrong assumption about the code | Re-read the failing assertion and the code path, and state the cause before changing anything |
-| Another test fails at a checkpoint | A task not done yet, or your change touched shared behavior | Sort it with `SDD sort-failures`. **Expected** (its task isn't done yet, and it isn't on the `--passed-before` list; a listed test is a regression): count it and go on. **Regression** (it passed before the task and fails after it, or it is on the `--passed-before` list): fix the code, or update the test if it encodes old behavior this change replaces, and say so; if you can't explain it, stop. **Outside** the change (not on the list): judge it from your own runs; if it still fails at the end, it is recorded as a defect |
+| Another test fails at a checkpoint | A task not done yet, or your change touched shared behavior | Read its sort in the `SDD test` report (`SDD sort-failures` when the design has no `Test report:`). **Expected** (its task isn't done yet, and it isn't in the baseline, `baseline.txt` or the `--passed-before` list; a test in the baseline is a regression): count it and go on. **Regression** (it passed before the task and fails after it, or it is in the baseline): fix the code, or update the test if it encodes old behavior this change replaces, and say so; if you can't explain it, stop. **Outside** the change (not in the baseline): judge it from your own runs; if it still fails at the end, it is recorded as a defect |
 | An existing test encodes old behavior the spec changes | Brownfield change | Update the test to match the spec, and list it in your report |
 | `SDD check` reports an error | Evidence or format problem | Read the message; it names the task and the fix |
 

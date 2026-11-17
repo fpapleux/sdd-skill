@@ -9,10 +9,13 @@ must be a scenario in spec-delta.md; anything new goes back as a question. -->
 ## Test strategy
 <!-- Unit/integration split, test doubles for each dependency scenario.
 "Test component" runs the tests of one capability at a checkpoint; `{prefix}`
-stands for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`. -->
+stands for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`.
+"Test report" is the JUnit XML file the runner writes, git-ignored, e.g.
+`build/junit.xml`. -->
 - Test command:
 - Test one:
 - Test component:
+- Test report:
 
 ## Failure modes
 <!-- One line per way the design can fail, answered by scenarios or N/A:
