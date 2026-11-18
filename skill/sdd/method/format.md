@@ -338,7 +338,8 @@ the project, not to a change, and the script writes it: `SDD defect add`,
 The test that proves a scenario carries its full ID in any style the stack
 allows: `test_REQ_DUR_001_N1_rejects_letters`, `it("REQ-DUR-001.N1 rejects
 letters")`, `TestREQ_DUR_001_N1`. `SDD check --stage verify` searches all
-**test files** outside `specs/` for each scenario ID. Test files are files
+**test files** for each scenario ID, skipping the SDD records: `specs/`,
+`.sdd/` and the `SDD_SPECS` folder. Test files are files
 in a `test`, `tests`, `__tests__`, `spec` or `testing` folder, or named
 `test_*`, `*_test.*`, `*.test.*`, `*.spec.*` or `*Test.*`. A mention in a
 README or a code comment doesn't count.

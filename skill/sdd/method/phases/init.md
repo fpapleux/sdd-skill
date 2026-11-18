@@ -6,6 +6,8 @@ You are setting up the repository with the operator.
    `SDD status` and stop. Mention that `SDD init --force` only refreshes the
    folders and the AGENTS.md/CLAUDE.md wiring; it never touches the
    constitution or specs.
+   In per-branch mode (`SDD where` says `per-branch: …`), the branch's folder
+   may not exist yet: then continue, and step 4 adds no `--per-branch`.
 2. Make sure you are at the repository root (usually the git root). If that's
    unclear, ask.
 3. **Assurance level.** If the operator gave one (`init internal`), use it.
@@ -18,7 +20,11 @@ You are setting up the repository with the operator.
 
    If the answer falls between two levels, recommend the higher one. Never
    choose a level silently.
-4. Run `SDD init --assurance <level>`.
+4. Run `SDD init --assurance <level>`. If several branches will run SDD
+   before main holds a constitution, offer per-branch mode
+   (`method/overview.md`, Files) and add `--per-branch` if the operator agrees.
+   When the root already has `specs/constitution.md`, the branch folder adopts
+   it: skip steps 5 and 6 unless the copy's approval is pending.
 5. Show the operator, briefly, the level and what it means in practice
    (overview table) and the three articles of `specs/constitution.md`. Ask
    whether to add project rules (stack, dependency policy, supported
