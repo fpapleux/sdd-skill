@@ -4,10 +4,10 @@ title: Per-branch SDD folders
 type: feature
 size: mini
 assurance: production
-status: planned
+status: archived
 capabilities: layout=LAY
 created: 2026-11-18
-spec_hash: 2a99c9d219a7
+spec_hash: afa896877f3f
 ---
 
 # 0011-per-branch-specs — Per-branch SDD folders
@@ -169,6 +169,8 @@ and under the `SDD_SPECS` folder when it is set.
 - Each folder holds a copy of the one constitution; editing a copy doesn't change the others until `sdd integrate`.
 - A branch cut from a main with no constitution can't see one set on another branch; the `internal` floor is the only guard.
 - Tests kept under a `.sdd/` folder are no longer found by check (evidence).
+- With the marker and `SDD_SPECS` both set, `init` accepts `prototype` for the `SDD_SPECS` folder: the `internal` floor covers branch folders only.
+- No test proves that `specs/` is skipped while another folder is in use (evidence).
 
 ## Design notes
 - Files: `skill/sdd/scripts/sdd.py`, `tests/test_sdd.py` (new `LayoutTests`).
@@ -196,242 +198,451 @@ and under the `SDD_SPECS` folder when it is set.
 - Test component: `python3 -m unittest tests.test_sdd -k REQ_{prefix}_`
 
 ## Tasks
-- [ ] T1 REQ-LAY-001.S1 new writes into the branch folder
+- [x] T1 REQ-LAY-001.S1 new writes into the branch folder
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T2 REQ-LAY-001.N1 a detached HEAD is refused before any write
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_S1_new_writes_into_the_branch_folder
+  - red: AssertionError: False is not true (no .sdd/feat-a/changes/0001-x/spec.md)
+  - green: Ran 1 test in 0.246s OK
+- [x] T2 REQ-LAY-001.N1 a detached HEAD is refused before any write
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T3 REQ-LAY-001.N2 outside git is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_N1_a_detached_head_is_refused_before_any_write
+  - red: AssertionError: 0 != 1 : initialized specs/ (assurance: internal)
+  - green: Ran 1 test in 0.350s OK
+- [x] T3 REQ-LAY-001.N2 outside git is refused
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T4 REQ-LAY-001.N3 git not on the PATH is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_N2_outside_git_is_refused
+  - red: AssertionError: 'error: per-branch mode needs a git repository (...)' not found in 'error: per-branch mode needs a git branch: check out a branch or set SDD_SPECS'
+  - green: Ran 1 test in 0.067s OK
+- [x] T4 REQ-LAY-001.N3 git not on the PATH is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T5 REQ-LAY-001.N4 a missing branch folder is not initialized, specs/ ignored
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_N3_git_not_on_the_path_is_refused
+  - red: AssertionError: init crashed: FileNotFoundError(2, 'No such file or directory')
+  - green: Ran 1 test in 0.146s OK
+- [x] T5 REQ-LAY-001.N4 a missing branch folder is not initialized, specs/ ignored
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T6 REQ-LAY-001.N5 without the marker, specs/ as before
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_N4_a_missing_branch_folder_is_not_initialized_specs_ignored
+  - red: pre-existing (after T1) — Project reads .sdd/<branch>/ whenever the marker exists, so specs/ is never consulted
+  - green: Ran 1 test in 0.197s OK
+- [x] T6 REQ-LAY-001.N5 without the marker, specs/ as before
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T7 REQ-LAY-001.S2 another branch's folder is not seen
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_N5_without_the_marker_specs_as_before
+  - red: pre-existing — the folder choice tests only the marker file, so an empty .sdd/ leaves specs/ in use
+  - green: Ran 1 test in 0.031s OK
+- [x] T7 REQ-LAY-001.S2 another branch's folder is not seen
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T8 REQ-LAY-001.B1 REQ-LAY-001.B2 branch names without and with slashes
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_S2_another_branchs_folder_is_not_seen
+  - red: pre-existing (after T1) — the folder is named from the current branch, so feat/b reads only .sdd/feat-b/
+  - green: Ran 1 test in 0.536s OK
+- [x] T8 REQ-LAY-001.B1 REQ-LAY-001.B2 branch names without and with slashes
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T9 REQ-LAY-001.B3 an empty SDD_SPECS keeps the branch folder
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_B1_and_REQ_LAY_001_B2_branch_names_without_and_with_slashes
+  - red: pre-existing (after T1) — T1 maps every slash of the branch to a hyphen and reads the folder's constitution
+  - green: Ran 1 test in 0.597s OK
+- [x] T9 REQ-LAY-001.B3 an empty SDD_SPECS keeps the branch folder
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T10 REQ-LAY-001.B4 run from a subfolder finds the project root
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_B3_an_empty_sdd_specs_keeps_the_branch_folder
+  - red: pre-existing (after T1) — sdd.py does not read SDD_SPECS yet, so an empty value changes nothing
+  - green: Ran 1 test in 0.362s OK
+- [x] T10 REQ-LAY-001.B4 run from a subfolder finds the project root
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T11 REQ-LAY-002.S1 init --per-branch writes the marker, the folder and AGENTS.md
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_001_B4_run_from_a_subfolder_finds_the_project_root
+  - red: AssertionError: 1 != 0 : error: this repository is not initialized: run `sdd init` first
+  - green: Ran 1 test in 0.242s OK
+- [x] T11 REQ-LAY-002.S1 init --per-branch writes the marker, the folder and AGENTS.md
   - tier: strong
-  - test:
-  - red:
-  - green:
-- [ ] T12 REQ-LAY-002.N1 init on an initialized branch folder is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_S1_init_per_branch_writes_the_marker_the_folder_and_agents_md
+  - red: AssertionError: False is not true (no .sdd/.per-branch marker)
+  - green: Ran 1 test in 0.266s OK
+- [x] T12 REQ-LAY-002.N1 init on an initialized branch folder is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T13 REQ-LAY-002.N2 init --per-branch on an existing branch folder writes no marker
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N1_init_on_an_initialized_branch_folder_is_refused
+  - red: AssertionError: 'error: already initialized (.sdd/feat-a/constitution.md exists); …' not found in 'error: already initialized (specs/constitution.md exists); …'
+  - green: Ran 1 test in 0.285s OK
+- [x] T13 REQ-LAY-002.N2 init --per-branch on an existing branch folder writes no marker
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T14 REQ-LAY-002.N3 init --per-branch on a detached HEAD writes nothing
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N2_init_per_branch_on_an_existing_branch_folder_writes_no_marker
+  - red: pre-existing (after T12) — init resolves the branch folder and refuses on its constitution before it writes the marker
+  - green: Ran 1 test in 0.229s OK
+- [x] T14 REQ-LAY-002.N3 init --per-branch on a detached HEAD writes nothing
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T15 REQ-LAY-002.N4 init --per-branch outside git writes nothing
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N3_init_per_branch_on_a_detached_head_writes_nothing
+  - red: pre-existing (after T11) — init --per-branch asks git for the branch before it writes the marker or any folder
+  - green: Ran 1 test in 0.226s OK
+- [x] T15 REQ-LAY-002.N4 init --per-branch outside git writes nothing
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T16 REQ-LAY-002.N6 per-branch init below internal is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N4_init_per_branch_outside_git_writes_nothing
+  - red: pre-existing (after T11) — the git lookup that raises the repository error runs before any write
+  - green: Ran 1 test in 0.064s OK
+- [x] T16 REQ-LAY-002.N6 per-branch init below internal is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T17 REQ-LAY-002.N5 init --per-branch with SDD_SPECS set is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N6_per_branch_init_below_internal_is_refused
+  - red: AssertionError: 0 != 1 : initialized .sdd/feat-a/ (assurance: prototype)
+  - green: Ran 1 test in 0.310s OK
+- [x] T17 REQ-LAY-002.N5 init --per-branch with SDD_SPECS set is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T18 REQ-LAY-002.S2 init with the marker on a new branch
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_N5_init_per_branch_with_sdd_specs_set_is_refused
+  - red: AssertionError: 0 != 1 : initialized .sdd/feat-a/ (assurance: internal)
+  - green: Ran 1 test in 0.314s OK
+- [x] T18 REQ-LAY-002.S2 init with the marker on a new branch
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T19 REQ-LAY-002.B3 init on an unborn branch
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_S2_init_with_the_marker_on_a_new_branch
+  - red: pre-existing (after T11) — init writes the per-branch section whenever the marker exists and names the folder in use
+  - green: Ran 1 test in 0.304s OK
+- [x] T19 REQ-LAY-002.B3 init on an unborn branch
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T20 REQ-LAY-002.B2 init --per-branch --force rewrites AGENTS.md only
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_B3_init_on_an_unborn_branch
+  - red: pre-existing (after T11) — git symbolic-ref resolves an unborn branch, so init --per-branch names .sdd/main/
+  - green: Ran 1 test in 0.137s OK
+- [x] T20 REQ-LAY-002.B2 init --per-branch --force rewrites AGENTS.md only
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T21 REQ-LAY-006.S1 init --per-branch copies the approved constitution
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_002_B2_init_per_branch_force_rewrites_agents_md_only
+  - red: pre-existing (after T11) — init --force with the per-branch flag rewrites the section and keeps an existing constitution
+  - green: Ran 1 test in 0.365s OK
+- [x] T21 REQ-LAY-006.S1 init --per-branch copies the approved constitution
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T22 REQ-LAY-006.N1 a lower level than the approved one is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_S1_init_per_branch_copies_the_approved_constitution
+  - red: AssertionError: b'---[30 chars]ved: no\n---…' != b'---[30 chars]ved: yes\nfingerprint: 91ca2802efb1…' (template written, not the copy)
+  - green: Ran 1 test in 0.300s OK
+- [x] T22 REQ-LAY-006.N1 a lower level than the approved one is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T23 REQ-LAY-006.N2 init with the marker refuses a lower level too
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_N1_a_lower_level_than_the_approved_one_is_refused
+  - red: AssertionError: 0 != 1 : initialized .sdd/feat-a/ (assurance: production)
+  - green: Ran 1 test in 0.328s OK
+- [x] T23 REQ-LAY-006.N2 init with the marker refuses a lower level too
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T24 REQ-LAY-006.N3 an invalid level in specs/constitution.md is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_N2_init_with_the_marker_refuses_a_lower_level_too
+  - red: pre-existing (after T22) — the level check runs for every new folder, whether the marker or the flag selects it
+  - green: Ran 1 test in 0.266s OK
+- [x] T24 REQ-LAY-006.N3 an invalid level in specs/constitution.md is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T25 REQ-LAY-006.S2 init with the marker copies it too
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_N3_an_invalid_level_in_specs_constitution_is_refused
+  - red: AssertionError: "error: specs/constitution.md: the assurance level 'draft' …" not found in "error: the constitution's assurance level 'draft' …"
+  - green: Ran 1 test in 0.347s OK
+- [x] T25 REQ-LAY-006.S2 init with the marker copies it too
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T26 REQ-LAY-006.B1 a higher level keeps the copied one, with a note
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_S2_init_with_the_marker_copies_it_too
+  - red: pre-existing (after T21) — the copy is byte for byte, so its fingerprinted approval still matches on the branch
+  - green: Ran 1 test in 0.620s OK
+- [x] T26 REQ-LAY-006.B1 a higher level keeps the copied one, with a note
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T27 REQ-LAY-006.B2 a never-approved constitution is adopted at its level
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_B1_a_higher_level_keeps_the_copied_one_with_a_note
+  - red: AssertionError: 'the copied constitution keeps production: …' not found in 'initialized .sdd/feat-a/ (assurance: production)\ncopied specs/constitution.md …'
+  - green: Ran 1 test in 0.238s OK
+- [x] T27 REQ-LAY-006.B2 a never-approved constitution is adopted at its level
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T28 REQ-LAY-006.S3 an SDD_SPECS folder adopts it too
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_B2_a_never_approved_constitution_is_adopted_at_its_level
+  - red: pre-existing (after T21) — level() reads a never-approved file's front matter, so it is copied at internal
+  - green: Ran 1 test in 0.303s OK
+- [x] T28 REQ-LAY-006.S3 an SDD_SPECS folder adopts it too
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T29 REQ-LAY-003.S1 REQ-LAY-003.S2 SDD_SPECS names the folder
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_006_S3_an_sdd_specs_folder_adopts_it_too
+  - red: AssertionError: 1 != 0 : error: already initialized (specs/constitution.md exists); use --force …
+  - green: Ran 1 test in 0.195s OK
+- [x] T29 REQ-LAY-003.S1 REQ-LAY-003.S2 SDD_SPECS names the folder
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T30 REQ-LAY-003.S3 init with SDD_SPECS initializes that folder
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_S1_and_REQ_LAY_003_S2_sdd_specs_names_the_folder
+  - red: AssertionError: 1 != 0 : error: this repository is not initialized: run `sdd init` first (run from a subfolder, records/constitution.md not used to find the root)
+  - green: Ran 1 test in 0.372s OK
+- [x] T30 REQ-LAY-003.S3 init with SDD_SPECS initializes that folder
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T31 REQ-LAY-003.B3 init with the marker and SDD_SPECS
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_S3_init_with_sdd_specs_initializes_that_folder
+  - red: pre-existing (after T28) — init takes the folder from specs_folder, so SDD_SPECS=records is initialized and AGENTS.md keeps specs/
+  - green: Ran 1 test in 0.060s OK
+- [x] T31 REQ-LAY-003.B3 init with the marker and SDD_SPECS
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T32 REQ-LAY-003.N1 an absolute SDD_SPECS is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_B3_init_with_the_marker_and_sdd_specs
+  - red: pre-existing (after T28) — SDD_SPECS is read before the marker, and init writes the per-branch AGENTS.md section whenever the marker exists
+  - green: Ran 1 test in 0.270s OK
+- [x] T32 REQ-LAY-003.N1 an absolute SDD_SPECS is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T33 REQ-LAY-003.N2 an SDD_SPECS leading outside is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_N1_an_absolute_sdd_specs_is_refused
+  - red: AssertionError: init crashed: ValueError('/var/…/records' is not in the subpath of '/private/var/…')
+  - green: Ran 1 test in 0.012s OK
+- [x] T33 REQ-LAY-003.N2 an SDD_SPECS leading outside is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T34 REQ-LAY-003.N3 SDD_SPECS naming the root is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_N2_an_sdd_specs_leading_outside_is_refused
+  - red: AssertionError: 0 != 1 : initialized ../other/ (assurance: internal)
+  - green: Ran 1 test in 0.009s OK
+- [x] T34 REQ-LAY-003.N3 SDD_SPECS naming the root is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T35 REQ-LAY-003.N4 SDD_SPECS naming a file is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_N3_sdd_specs_naming_the_root_is_refused
+  - red: AssertionError: 0 != 1 : initialized ./ (assurance: internal)
+  - green: Ran 1 test in 0.011s OK
+- [x] T35 REQ-LAY-003.N4 SDD_SPECS naming a file is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T36 REQ-LAY-003.N5 SDD_SPECS through a symlink outside is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_N4_sdd_specs_naming_a_file_is_refused
+  - red: AssertionError: init crashed: NotADirectoryError(20, 'Not a directory')
+  - green: Ran 1 test in 0.012s OK
+- [x] T36 REQ-LAY-003.N5 SDD_SPECS through a symlink outside is refused
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T37 REQ-LAY-003.B1 an empty SDD_SPECS counts as unset
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_N5_sdd_specs_through_a_symlink_outside_is_refused
+  - red: pre-existing (after T33) — the resolved path of the link is outside the root, so T33's check refuses it (red before T33: AssertionError: 0 != 1 : initialized link/ (assurance: internal))
+  - green: Ran 1 test in 0.010s OK
+- [x] T37 REQ-LAY-003.B1 an empty SDD_SPECS counts as unset
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T38 REQ-LAY-003.B2 SDD_SPECS works on a detached HEAD
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_B1_an_empty_sdd_specs_counts_as_unset
+  - red: pre-existing (after T28) — specs_folder and locate act on SDD_SPECS only when it is non-empty
+  - green: Ran 1 test in 0.051s OK
+- [x] T38 REQ-LAY-003.B2 SDD_SPECS works on a detached HEAD
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T39 REQ-LAY-004.S1 REQ-LAY-004.S2 REQ-LAY-004.S3 where prints the folder and the reason
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_003_B2_sdd_specs_works_on_a_detached_head
+  - red: pre-existing (after T28) — specs_folder returns the SDD_SPECS folder before it asks git for a branch
+  - green: Ran 1 test in 0.351s OK
+- [x] T39 REQ-LAY-004.S1 REQ-LAY-004.S2 REQ-LAY-004.S3 where prints the folder and the reason
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T40 REQ-LAY-004.N1 where on a detached HEAD is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_004_S1_and_REQ_LAY_004_S2_and_REQ_LAY_004_S3_where_prints_the_folder_and_the_reason
+  - red: AssertionError: Tuples differ: (2, '', 'usage: sdd.py [-h] [--root ROOT]…') != (0, 'specs/ (default)\n', '')
+  - green: Ran 1 test in 0.389s OK
+- [x] T40 REQ-LAY-004.N1 where on a detached HEAD is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T41 REQ-LAY-004.N2 where outside git is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_004_N1_where_on_a_detached_head_is_refused
+  - red: pre-existing (after T39) — where builds the Project first, which asks git for the branch and raises the branch error on stderr
+  - green: Ran 1 test in 0.441s OK
+- [x] T41 REQ-LAY-004.N2 where outside git is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T42 REQ-LAY-004.N3 where with an invalid SDD_SPECS is refused
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_004_N2_where_outside_git_is_refused
+  - red: pre-existing (after T39) — the git lookup in specs_folder raises the repository error before where prints anything
+  - green: Ran 1 test in 0.065s OK
+- [x] T42 REQ-LAY-004.N3 where with an invalid SDD_SPECS is refused
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T43 REQ-LAY-004.B1 where normalizes the SDD_SPECS path
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_004_N3_where_with_an_invalid_sdd_specs_is_refused
+  - red: pre-existing (after T39) — specs_folder refuses the value (T32–T35) before where prints anything
+  - green: Ran 1 test in 0.030s OK
+- [x] T43 REQ-LAY-004.B1 where normalizes the SDD_SPECS path
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T44 REQ-LAY-005.S1 REQ-LAY-005.S2 REQ-LAY-005.S3 SDD records are not test evidence
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_004_B1_where_normalizes_the_sdd_specs_path
+  - red: pre-existing (after T39) — specs_folder normalizes the path with normpath, so where prints records/
+  - green: Ran 1 test in 0.010s OK
+- [x] T44 REQ-LAY-005.S1 REQ-LAY-005.S2 REQ-LAY-005.S3 SDD records are not test evidence
   - tier: mid
-  - test:
-  - red:
-  - green:
-- [ ] T45 REQ-LAY-005.B2 the root's .sdd/ is skipped without the marker
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_005_S1_and_REQ_LAY_005_S2_and_REQ_LAY_005_S3_sdd_records_are_not_test_evidence
+  - red: AssertionError: 0 != 1 : check 0001-dur (stage: verify, assurance: internal) (the record in .sdd/tests/ was found as a test)
+  - green: Ran 1 test in 1.019s OK
+- [x] T45 REQ-LAY-005.B2 the root's .sdd/ is skipped without the marker
   - tier: light
-  - test:
-  - red:
-  - green:
-- [ ] T46 REQ-LAY-005.B1 a real test outside the records still counts
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_005_B2_the_roots_sdd_folder_is_skipped_without_the_marker
+  - red: AssertionError: 'REQ-DUR-001.S1: no test names this scenario' not found in 'check 0001-dur (stage: verify, assurance: internal)…'
+  - green: Ran 1 test in 0.361s OK
+- [x] T46 REQ-LAY-005.B1 a real test outside the records still counts
   - tier: light
-  - test:
-  - red:
-  - green:
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_005_B1_a_real_test_outside_the_records_still_counts
+  - red: pre-existing — a real tests/test_dur.py naming the scenario was found before the change and still is
+  - green: Ran 1 test in 0.546s OK
+- [x] T47 REQ-LAY-005.B1 re-record the red evidence of T46 with its dependency (Verification F1)
+  - tier: light
+  - test: tests/test_sdd.py::LayoutTests.test_REQ_LAY_005_B1_a_real_test_outside_the_records_still_counts
+  - red: pre-existing (after T11) — the test needs the marker and the branch folder that T1 and T11 build; at the base it fails (replay --base HEAD: mismatch), and the claim that a real tests/ file still counts holds once they exist
+  - green: Ran 1 test in 0.447s OK
 
 ## Mutations
 <!-- Implementer: one entry per new rule once its task is green (project rule 4). -->
+- M1 REQ-LAY-001.S1 skill/sdd/scripts/sdd.py
+  - find: `if (root / PER_BRANCH_MARKER).exists():`
+  - replace: `if False:`
+- M2 REQ-LAY-001.S1 skill/sdd/scripts/sdd.py
+  - find: `created = f"{project.specs_rel}/changes/{change_id}/spec.md"`
+  - replace: `created = f"specs/changes/{change_id}/spec.md"`
+- M3 REQ-LAY-001.B2 skill/sdd/scripts/sdd.py
+  - find: `return root / ".sdd" / branch.replace("/", "-"), f"per-branch: {branch}"`
+  - replace: `return root / ".sdd" / branch, f"per-branch: {branch}"`
+- M4 REQ-LAY-001.N1 skill/sdd/scripts/sdd.py
+  - find: `if result.returncode != 0 or not result.stdout.strip():`
+  - replace: `if False:`
+- M5 REQ-LAY-001.N2 skill/sdd/scripts/sdd.py
+  - find: `if result.returncode not in (0, 1):`
+  - replace: `if False:`
+- M6 REQ-LAY-001.N3 skill/sdd/scripts/sdd.py
+  - find: `except OSError:  # git is not installed`
+  - replace: `except ZeroDivisionError:  # git is not installed`
+- M7 REQ-LAY-001.B4 skill/sdd/scripts/sdd.py
+  - find: `(candidate / PER_BRANCH_MARKER).exists() or`
+  - replace: `False or`
+- M8 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `marker.write_bytes(b"")`
+  - replace: `marker.write_bytes(b"x")`
+- M9 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `project.root / ".sdd" / branch.replace("/", "-")`
+  - replace: `project.root / ".sdd" / branch`
+- M10 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `block = block.replace("`specs/", "`.sdd/<branch>/")`
+  - replace: `block = block.replace("`specs/", "`specs/")`
+- M11 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `return block.replace("\n- ", "\n" + line + "- ", 1)`
+  - replace: `return block`
+- M12 REQ-LAY-002.S2 skill/sdd/scripts/sdd.py
+  - find: `per_branch = args.per_branch or marker.exists()`
+  - replace: `per_branch = args.per_branch`
+- M13 REQ-LAY-002.N5 skill/sdd/scripts/sdd.py
+  - find: `if args.per_branch and os.environ.get("SDD_SPECS"):`
+  - replace: `if False:`
+- M14 REQ-LAY-002.N6 skill/sdd/scripts/sdd.py
+  - find: `LEVELS.index(args.assurance) < LEVELS.index("internal")`
+  - replace: `LEVELS.index(args.assurance) < LEVELS.index("prototype")`
+- M15 REQ-LAY-006.S1 skill/sdd/scripts/sdd.py
+  - find: `shutil.copyfile(source, project.constitution)`
+  - replace: `project.constitution.write_bytes(source.read_bytes().replace(b"approved: yes", b"approved: no"))`
+- M16 REQ-LAY-006.S1 skill/sdd/scripts/sdd.py
+  - find: `        created = False`
+  - replace: `        created = True`
+- M17 REQ-LAY-006.N1 skill/sdd/scripts/sdd.py
+  - find: `if LEVELS.index(args.assurance) < LEVELS.index(adopted):`
+  - replace: `if False:`
+- M18 REQ-LAY-006.N3 skill/sdd/scripts/sdd.py
+  - find: `.level("specs/constitution.md: the")`
+  - replace: `.level()`
+- M19 REQ-LAY-006.B1 skill/sdd/scripts/sdd.py
+  - find: `if LEVELS.index(args.assurance) > LEVELS.index(adopted):`
+  - replace: `if False:`
+- M20 REQ-LAY-003.S2 skill/sdd/scripts/sdd.py
+  - find: `(named and (candidate / named / "constitution.md").exists())`
+  - replace: `False`
+- M21 REQ-LAY-003.N1 skill/sdd/scripts/sdd.py
+  - find: `if Path(named).is_absolute():`
+  - replace: `if False:`
+- M22 REQ-LAY-003.N3 skill/sdd/scripts/sdd.py
+  - find: `if real_root not in resolved.parents or resolved.is_file():`
+  - replace: `if real_root not in [resolved, *resolved.parents] or resolved.is_file():`
+- M23 REQ-LAY-003.N4 skill/sdd/scripts/sdd.py
+  - find: `if real_root not in resolved.parents or resolved.is_file():`
+  - replace: `if real_root not in resolved.parents:`
+- M24 REQ-LAY-003.N5 skill/sdd/scripts/sdd.py
+  - find: `resolved, real_root = folder.resolve(), root.resolve()`
+  - replace: `resolved, real_root = folder.absolute(), root.resolve()`
+- M25 REQ-LAY-003.N2 skill/sdd/scripts/sdd.py
+  - find: `if real_root not in resolved.parents or resolved.is_file():`
+  - replace: `if resolved.is_file():`
+- M26 REQ-LAY-003.B1 skill/sdd/scripts/sdd.py
+  - find: `    if named:`
+  - replace: `    if named is not None:`
+- M27 REQ-LAY-004.S1 skill/sdd/scripts/sdd.py
+  - find: `print(f"{project.specs_rel}/ ({project.specs_reason})")`
+  - replace: `print(f"{project.specs_rel} ({project.specs_reason})")`
+- M28 REQ-LAY-005.S2 skill/sdd/scripts/sdd.py
+  - find: `parts[:1] in (("specs",), (".sdd",))`
+  - replace: `parts[:1] in (("specs",),)`
+- M29 REQ-LAY-005.S3 skill/sdd/scripts/sdd.py
+  - find: `parts[:len(folder)] == folder`
+  - replace: `False`
+- M30 REQ-LAY-002.N6 skill/sdd/scripts/sdd.py
+  - find: `project.specs_reason.startswith("per-branch") and`
+  - replace: `project.specs_reason.startswith("SDD_SPECS") and`
+- M31 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `print(f"initialized {rel}/ (assurance: {level})")`
+  - replace: `print(f"initialized specs/ (assurance: {level})")`
+- M32 REQ-LAY-002.S1 skill/sdd/scripts/sdd.py
+  - find: `print(f"created {rel}/constitution.md (approval pending: sdd approve)")`
+  - replace: `print(f"created specs/constitution.md (approval pending: sdd approve)")`
+- M33 REQ-LAY-002.N1 skill/sdd/scripts/sdd.py
+  - find: `raise SddError(f"already initialized ({rel}/constitution.md exists); "`
+  - replace: `raise SddError(f"already initialized (specs/constitution.md exists); "`
+- M34 REQ-LAY-006.S1 skill/sdd/scripts/sdd.py
+  - find: `specs/ is not read on this branch")`
+  - replace: `")`
 
 ## Verification
 <!-- Verifier: commands run, results, coverage, findings, verdict. -->
+- Date: 2026-11-18 · Verifier: subagent (strong)
+- Tests: `python3 -m unittest tests.test_sdd` → Ran 608 tests, OK
+- Check: `sdd.py check --stage verify` → result: OK (26 warnings: 24 pre-existing reds, the Verifier line, size cap 201 > 200 lines for mini)
+- Replay: `sdd.py replay --base HEAD` → replay: 45 confirmed, 1 mismatch, 0 skipped (T46) → finding F1
+- Mutate: `sdd.py mutate` → mutate: 29 caught, 0 survived or invalid
+- Extra mutations by hand (scratch copy, full suite): `Project.locate` moved out of `main`'s `try`, the "already initialized", "initialized" and "created" lines naming `specs/`, the "copied" line removed, and the per-branch floor condition set to `False` → all caught. The `specs/` skip removed from `is_records_path` → survived → finding F3
+- Coverage: coverage.py not installed; line coverage with the stdlib `trace` module (scratch copy, full suite): every new or changed line of `git_branch`, `specs_folder`, `Project.__init__`/`locate`, `is_records_path`, `agents_block`, `cmd_init`, `cmd_new`, `cmd_where` and `overlay_tests` ran, including each error branch (`except OSError`, return code 128, detached HEAD, absolute/outside/file `SDD_SPECS`, already initialized, lower level, invalid level, floor, `SDD_SPECS` with `--per-branch`). Branch coverage: not available.
+- Red evidence: 22 ticked reds are real assertion failures or crashes about the behavior. Of the 24 `pre-existing` reds, 23 are sound (replay confirms them; each names the earlier task the behavior comes from). T46 is not: see F1.
+- Design work (rule 1), reviewed against the spec: SKILL.md (version 0.21.0, the `specs/` line), method/overview.md (per-branch paragraph, `init [--per-branch]`, `where`), method/format.md (Test naming skips `specs/`, `.sdd/`, `SDD_SPECS`), method/phases/init.md, README and RELEASE_NOTES (6 requirements, 52 scenarios, 46 tasks, 608 tests, 29 mutations all match) are accurate.
+- Rule 6: the diff has no local paths, personal names, hosts or internal names (one red line quotes an elided temp path, `'/var/…/records'`).
+
+| Scenario | Test | Result | Then fully asserted |
+| --- | --- | --- | --- |
+| REQ-LAY-001.S1 | LayoutTests.test_REQ_LAY_001_S1_new_writes_into_the_branch_folder | pass | yes |
+| REQ-LAY-001.S2 | LayoutTests.test_REQ_LAY_001_S2_another_branchs_folder_is_not_seen | pass | yes |
+| REQ-LAY-001.B1 | LayoutTests.test_REQ_LAY_001_B1_and_REQ_LAY_001_B2_branch_names_without_and_with_slashes | pass | yes |
+| REQ-LAY-001.B2 | LayoutTests.test_REQ_LAY_001_B1_and_REQ_LAY_001_B2_branch_names_without_and_with_slashes | pass | yes |
+| REQ-LAY-001.B3 | LayoutTests.test_REQ_LAY_001_B3_an_empty_sdd_specs_keeps_the_branch_folder | pass | yes |
+| REQ-LAY-001.B4 | LayoutTests.test_REQ_LAY_001_B4_run_from_a_subfolder_finds_the_project_root | pass | yes |
+| REQ-LAY-001.N1 | LayoutTests.test_REQ_LAY_001_N1_a_detached_head_is_refused_before_any_write | pass | yes |
+| REQ-LAY-001.N2 | LayoutTests.test_REQ_LAY_001_N2_outside_git_is_refused | pass | yes |
+| REQ-LAY-001.N3 | LayoutTests.test_REQ_LAY_001_N3_git_not_on_the_path_is_refused | pass | yes |
+| REQ-LAY-001.N4 | LayoutTests.test_REQ_LAY_001_N4_a_missing_branch_folder_is_not_initialized_specs_ignored | pass | yes |
+| REQ-LAY-001.N5 | LayoutTests.test_REQ_LAY_001_N5_without_the_marker_specs_as_before | pass | yes |
+| REQ-LAY-002.S1 | LayoutTests.test_REQ_LAY_002_S1_init_per_branch_writes_the_marker_the_folder_and_agents_md | pass | yes |
+| REQ-LAY-002.S2 | LayoutTests.test_REQ_LAY_002_S2_init_with_the_marker_on_a_new_branch | pass | yes |
+| REQ-LAY-002.B2 | LayoutTests.test_REQ_LAY_002_B2_init_per_branch_force_rewrites_agents_md_only | pass | yes |
+| REQ-LAY-002.B3 | LayoutTests.test_REQ_LAY_002_B3_init_on_an_unborn_branch | pass | yes |
+| REQ-LAY-002.N1 | LayoutTests.test_REQ_LAY_002_N1_init_on_an_initialized_branch_folder_is_refused | pass | yes |
+| REQ-LAY-002.N2 | LayoutTests.test_REQ_LAY_002_N2_init_per_branch_on_an_existing_branch_folder_writes_no_marker | pass | yes |
+| REQ-LAY-002.N3 | LayoutTests.test_REQ_LAY_002_N3_init_per_branch_on_a_detached_head_writes_nothing | pass | yes |
+| REQ-LAY-002.N4 | LayoutTests.test_REQ_LAY_002_N4_init_per_branch_outside_git_writes_nothing | pass | yes |
+| REQ-LAY-002.N5 | LayoutTests.test_REQ_LAY_002_N5_init_per_branch_with_sdd_specs_set_is_refused | pass | yes |
+| REQ-LAY-002.N6 | LayoutTests.test_REQ_LAY_002_N6_per_branch_init_below_internal_is_refused | pass | yes |
+| REQ-LAY-006.S1 | LayoutTests.test_REQ_LAY_006_S1_init_per_branch_copies_the_approved_constitution | pass | yes |
+| REQ-LAY-006.S2 | LayoutTests.test_REQ_LAY_006_S2_init_with_the_marker_copies_it_too | pass | yes |
+| REQ-LAY-006.S3 | LayoutTests.test_REQ_LAY_006_S3_an_sdd_specs_folder_adopts_it_too | pass | yes |
+| REQ-LAY-006.B1 | LayoutTests.test_REQ_LAY_006_B1_a_higher_level_keeps_the_copied_one_with_a_note | pass | yes |
+| REQ-LAY-006.B2 | LayoutTests.test_REQ_LAY_006_B2_a_never_approved_constitution_is_adopted_at_its_level | pass | yes |
+| REQ-LAY-006.N1 | LayoutTests.test_REQ_LAY_006_N1_a_lower_level_than_the_approved_one_is_refused | pass | yes |
+| REQ-LAY-006.N2 | LayoutTests.test_REQ_LAY_006_N2_init_with_the_marker_refuses_a_lower_level_too | pass | yes |
+| REQ-LAY-006.N3 | LayoutTests.test_REQ_LAY_006_N3_an_invalid_level_in_specs_constitution_is_refused | pass | yes |
+| REQ-LAY-003.S1 | LayoutTests.test_REQ_LAY_003_S1_and_REQ_LAY_003_S2_sdd_specs_names_the_folder | pass | yes |
+| REQ-LAY-003.S2 | LayoutTests.test_REQ_LAY_003_S1_and_REQ_LAY_003_S2_sdd_specs_names_the_folder | pass | yes |
+| REQ-LAY-003.S3 | LayoutTests.test_REQ_LAY_003_S3_init_with_sdd_specs_initializes_that_folder | pass | yes |
+| REQ-LAY-003.B1 | LayoutTests.test_REQ_LAY_003_B1_an_empty_sdd_specs_counts_as_unset | pass | yes |
+| REQ-LAY-003.B2 | LayoutTests.test_REQ_LAY_003_B2_sdd_specs_works_on_a_detached_head | pass | yes |
+| REQ-LAY-003.B3 | LayoutTests.test_REQ_LAY_003_B3_init_with_the_marker_and_sdd_specs | pass | yes |
+| REQ-LAY-003.N1 | LayoutTests.test_REQ_LAY_003_N1_an_absolute_sdd_specs_is_refused | pass | yes |
+| REQ-LAY-003.N2 | LayoutTests.test_REQ_LAY_003_N2_an_sdd_specs_leading_outside_is_refused | pass | yes |
+| REQ-LAY-003.N3 | LayoutTests.test_REQ_LAY_003_N3_sdd_specs_naming_the_root_is_refused | pass | yes |
+| REQ-LAY-003.N4 | LayoutTests.test_REQ_LAY_003_N4_sdd_specs_naming_a_file_is_refused | pass | yes |
+| REQ-LAY-003.N5 | LayoutTests.test_REQ_LAY_003_N5_sdd_specs_through_a_symlink_outside_is_refused | pass | yes |
+| REQ-LAY-004.S1 | LayoutTests.test_REQ_LAY_004_S1_and_REQ_LAY_004_S2_and_REQ_LAY_004_S3_where_prints_the_folder_and_the_reason | pass | yes |
+| REQ-LAY-004.S2 | LayoutTests.test_REQ_LAY_004_S1_and_REQ_LAY_004_S2_and_REQ_LAY_004_S3_where_prints_the_folder_and_the_reason | pass | yes |
+| REQ-LAY-004.S3 | LayoutTests.test_REQ_LAY_004_S1_and_REQ_LAY_004_S2_and_REQ_LAY_004_S3_where_prints_the_folder_and_the_reason | pass | yes |
+| REQ-LAY-004.B1 | LayoutTests.test_REQ_LAY_004_B1_where_normalizes_the_sdd_specs_path | pass | yes |
+| REQ-LAY-004.N1 | LayoutTests.test_REQ_LAY_004_N1_where_on_a_detached_head_is_refused | pass | yes |
+| REQ-LAY-004.N2 | LayoutTests.test_REQ_LAY_004_N2_where_outside_git_is_refused | pass | yes |
+| REQ-LAY-004.N3 | LayoutTests.test_REQ_LAY_004_N3_where_with_an_invalid_sdd_specs_is_refused | pass | yes |
+| REQ-LAY-005.S1 | LayoutTests.test_REQ_LAY_005_S1_and_REQ_LAY_005_S2_and_REQ_LAY_005_S3_sdd_records_are_not_test_evidence | pass | yes |
+| REQ-LAY-005.S2 | LayoutTests.test_REQ_LAY_005_S1_and_REQ_LAY_005_S2_and_REQ_LAY_005_S3_sdd_records_are_not_test_evidence | pass | yes |
+| REQ-LAY-005.S3 | LayoutTests.test_REQ_LAY_005_S1_and_REQ_LAY_005_S2_and_REQ_LAY_005_S3_sdd_records_are_not_test_evidence | pass | yes |
+| REQ-LAY-005.B1 | LayoutTests.test_REQ_LAY_005_B1_a_real_test_outside_the_records_still_counts | pass | yes (red evidence unsound: F1) |
+| REQ-LAY-005.B2 | LayoutTests.test_REQ_LAY_005_B2_the_roots_sdd_folder_is_skipped_without_the_marker | pass | yes |
+
+Findings:
+- F1 (replay mismatch, weak red evidence) T46 REQ-LAY-005.B1: the red line says `pre-existing` with no `(after T<n>)`, but the test needs the marker and the branch folder `.sdd/tests/` (T1, T11) and fails at the base. The behavior claim (a real `tests/` file still counts) holds; the dependency is missing → task T47.
+- F2 (spec gap) with the marker and `SDD_SPECS` set, `init --assurance prototype` (nothing to adopt) is accepted: it initializes `records/` at prototype and writes the per-branch AGENTS.md section (reproduced). REQ-LAY-002's floor ("with no constitution to adopt, the level must be internal or higher") doesn't say whether it covers an `SDD_SPECS` folder while the marker exists; the code applies it only to a branch folder → for the operator: A) amend now (a scenario, e.g. LAY-002.B4 or N7, and a task), or B) accept it as a known gap.
+- F3 (spec gap, untested clause) REQ-LAY-005 says the root's `specs/` is always skipped, but no scenario has a `specs/` folder while another folder is in use (per-branch or `SDD_SPECS`), for example the old `specs/` that REQ-LAY-006 copies from. Removing the `specs/` skip from `is_records_path` survives the full suite → for the operator: A) amend now (a scenario such as "the marker, branch `feat/a` initialized, a change in `specs/` whose tasks name the test, no other file naming it → no test" and a task), or B) accept it as a known gap.
+- F4 (mutation plan, rule 4) changed rules with no `## Mutations` entry: `Project.locate` inside `main`'s `try` (LAY-001.N1–N3), the "already initialized", "initialized" and "created" lines naming the folder (LAY-002.N1, S1), the "copied" line (LAY-006.S1) and the per-branch floor condition (LAY-002.N6). All were caught by hand; the plan should list them (Implementer, with T47).
+
+Verdict: GAPS — 4 findings (T47 added for F1; F2 and F3 await the operator; F4 needs Mutations entries)
+
+### Pass 2
+- Date: 2026-11-18 · Verifier: subagent (strong)
+- Code and tests unchanged since pass 1: `sdd.py` and `tests/test_sdd.py` were last written before the design docs and the pass 1 record, and the suite still has 608 tests. Since pass 1 only spec.md changed (T47, M30–M34, A1 and its two Known gaps lines).
+- Tests: `python3 -m unittest tests.test_sdd` → Ran 608 tests, OK
+- Check: `sdd.py check --stage verify` → result: OK (26 warnings: 25 pre-existing reds, size cap 203 > 200 lines for mini; the Verifier-line warning is gone)
+- Replay: `sdd.py replay --base HEAD` → replay: 46 confirmed, 1 mismatch, 0 skipped. The mismatch is T46 ("pre-existing claimed, but the test fails at the base"). T46's red line is frozen evidence, so it was not edited. T47 re-records the same test with `(after T11)` and is `T47 confirmed now (depends on T11)`, so T47 explains the mismatch and no open problem remains.
+- Mutate: `sdd.py mutate` → mutate: 34 caught, 0 survived or invalid
+- Extra mutation by hand (scratch copy): `Project.locate` moved out of `main`'s `try` → LayoutTests FAILED (failures=5, errors=6), so it is caught. This is the one F4 item that a one-line find/replace can't express, so it stays a by-hand check.
+- A1 Known gaps re-checked against the code: (1) floor: the floor at `sdd.py:1445` applies only when `specs_reason` starts with `per-branch`. With the marker on `feat/a` and `SDD_SPECS=records`, `init --assurance prototype` exits 0, prints "initialized records/ (assurance: prototype)" and writes the `.sdd/<branch>/` AGENTS.md section. The line is accurate. (2) `specs/` skip: with `("specs",)` removed from `is_records_path`, the full suite still passes. The line is accurate.
+- Scenario matrix: unchanged from pass 1. All 52 scenarios pass and their Thens are fully asserted. REQ-LAY-005.B1's red evidence is now sound through T47.
+
+Earlier findings:
+- F1 resolved: T47 adds the `(after T11)` dependency, and replay confirms it. T46's remaining mismatch is the superseded record (see Replay).
+- F2 closed: the operator accepted it as a known gap (A1, approved). The gap line is accurate.
+- F3 closed: the operator accepted it as a known gap (A1, approved). The gap line is accurate.
+- F4 resolved: M30 (floor), M31 ("initialized"), M32 ("created"), M33 ("already initialized") and M34 ("copied") are planned and caught. `locate` inside `try` is caught by hand.
+
+New findings:
+- F5 (design work, rule 1) RELEASE_NOTES.md lines 15–16 still say "52 scenarios and 46 tasks" and "all 29 planned mutations are caught". The change now has 47 tasks and 34 mutations. Implementer: update the counts. No gap task is needed, because no behavior is affected.
+
+Verdict: GAPS — 1 finding (F5: the release-note counts are stale, 46 → 47 tasks and 29 → 34 mutations); F1–F4 are resolved or closed
+
+### Pass 3
+- Date: 2026-11-18 · Verifier: subagent (strong)
+- Re-checked RELEASE_NOTES.md only: lines 14–15 now say "52 scenarios and 47 tasks" and "all 34 planned mutations are caught", which matches the change (47 tasks, 34 mutations). F5 is resolved.
+- No finding is open. The pass 2 results stand: 608 tests OK, check OK, replay with only T46's superseded mismatch (explained by T47), and mutate 34 caught.
+
+Verdict: PASS
 
 ## Open questions
 - Per-branch mode with no constitution to adopt: a minimum level? → internal or higher (operator, 2026-11-18, Claude Code chat: "a multi-developer effort should have a minimum level"; internal proposed by the author; operator: "that seems right")
@@ -542,8 +753,10 @@ method/format.md. Required before the gate at production and above. -->
 ## Amendments
 <!-- Spec changes after approval, one line each, then `sdd.py approve amend`:
 - A1 2026-10-07: <reason> → <what changed> -->
+- A1 2026-11-18: verification found two spec gaps (Verification F2, F3); the operator accepted both as known gaps ("F2 B, F3 B", Claude Code chat) → Known gaps: the `internal` floor covers branch folders only; no test proves the `specs/` skip while another folder is in use
 
 ## Approvals
 | Gate | Date | Evidence |
 | --- | --- | --- |
 | plan | 2026-11-18 | Operator in Claude Code chat, 2026-11-18: "approved" (spec and plan of 0011 as shown in the review digest, including the hotfix-into-main departure from rule 8, the 0011 number and version 0.21.0) |
+| amend | 2026-11-18 | Operator in Claude Code chat, 2026-11-18: "approved" (amendment A1: F2 and F3 accepted as known gaps) |

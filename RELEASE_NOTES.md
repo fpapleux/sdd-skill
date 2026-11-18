@@ -8,6 +8,33 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 0.21.0 — 2026-11-18
+
+An interim for several branches running SDD on one repository, one `mini`
+change (0011) released from a hotfix branch into `main`. A new capability,
+`layout`, has 6 requirements. The change has 52 scenarios and 47 tasks. The
+suite is now 608 tests, and all 34 planned mutations are caught.
+
+- **Behavior:** per-branch mode. `init --assurance <level> --per-branch`
+  writes an empty marker `.sdd/.per-branch`. While it exists, sdd.py keeps the
+  specs in `.sdd/<branch>/` (each `/` becomes `-`) and never reads `specs/`.
+  A detached HEAD, a folder outside git, or git not installed is refused
+  before anything is written (change 0011).
+- **Behavior:** a new branch folder adopts the root's `specs/constitution.md`
+  unchanged, with its approvals and its level; a lower `--assurance` is
+  refused. With nothing to adopt, per-branch mode needs `internal` or higher.
+  While the marker exists, the AGENTS.md section names `.sdd/<branch>/`
+  (change 0011).
+- **Behavior:** the `SDD_SPECS` environment variable names the specs folder,
+  relative to the project root. An absolute path, a path outside the root,
+  the root itself or a file is refused (change 0011).
+- **Behavior:** `sdd.py where` prints the specs folder in use and why
+  (change 0011).
+- **Behavior:** check's test-file search skips `.sdd/` and the `SDD_SPECS`
+  folder as well as `specs/`, with or without the marker (change 0011).
+- `init` and `new` print the folder in use. Bringing branch folders together
+  on main (`sdd integrate`) is a later change.
+
 ## 0.20.0 — 2026-11-03
 
 Two of the follow-ups 0.19.0 left open, each a `mini` change, verified and

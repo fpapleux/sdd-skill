@@ -449,6 +449,7 @@ Drafting specs for untouched existing code (`sdd baseline`) is planned for v2.
 | `sdd verify` | Check the work against the spec |
 | `sdd archive` | Merge into the living spec |
 | `sdd status` | Where things stand, and the next step |
+| `sdd where` | Which folder holds the specs: `specs/`, a branch folder in per-branch mode, or `SDD_SPECS` |
 
 ### The script
 
@@ -500,6 +501,11 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   and it doesn't check that the `--passed-before` list really passed. A
   defect blocks only the change named in its row. A scripted run plan is
   planned (change 0008).
+- Per-branch mode (`init --per-branch`) is an interim for several branches:
+  each branch keeps its records in `.sdd/<branch>/` and adopts the root's
+  constitution. After a merge, main doesn't see the branch folders yet,
+  change numbers are unique only within a branch, and renaming a branch
+  disconnects its folder.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
