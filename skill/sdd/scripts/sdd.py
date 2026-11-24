@@ -659,48 +659,10 @@ def approval_rows(text: str) -> list:
 
 # ---------------------------------------------------------------- project
 
-PER_BRANCH_MARKER = Path(".sdd") / ".per-branch"
-
-
-def git_branch(root: Path) -> str:
-    """The current git branch of root, for per-branch mode."""
-    repository_error = SddError("per-branch mode needs a git repository "
-                                "(git must be installed and the project under version control)")
-    try:
-        result = subprocess.run(["git", "symbolic-ref", "--short", "-q", "HEAD"], cwd=root,
-                                capture_output=True, text=True)
-    except OSError:  # git is not installed
-        raise repository_error from None
-    if result.returncode not in (0, 1):  # 128: not a repository
-        raise repository_error
-    if result.returncode != 0 or not result.stdout.strip():  # 1: HEAD is detached
-        raise SddError("per-branch mode needs a git branch: check out a branch or set SDD_SPECS")
-    return result.stdout.strip()
-
-
-def specs_folder(root: Path):
-    """The specs folder in use and the reason: SDD_SPECS, else per-branch mode, else specs/."""
-    named = os.environ.get("SDD_SPECS", "")
-    if named:
-        outside = SddError("SDD_SPECS must name a folder inside the repository")
-        if Path(named).is_absolute():
-            raise outside
-        folder = root / os.path.normpath(named)
-        resolved, real_root = folder.resolve(), root.resolve()
-        if real_root not in resolved.parents or resolved.is_file():
-            raise outside
-        return folder, "SDD_SPECS"
-    if (root / PER_BRANCH_MARKER).exists():
-        branch = git_branch(root)
-        return root / ".sdd" / branch.replace("/", "-"), f"per-branch: {branch}"
-    return root / "specs", "default"
-
-
 class Project:
-    def __init__(self, root: Path, specs=None):
+    def __init__(self, root: Path):
         self.root = root
-        self.specs, self.specs_reason = specs_folder(root) if specs is None else specs
-        self.specs_rel = self.specs.relative_to(root).as_posix()
+        self.specs = root / "specs"
         self.constitution = self.specs / "constitution.md"
         self.changes = self.specs / "changes"
         self.archive = self.specs / "archive"
@@ -712,11 +674,8 @@ class Project:
         if root_arg:
             return cls(Path(root_arg).resolve())
         here = Path.cwd().resolve()
-        named = os.environ.get("SDD_SPECS", "")
         for candidate in [here, *here.parents]:
-            if (candidate / PER_BRANCH_MARKER).exists() or \
-                    (candidate / "specs" / "constitution.md").exists() or \
-                    (named and (candidate / named / "constitution.md").exists()):
+            if (candidate / "specs" / "constitution.md").exists():
                 return cls(candidate)
         return cls(here)
 
@@ -743,7 +702,7 @@ class Project:
         return {"text": text, "fm": fm, "current": current, "reference": reference,
                 "changed": changed, "approved_level": approved_level}
 
-    def level(self, owner: str = "the constitution's") -> str:
+    def level(self) -> str:
         """The project level: the approved one while the constitution has unapproved edits."""
         state = self.constitution_state()
         if state["changed"] and state["approved_level"]:
@@ -753,7 +712,7 @@ class Project:
             return level
         if state["approved_level"]:
             return state["approved_level"]
-        raise SddError(f"{owner} assurance level '{level or '(missing)'}' is not one of: "
+        raise SddError(f"the constitution's assurance level '{level or '(missing)'}' is not one of: "
                        f"{', '.join(LEVELS)}")
 
     def active(self):
@@ -1285,15 +1244,8 @@ def check_plan(clean, tasks, scenario_refs, err, warn):
                 err(f"{ref}: no task plans this scenario")
 
 
-def is_records_path(project: Project, rel) -> bool:
-    """Whether rel (relative to the root) is an SDD record: under specs/, .sdd/ or the specs folder."""
-    parts = Path(rel).parts
-    folder = Path(project.specs_rel).parts
-    return parts[:1] in (("specs",), (".sdd",)) or parts[:len(folder)] == folder
-
-
 def project_text_files(project: Project) -> dict:
-    """All text files outside the SDD records (where tests live), keyed by relative path."""
+    """All text files outside specs/ (where tests live), keyed by relative path."""
     paths = None
     try:
         out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
@@ -1307,7 +1259,7 @@ def project_text_files(project: Project) -> dict:
     files = {}
     for path in paths:
         rel = path.relative_to(project.root)
-        if is_records_path(project, rel):
+        if rel.parts and rel.parts[0] == "specs":
             continue
         try:
             if path.stat().st_size > 2_000_000:
@@ -1410,58 +1362,22 @@ def append_approval(path: Path, gate: str, evidence: str):
     path.write_text("\n".join(lines) + "\n")
 
 
-def agents_block(per_branch: bool) -> str:
-    """The SDD section of AGENTS.md; in per-branch mode its paths name `.sdd/<branch>/`."""
-    block = (TEMPLATES / "agents-section.md").read_text().strip()
-    if not per_branch:
-        return block
-    block = block.replace("`specs/", "`.sdd/<branch>/")
-    line = ("- `<branch>` is the current git branch with each `/` replaced by `-`;\n"
-            "  `sdd.py where` prints the folder.\n")
-    return block.replace("\n- ", "\n" + line + "- ", 1)
-
-
 def cmd_init(project: Project, args) -> int:
-    if args.per_branch and os.environ.get("SDD_SPECS"):
-        raise SddError("init --per-branch can't be used while SDD_SPECS is set")
-    marker = project.root / PER_BRANCH_MARKER
-    per_branch = args.per_branch or marker.exists()
-    if args.per_branch and not marker.exists():
-        branch = git_branch(project.root)
-        project = Project(project.root, (project.root / ".sdd" / branch.replace("/", "-"),
-                                         f"per-branch: {branch}"))
-    rel = project.specs_rel
     if project.constitution.exists() and not args.force:
-        raise SddError(f"already initialized ({rel}/constitution.md exists); "
+        raise SddError("already initialized (specs/constitution.md exists); "
                        "use --force to refresh the folders and AGENTS.md/CLAUDE.md only")
-    created = not project.constitution.exists()
-    source = project.root / "specs" / "constitution.md"
-    adopted = None  # the level in force of specs/constitution.md, copied into a new folder
-    if created and project.specs != project.root / "specs" and source.exists():
-        adopted = Project(project.root, (source.parent, "default")).level("specs/constitution.md: the")
-        if LEVELS.index(args.assurance) < LEVELS.index(adopted):
-            raise SddError(f"specs/constitution.md is at {adopted}: a branch can't start lower")
-        created = False
-    if created and project.specs_reason.startswith("per-branch") and \
-            LEVELS.index(args.assurance) < LEVELS.index("internal"):
-        raise SddError("per-branch mode is for several developers: "
-                       "the assurance level must be internal or higher")
-    if args.per_branch and not marker.exists():
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_bytes(b"")
     for folder in (project.capabilities, project.changes, project.archive):
         folder.mkdir(parents=True, exist_ok=True)
         (folder / ".gitkeep").touch()
     if not project.active_file.exists():
         project.set_active(None)
-    if adopted:
-        shutil.copyfile(source, project.constitution)
+    created = not project.constitution.exists()
     if created:
         project.constitution.write_text(render(
             "constitution.md", assurance=args.assurance, assurance_meaning=LEVEL_MEANING[args.assurance]))
 
     # AGENTS.md carries the SDD rules for Codex; CLAUDE.md imports it for Claude Code.
-    block = agents_block(per_branch)
+    block = (TEMPLATES / "agents-section.md").read_text().strip()
     agents = project.root / "AGENTS.md"
     current = agents.read_text() if agents.exists() else ""
     marked = re.compile(r"<!-- sdd:begin -->.*?<!-- sdd:end -->", re.S)
@@ -1476,14 +1392,9 @@ def cmd_init(project: Project, args) -> int:
         claude.write_text((claude_text.rstrip() + "\n\n" if claude_text.strip() else "") + "@AGENTS.md\n")
 
     level = read_front_matter(project.constitution.read_text()).get("assurance")
-    print(f"initialized {rel}/ (assurance: {level})")
+    print(f"initialized specs/ (assurance: {level})")
     if created:
-        print(f"created {rel}/constitution.md (approval pending: sdd approve)")
-    if adopted:
-        print(f"copied specs/constitution.md (assurance: {adopted}); specs/ is not read on this branch")
-        if LEVELS.index(args.assurance) > LEVELS.index(adopted):
-            print(f"the copied constitution keeps {adopted}: "
-                  "edit it and run sdd approve constitution to raise it")
+        print("created specs/constitution.md (approval pending: sdd approve)")
     print("updated AGENTS.md (SDD section) and CLAUDE.md (@AGENTS.md)")
     return 0
 
@@ -1517,10 +1428,10 @@ def cmd_new(project: Project, args) -> int:
     if args.size == "standard":
         for name in STANDARD_FILES:
             (folder / name).write_text(render(f"standard/{name}", **values))
-        created = f"{project.specs_rel}/changes/{change_id}/ ({', '.join(STANDARD_FILES)})"
+        created = f"specs/changes/{change_id}/ ({', '.join(STANDARD_FILES)})"
     else:
         (folder / "spec.md").write_text(render("mini-spec.md", **values))
-        created = f"{project.specs_rel}/changes/{change_id}/spec.md"
+        created = f"specs/changes/{change_id}/spec.md"
     previous = project.active()
     project.set_active(change_id)
     print(f"created {created} (size: {args.size}, assurance: {level})")
@@ -1529,11 +1440,6 @@ def cmd_new(project: Project, args) -> int:
         status = read_front_matter(project.main_file(previous).read_text()).get("status")
         if status not in TERMINAL:
             print(f"note: {previous} is still '{status}'; switch back with `sdd.py use {previous}`")
-    return 0
-
-
-def cmd_where(project: Project, args) -> int:
-    print(f"{project.specs_rel}/ ({project.specs_reason})")
     return 0
 
 
@@ -2535,9 +2441,9 @@ def listed_files(project: Project) -> list:
 
 
 def overlay_tests(project: Project, target: Path):
-    """Lay every current test file (outside the SDD records) over a copy of another revision."""
+    """Lay every current test file (outside specs/) over a copy of another revision."""
     for rel in listed_files(project):
-        if is_test_path(rel) and not is_records_path(project, rel):
+        if is_test_path(rel) and Path(rel).parts[0] != "specs":
             (target / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(project.root / rel, target / rel)
 
@@ -2960,8 +2866,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("init", help="create specs/, constitution, AGENTS.md/CLAUDE.md wiring")
     p.add_argument("--assurance", required=True, choices=LEVELS)
     p.add_argument("--force", action="store_true")
-    p.add_argument("--per-branch", action="store_true",
-                   help="keep this branch's specs in .sdd/<branch>/ (writes the marker .sdd/.per-branch)")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("new", help="create a change and make it active")
@@ -2972,9 +2876,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--assurance", choices=LEVELS)
     p.add_argument("--capability", action="append", metavar="name=PREFIX")
     p.set_defaults(func=cmd_new)
-
-    p = sub.add_parser("where", help="print the specs folder in use and why")
-    p.set_defaults(func=cmd_where)
 
     p = sub.add_parser("status", help="where things stand and the next step")
     p.add_argument("--json", action="store_true")
@@ -3064,8 +2965,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    project = Project.locate(args.root)
     try:
-        project = Project.locate(args.root)
         return args.func(project, args)
     except SddError as exc:
         print(f"error: {exc}", file=sys.stderr)

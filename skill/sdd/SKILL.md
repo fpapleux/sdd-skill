@@ -3,7 +3,7 @@ name: sdd
 description: Spec-driven development. Turns the operator's intent into a reviewed spec (EARS requirements with Given/When/Then scenarios and IDs), then derives test-first tasks, code and verification from it, and keeps a living spec in specs/. Use when the user invokes sdd (/sdd in Claude Code, $sdd in Codex) with a phase such as init, quick, propose, specify, clarify, design, tasks, analyze, approve, implement, amend, bug, verify, archive, status or next, or asks to work spec-first in a repository that has a specs/ folder.
 license: MIT
 metadata:
-  version: "0.21.0"
+  version: "0.20.0"
 ---
 
 # SDD — spec-driven development
@@ -21,10 +21,6 @@ In every SDD file:
 - **`SDD`** means `python3 <skill folder>/scripts/sdd.py`. Run it from the
   root of the operator's repository.
 - `method/…` and `templates/…` paths are relative to the skill folder.
-- **`specs/`** in every SDD file means the specs folder in use, which
-  `SDD where` prints. It is `specs/` unless the repository runs in per-branch
-  mode (`.sdd/.per-branch`, where it is `.sdd/<branch>/`) or `SDD_SPECS` names
-  another folder.
 
 ## 1. Parse the invocation
 
