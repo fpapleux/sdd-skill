@@ -139,17 +139,6 @@ AGENTS.md                    # SDD section (read by Codex)
 CLAUDE.md                    # contains @AGENTS.md (read by Claude Code)
 ```
 
-**Per-branch mode** (interim, for several branches before main has SDD
-records): `SDD init --assurance <level> --per-branch` writes the marker
-`.sdd/.per-branch`. While it exists, each branch keeps the whole tree above in
-`.sdd/<branch>/` (each `/` in the branch name becomes `-`), so branches never
-touch each other's records. A new branch folder adopts the root's
-`specs/constitution.md` unchanged when it exists; otherwise the level must be
-`internal` or higher. The `SDD_SPECS` environment variable names another
-folder, relative to the root. `SDD where` prints the folder in use. After a
-merge, main doesn't yet see the branch folders: bringing them together is a
-later change.
-
 The grammar of `spec.md` (requirements, scenario tables, N/A lines, tasks and
 evidence) is in `method/format.md`. Read it before writing or editing a spec.
 
@@ -157,7 +146,7 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 
 | Command | Use |
 | --- | --- |
-| `SDD init --assurance <level> [--force] [--per-branch]` | Create `specs/` and wire AGENTS.md/CLAUDE.md |
+| `SDD init --assurance <level> [--force]` | Create `specs/` and wire AGENTS.md/CLAUDE.md |
 | `SDD new <slug> --title "…" --capability name=PREFIX [--size mini\|standard] [--type feature\|defect\|hardening] [--assurance <higher level>]` | Create a change and make it active |
 | `SDD next-req <PREFIX>` | Next free requirement ID |
 | `SDD round [--fresh \| --subagent <tier>]` | Start a Spec Critic round: appends it to Clarifications with every requirement listed, headed with who runs it |
@@ -165,7 +154,6 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD analyze [--change <id>] [--json]` | Check's plan report plus the cross-artifact findings: design trace, failure modes and contracts (standard), clause and balance warnings. Read-only. Exit 1 = errors. |
 | `SDD next [--change <id>]` | The remaining steps to the next gate, `1. sdd <phase>` …, then a `gate:` line. Read-only. |
 | `SDD status [--json]` | Summary + next step |
-| `SDD where` | The specs folder in use and why: `default`, `per-branch: <branch>` or `SDD_SPECS` |
 | `SDD approve constitution\|spec\|plan\|results\|amend --evidence "…"` | Record an operator approval. `constitution` records its fingerprint (and refuses an unchanged or invalid one). `spec` (standard) or `plan` (mini) locks the spec. `plan` runs the analysis and refuses on its errors. `results` (standard) needs a PASS verdict and marks it verified. `amend` needs a logged spec change and a clean check, then re-locks it. |
 | `SDD advance clarifying\|designed\|implementing\|verifying\|verified\|blocked\|abandoned` | Move the status (`verified` for mini only; standard uses `approve results`). A blocked change returns only to the status it had. |
 | `SDD archive` | Merge a verified change into `specs/capabilities/` (requirements, known gaps, history line) and archive it |
