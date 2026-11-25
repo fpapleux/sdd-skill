@@ -30,11 +30,11 @@ the full study in [sdd-skill-study.md](sdd-skill-study.md).
 | **Cheaper models for routine work** | Strong models are kept for hard tasks and review. In change 0005, 65 of 71 tasks ran on cheaper models. |
 | **Plain files, no lock-in** | Specs and state are plain files in git. Work moves between Claude Code and Codex. The script uses only the Python standard library. |
 
-> **Status: version 0.20.0, v1 in progress.** The `mini` and `standard` sizes
-> work end to end at every assurance level. SDD is developed with SDD, at
-> `production` assurance. Next: a scripted test runner and impact-targeted
-> testing, then `harden`; releases, deploy and the rest of `production`
-> assurance come in v2. One developer per codebase
+> **Status: version 1.0.0, v1 complete.** The `mini` and `standard` sizes
+> work end to end at every assurance level, and a scripted test runner runs
+> and records each test step. SDD is developed with SDD, at `production`
+> assurance. Next, in v2: impact-targeted testing, retiring resolved known
+> gaps, `harden`, releases, deploy and the rest of `production` assurance. One developer per codebase
 > today. What each version changed is in the [release notes](RELEASE_NOTES.md);
 > what comes next is in the [roadmap](#roadmap).
 
@@ -367,7 +367,7 @@ the safeguards it lacks.
 | **Failure cases** | **None required.** A **Known gaps** list instead, one line per thing not handled | Bad input · wrong state or duplicates · failure of anything it calls | The above + boundaries · access rights (6 core categories) | The 6 core + concurrency · rule combinations · invariants |
 | **A failure test checks** | — | The error shown, and that nothing else happened | The error, no side effects, state unchanged | Same as production |
 | **Spec review** | Only open questions are flagged | Self-check; the script rejects blank coverage. `standard` changes get a Critic round. | Critic round at any size, by a strong subagent or in a fresh session (recorded, and the script warns otherwise) | Independent reviewer, every round *(v3)* |
-| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier (strong subagent or fresh session, recorded), with red evidence replayed and planned mutations run by the script; blocking coverage of changed code and probing for unexpected inputs *(v1)* | Production checks + mutation testing + property-based tests *(v3)* |
+| **Verification** | Tests pass | Tests pass, coverage reported | Independent verifier (strong subagent or fresh session, recorded), with red evidence replayed and planned mutations run by the script; blocking coverage of changed code and probing for unexpected inputs *(v2)* | Production checks + mutation testing + property-based tests *(v3)* |
 
 ### When a prototype grows up
 
@@ -394,7 +394,7 @@ script checks that it was done, the same way each time.
 | The approved spec is fingerprinted; any edit fails the check until amended. | Every scenario has a task, and a test that names its ID. | `mutate` breaks each rule in a scratch copy and expects a test to fail. |
 | Results need a PASS verdict, or nothing is marked verified. | The script merges each change into the living spec. | `analyze`, `next`, `sort-failures` and `defect` do the mechanical parts of review, so the model spends no tokens on them. |
 
-As of 0.20.0 the script is about 3,000 lines with 16 commands and 565 tests of
+As of 1.0.0 the script is about 3,600 lines with 18 commands and 677 tests of
 its own. In change 0005, `replay` confirmed all 71 tasks and `mutate` caught
 all 59 planned mutations.
 
@@ -450,7 +450,7 @@ python3 ~/.claude/skills/sdd/scripts/sdd.py next-req DUR     # next free require
 
 Other commands: `init`, `new`, `round`, `analyze [--json]`, `next`, `approve`,
 `advance`, `archive`, `use`, `replay --base <rev>`, `mutate`,
-`sort-failures <file>` and `defect add|decide|close`. Run `sdd.py --help` for
+`run-plan`, `test`, `sort-failures <file>` and `defect add|decide|close`. Run `sdd.py --help` for
 details. Exit code `1` means errors were found.
 
 ---
@@ -466,7 +466,7 @@ figures are from published reviews cited in [the study](sdd-skill-study.md).
 | [OpenSpec](https://github.com/Fission-AI/OpenSpec) | Living specs per capability; ADDED / MODIFIED / REMOVED deltas merged at archive | Duplicates and contradictions build up in the specs | A Spec Steward reviews each capability after archive. The script refuses a reused ID, or a MODIFIED one that doesn't exist. |
 | [AWS Kiro](https://kiro.dev) | EARS requirements; bugfix specs that state current and expected behavior | Heavy for small changes; a finished task doesn't show the requirement works | `inline` and `mini` sizes for small work. Each scenario needs a test that names its ID, and the Verifier reruns it. |
 | [BMAD](https://github.com/bmad-code-org/BMAD-METHOD) | Each task carries its own context; adversarial review | Persona hand-offs compound errors and use many tokens (3× slower in one test) | Seven roles with file boundaries; hand-offs go through files. Routine tasks run on cheaper models. |
-| [GSD](https://github.com/open-gsd/gsd-core) | Verifier subagents in a fresh context; a resumable state file | Stops at implement and verify, as all the frameworks reviewed do | Releases and deploy are planned for v1 increment 6. |
+| [GSD](https://github.com/open-gsd/gsd-core) | Verifier subagents in a fresh context; a resumable state file | Stops at implement and verify, as all the frameworks reviewed do | Releases and deploy are planned for v2. |
 | [Agent OS](https://buildermethods.com/agent-os) | Relies on the host's plan mode and subagents | Earlier versions rebuilt orchestration the host already had | Fan-out uses the host's subagents; `sdd.py` only runs deterministic checks. |
 
 Tessl was also reviewed: it generates code from specs, which we judged
@@ -541,8 +541,7 @@ Defined in [`skill/sdd/SKILL.md`](skill/sdd/SKILL.md):
   time limit, and plan a mutation as a single-line find and replace.
 - `sort-failures` reads the test names it is given: it doesn't run tests,
   and it doesn't check that the `--passed-before` list really passed. A
-  defect blocks only the change named in its row. A scripted run plan is
-  planned (change 0008).
+  defect blocks only the change named in its row.
 - No repository-wide CI check or pre-commit hook yet.
 - Codex support is designed in from the start (portable `SKILL.md`, all state
   in files, `agents/openai.yaml`), but has had less hands-on testing than
@@ -554,12 +553,12 @@ Versions follow `MAJOR.MINOR.BUILD`; MAJOR becomes 1 when v1 is complete.
 
 | Version | Adds |
 | --- | --- |
-| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; subagent fan-out (a prime model orchestrates; the Critic and Verifier run as read-only subagents on strong models, routine tasks on cheaper ones; a fresh session is the fallback in Codex); `analyze`; `bug`, `amend` and `harden` phases; a scripted test runner and impact-targeted testing |
-| **v2** | **Releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback), with delivery profiles and install options offered as a choice; `production` assurance: blocking diff coverage, adversarial probing; opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
+| **v1** | `standard` size (separate proposal / design / tasks / verification files, three gates); `clarify` with a Spec Critic coverage audit; subagent fan-out (a prime model orchestrates; the Critic and Verifier run as read-only subagents on strong models, routine tasks on cheaper ones; a fresh session is the fallback in Codex); `analyze`; `bug` and `amend` phases; a scripted test runner and run plan. **Complete in 1.0.0.** |
+| **v2** | Impact-targeted testing (change 0010); a change retires the known gaps it resolves (change 0009); `harden <capability> --to <level>`; **releases** (build once, approval bound to the package digest) and **deploy** (approval bound to target and digest, receipts, rollback), with delivery profiles and install options offered as a choice; `production` assurance: blocking diff coverage, adversarial probing; opt-in git pre-commit gate and CI recipe; `baseline` for existing code |
 | **v3** | `full` size and `critical` assurance (contracts, decision records, mutation and property-based testing); Claude Code plugin + marketplace; an eval suite run in both tools |
 | **Later** | Not scheduled, after v1: a UX design capability (user journeys, flows, wireframes) and a UI design capability (style guide, style sheets, UI mock-ups) |
 
-v1 is built in increments, each one an SDD change from increment 4 on:
+v1 was built in increments, each one an SDD change from increment 4 on:
 
 | # | Increment | State |
 | --- | --- | --- |
@@ -572,12 +571,12 @@ v1 is built in increments, each one an SDD change from increment 4 on:
 | — | Change 0004: each known gap goes to the capability it concerns | done (0.18) |
 | — | Change 0005: scoped test runs and a defect log | done (0.19) |
 | — | Changes 0006 and 0007: open defects block the verify gates; tests that passed before the run count as regressions | done (0.20) |
-| — | Change 0008: a scripted test runner (each step run and recorded, a report of the exceptions, a baseline once per change) and run plan | in progress |
-| — | Change 0010: an impact assessment chooses the tests a change runs | planned |
-| — | Change 0009: a change retires the known gaps it resolves | planned |
+| — | Change 0008: a scripted test runner (each step run and recorded, a report of the exceptions, a baseline once per change) and run plan | done (1.0) |
+| — | Change 0010: an impact assessment chooses the tests a change runs | moved to v2 |
+| — | Change 0009: a change retires the known gaps it resolves | moved to v2 |
 | 6 | Releases and deploy, with delivery profiles and install options | moved to v2 |
 | 7 | `production` assurance: blocking diff coverage, adversarial probe | moved to v2 |
-| 8 | `harden <capability> --to <level>` | planned |
+| 8 | `harden <capability> --to <level>` | moved to v2 |
 
 ### Team-based development
 

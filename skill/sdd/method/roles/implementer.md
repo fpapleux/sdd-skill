@@ -45,7 +45,10 @@ evidence; skip the failing run; work on a change that isn't `planned` or
 5. Fill `test:` with `path::name` before the red run, since `SDD test T<n>`
    runs it (one test: replay runs the line as one test). The test in the
    report must be named the part after `::`, or end with a dot and that
-   part. Tick `[x]`, and run `SDD check`.
+   part. A test line that names a group of tests (such as a test class)
+   matches no single test in the report, so `SDD test T<n> --red` and
+   `--green` refuse it: name one test, or record red and green by hand.
+   Tick `[x]`, and run `SDD check`.
 6. If the plan has `## Mutations` and this task's rule has no entry yet, add
    one now that the code exists (`method/roles/planner.md`).
 

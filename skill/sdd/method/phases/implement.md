@@ -20,7 +20,10 @@ Deliver tasks test-first. Role: **Implementer**
    writes the red line, then write the code, then `SDD test T<n> --green`
    writes the green line. A `red: pre-existing — <why>` line and a red that
    holds only after an earlier task (`(after T<n>)`) are still written by
-   hand. Tick the box only after green.
+   hand. A test line that names a group of tests (such as a test class)
+   matches no single test in the report, so `SDD test T<n> --red` and
+   `--green` refuse it: name one test, or record red and green by hand.
+   Tick the box only after green.
 4. After each task, run `SDD check`. It must show no error about that task.
 5. **Run the tests at three levels.**
    - **Task:** the task's own test, with the design's `Test one:` command, at

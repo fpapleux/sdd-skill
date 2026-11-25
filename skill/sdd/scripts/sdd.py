@@ -2746,6 +2746,13 @@ def write_atomic(path: Path, text: str):
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
+        try:
+            mode = os.stat(path).st_mode & 0o7777  # an existing file keeps its mode
+        except OSError:
+            umask = os.umask(0)  # a new file gets the umask default, not mkstemp's 0600
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):

@@ -123,6 +123,22 @@
   - test: tests/test_sdd.py::ReportPathRefusalTests
   - red: AssertionError: Lists differ: ['all'] != [] (6 tests, failures=6: the step ran; N20 hit a PermissionError deleting the folder, stubbed to an error)
   - green: Ran 6 tests in 6.3s OK
+- [x] T25 REQ-EVD-007.N5 After an unreadable last run, assert the whole S1 report (verification F1, F5)
+  - tier: light
+  - also: method/overview.md, the `SDD test` row: exit 1 also when the command exits other than 0 but the report shows no failure, and on a refusal; method/phases/implement.md and method/roles/implementer.md step 5: a test line that names a group of tests (such as a test class, as this repository's tasks do) matches no single test in the report, so `SDD test T<n> --red` and `--green` refuse it; say to name one test or record red and green by hand (verification F5)
+  - test: tests/test_sdd.py::RunOfFilesTests.test_REQ_EVD_007_N5_an_unreadable_last_run_is_kept_as_run_of_unreadable
+  - red: pre-existing — the report after an unreadable last run was already the S1 report; only the test was weak, and it now asserts the result, failure, sort and log lines
+  - green: Ran 1 test in 3.727s OK
+- [x] T26 REQ-EVD-010.B7 An existing tasks.md keeps its mode (verification F3)
+  - tier: mid
+  - test: tests/test_sdd.py::EvidenceMatchTests.test_REQ_EVD_010_B7_an_existing_tasks_file_keeps_its_mode
+  - red: AssertionError: 384 != 420 (tasks.md was 0644 and is 0600 after test T1 --red)
+  - green: Ran 1 test in 0.650s OK
+- [x] T27 REQ-EVD-009.B8 A changed Test command is not reused (verification F4)
+  - tier: light
+  - test: tests/test_sdd.py::ReuseKeyTests.test_REQ_EVD_009_B8_a_changed_test_command_runs_the_new_command
+  - red: pre-existing — reusable() already compares the command; with that comparison removed in a scratch edit the test fails: AssertionError: Lists differ: [] != ['all']
+  - green: Ran 1 test in 0.914s OK
 
 ## Mutations
 
@@ -580,3 +596,9 @@
 - M151 REQ-EVD-011.N21 skill/sdd/scripts/sdd.py
   - find: `target = (root / rel).resolve()`
   - replace: `target = root / rel`
+- M152 REQ-EVD-010.B7 skill/sdd/scripts/sdd.py
+  - find: `mode = os.stat(path).st_mode & 0o7777  # an existing file keeps its mode`
+  - replace: `mode = 0o600  # an existing file keeps its mode`
+- M153 REQ-EVD-009.B8 skill/sdd/scripts/sdd.py
+  - find: `and last["command"] == command`
+  - replace: `and True`

@@ -4,10 +4,10 @@ title: A scripted plan of a run's steps and checkpoints
 type: feature
 size: standard
 assurance: production
-status: implementing
+status: archived
 capabilities: orchestration=ORC, evidence=EVD
 created: 2026-10-30
-spec_hash: 3c20b8dc26d5
+spec_hash: 65f28de8f948
 ---
 
 # 0008-run-plan — A scripted plan of a run's steps and checkpoints
@@ -74,6 +74,7 @@ answers here as "- <question> → <answer> (operator, <date>)". -->
 - A1 2026-10-08: <reason> → <what changed> -->
 - A1 2026-11-16: the operator folds a scripted test runner into this change ("fold it in and 0010 will be about targeting… Let's do this in 0008", Claude Code chat) → Intent widened from printing the plan to printing it, running each test step and reporting the exceptions; Scope adds the runner, its report, sorted failures, script-written red and green lines, reuse on unchanged code and the last run kept in git and older runs out of it, the baseline in the change's folder; the Out line on running steps narrowed; REQ-ORC-009 modified (the baseline step, row B9); REQ-EVD-007 to REQ-EVD-011 added (run a step and report, the baseline, reuse, red and green lines, refusals); Known gaps added and updated; capability evidence=EVD added; the Critic's amendment A1 review (23 findings, Q1-Q5) applied
 - A2 2026-11-17: the design (Architect, design.md Questions Q1-Q5) found five cases the spec didn't cover; the operator answered "1 A, 2 A, 3 A, 4 A, 5 A" (Claude Code chat) → baseline.txt's commit is `none` outside git or before the first commit, and no reuse then (EVD-008.B2, EVD-009.N2); --red and --green insert a missing red or green line after test: (EVD-010.B4); a skipped test is refused by --red and --green (EVD-010.N9); a reused run counts as the run for --red, --green and baseline, with its time (EVD-008.B3, EVD-010.B5); an empty `- Test report:` line reads as none (EVD-007.N7); then the failure-mode review's spec gaps, answered "1 A, 2 A, 3 A, 4 A" (operator, 2026-11-17, Claude Code chat): a `Test report:` path that names a tracked file or a folder, or leads outside through a symlink, is refused (EVD-011.N19-N21); run-plan shows "- baseline: none (the design has no \"Test report:\" line)" (ORC-009.B10); a red message holding a comment marker or `(after T` is written as "red: failed" (EVD-010.B6); a task with two red or green lines is refused (EVD-010.N10); seven Known gaps added (concurrent runs, duplicate names, output size, runner artifacts, test-line filling, platforms, names with spaces)
+- A4 2026-11-24: verification F2, F3, F4; the operator answered "F2 B, F3 A, F4 A" (Claude Code chat) → REQ-EVD-010.B7 (an existing tasks.md keeps its mode), REQ-EVD-009.B8 (a changed Test command is not reused), three Known gaps (F2; the rest of F4; a new file's mode)
 
 ## Approvals
 | Gate | Date | Evidence |
@@ -82,3 +83,5 @@ answers here as "- <question> → <answer> (operator, <date>)". -->
 | amend | 2026-11-17 | Operator in Claude Code chat, 2026-11-17: "approve amendment A1" (reply to "Do you approve amendment A1?" for 0008-run-plan after the Critic's A1 review, 23 findings applied, Q1-Q5 answered) |
 | amend | 2026-11-17 | Operator in Claude Code chat, 2026-11-17: "approved" (reply to "Do you approve amendment A2?" for 0008-run-plan: the Architect's Q1-Q5 answered 1 A-5 A and the failure-mode review's gaps answered 1 A-4 A) |
 | plan | 2026-11-17 | Operator in Claude Code chat, 2026-11-17: "/sdd approve" (reply to "Do you approve this plan?" for 0008-run-plan: 24 tasks over 110 scenarios, refusals grouped by guard, mutation entries added per rule at green) |
+| amend | 2026-11-25 | Operator in Claude Code chat, 2026-11-25: "/sdd aprove" (amendment A4 to 0008: REQ-EVD-010.B7, REQ-EVD-009.B8 and three Known gaps, after "F2 B, F3 A, F4 A") |
+| results | 2026-11-25 | Operator in Claude Code chat, 2026-11-25: "/sdd approve" (results of 0008 after verification pass 2, PASS) |

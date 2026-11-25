@@ -35,10 +35,33 @@ Maintained by `sdd.py archive`. Do not edit by hand. -->
 - REQ-ORC-004.S13 is tested for a standard change only; a mini change with a GAPS verdict, and a verdict word other than PASS or GAPS (which also gets the gaps gate), have no test. (0003-design-depth-analyze-next)
 - No scenario shows that a word shared by several clauses doesn't cover a clause (REQ-ANL-006). (0003-design-depth-analyze-next)
 - `design_findings` falls back to the project's level when the report's level isn't valid; no scenario reaches that defensive line. (0003-design-depth-analyze-next)
+- A capability declared with two prefixes gets one component checkpoint per prefix, each running part of its tests, not one checkpoint for the capability (0005 Q4). (0008-run-plan)
+- A task whose scenario references carry two prefixes is grouped by its first reference only; its other prefix gets no checkpoint from it. (0008-run-plan)
+- A run that spans several changes, and components other than capabilities (such as architectural layers), are not planned. (0008-run-plan)
+- check at the plan stage and `advance designed` read `Test command:` as its first mention anywhere in the change, and replay and mutate read `Test one:` as its first list line anywhere in the change, not from the design's list line that run-plan reads, so a prose mention or a list line outside the design can stand in for the design's line and the command replay runs can differ from the one run-plan prints; this defect is outside this change, and the operator decides on a separate defect change. (0008-run-plan)
+- That `implement` follows the printed plan is method work under project rule 1, verified by review and a dogfood run. (0008-run-plan)
+- A test run that never ends is not stopped: sdd.py waits for the command to end. (0008-run-plan)
+- A baseline is refused once a task is ticked, but a code edit made before the first tick, outside a task, is not detected: the baseline then holds the edited code's results. (0008-run-plan)
+- A red line that holds only after an earlier task's code (`(after T<n>)`) and a `red: pre-existing` line are still written by hand; `test --red` writes neither. (0008-run-plan)
+- A runner that can't write JUnit XML gets the exit code and the last 20 lines only: no per-test outcome, no sorting, no red or green line. A project's own adapter that writes the report (as this repository's unittest one, in the design) is the way round it. (0008-run-plan)
+- Reuse compares file content, not what the tests read: a change to a file git ignores, an environment variable or a service the tests call doesn't stop a reuse; --rerun runs the step anyway. (0008-run-plan)
+- That implement and verify run their test steps through `sdd.py test`, and read its report instead of the output, is method work under project rule 1, verified by review and a dogfood run. (0008-run-plan)
+- Only the project folder's absolute path is written as `.`: other local paths in a runner's output (the home folder, a virtual environment, a temporary folder) are kept as they are in the committed last-run.log, and a project rule against local paths in committed files is checked by the operator. (0008-run-plan)
+- A red or green line typed by hand in the form sdd.py writes, with "(sdd test <time>)", is not told apart from one sdd.py wrote: the mark isn't checked against a recorded run. (0008-run-plan)
+- Two `sdd.py test` runs at the same moment can overwrite each other's report and last run (concurrency is not required at production). (0008-run-plan)
+- Duplicate test names in one report are counted as the report lists them, and a name that both passed and failed counts as failed. (0008-run-plan)
+- A runner's output is kept whole, with no size cap, and a large last-run.log is committed. (0008-run-plan)
+- Files a runner writes that git doesn't ignore (caches, coverage data) change the digest, so no run is reused after them. (0008-run-plan)
+- No platform is named: Windows paths in commands and a missing `python3` are not handled. (0008-run-plan)
+- A test name with surrounding spaces or a newline doesn't survive baseline.txt, so it isn't matched to the baseline. (0008-run-plan)
+- A range with nothing left to run still prints "component checkpoints skipped" when the design has no Test component line (verification F2). (0008-run-plan)
+- No test catches the reused suffix on a result line with no report, a submodule in the digest, the skip of a tracked file deleted in the working tree, or write_evidence keeping CRLF line endings and ending its block at a heading (verification F4). (0008-run-plan)
+- A file the runner creates gets the umask default mode; only an existing file's mode is kept (verification F3). (0008-run-plan)
 
 ## Change history
 - 0002-subagent-fanout — Subagent fan-out: prime orchestrator, role tiers, scripted verification evidence (2026-10-18): added REQ-ORC-001, added REQ-ORC-002, added REQ-ORC-003
 - 0003-design-depth-analyze-next — Design depth, analyze and next (2026-10-21): added REQ-ORC-004, added REQ-ORC-005, added REQ-ORC-006
+- 0008-run-plan — A scripted plan of a run's steps and checkpoints (2026-11-25): added REQ-ORC-009, added REQ-ORC-010, added REQ-ORC-011
 
 ## Requirements
 
@@ -193,3 +216,61 @@ When a standard change is at designed, has tasks and check reports no error, sta
 
 - N/A dependency: only local files in the repository are read; no program or service is called
 - N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
+
+### REQ-ORC-009 Run-plan prints the steps of a run
+When the operator runs `sdd.py run-plan [<form>]` for the active change, or the one `--change` names, at planned or implementing, sdd.py shall print the test steps of the run that `implement <form>` makes and exit 0, running no command and changing no file: the form is `T<n>` (that task), `T<a>-T<b>` (the tasks from T<a> to T<b> in plan order), `next` (the first unticked task; the default) or `all` (every task of the plan); `Test command:` and `Test one:` are each read from the first list line (`-` or `*`) of the design (design.md of a standard change, the Design notes of a mini one) that carries it, as REQ-EVD-004 reads `Test component:`, taken without surrounding backticks, and a mention elsewhere in the change does not count; the first line is `plan for <change-id> (<form>): <n> to do, <m> done`, where n and m count the unticked and the ticked tasks of the range; after it, or after the skipped line of REQ-ORC-010 when there is one, comes the baseline line, read from the change's baseline.txt (REQ-EVD-008): `- baseline: none (the design has no "Test report:" line)`, unnumbered, when the design has no `Test report:` line or an empty one and no baseline.txt, otherwise `1. baseline: <test command>` when the change has no baseline.txt and no ticked task, `- baseline: none (a task is ticked; runs sort without one)`, unnumbered, when it has no baseline.txt and a ticked task, or `- baseline: recorded <time>`, unnumbered, with the time of its first line, when it has one; then one line per task of the range, in plan order; for an unticked task, first `<k>. T<i>: <Test one> (no test line yet)` when the task has no test line (empty or a placeholder, as replay reads it, REQ-EVD-001), where `<Test one>` is the `Test one:` command as written, without backticks; otherwise `<k>. T<i>: no command (the test line has no "::")` when that command uses `{file}` or `{name}` and the test line has no `::`; otherwise `<k>. T<i>: <command>`, where the command is the `Test one:` command split into words as a shell splits them, then each `{test}`, `{file}` and `{name}` filled inside its word from the task's test line as replay fills them (REQ-EVD-001), the words joined by single spaces, a word being single-quoted when it is empty or holds a character other than an ASCII letter, an ASCII digit or one of `@%+=:,./_-`, with a single quote inside it written `'"'"'`; and `- T<i>: done`, unnumbered, for a ticked task, with the component checkpoints of REQ-ORC-010 placed among them; and last `<k>. full suite: <test command>`; the test command is the `Test command:` text as written, without backticks, and k numbers the numbered lines from 1; a range with no unticked task prints only the first line, the baseline line, its done lines and `nothing to run: no task to do in the range`.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | a standard change 0001-x at planned whose design has "- Test command: `runner tests`", "- Test one: `runner {file} {name}`" and "- Test component: `runner -k REQ_{prefix}_`", and tasks T1 (REQ-DUR-001.S1, ticked), T2 (REQ-DUR-001.N1, test line "tests/t_x.py::test_b") and T3 (REQ-DUR-001.S2, test line "tests/t_x.py::test_c") | run-plan T1-T3 | exactly "plan for 0001-x (T1-T3): 2 to do, 1 done", "- baseline: none (a task is ticked; runs sort without one)", "- T1: done", "1. T2: runner tests/t_x.py test_b", "2. T3: runner tests/t_x.py test_c", "3. component DUR: runner -k REQ_DUR_", "4. full suite: runner tests" · exit 0 · no command is run · no file is changed |
+| S2 | happy | the S1 change, with another change 0002-y active | run-plan T2 --change 0001-x | exactly "plan for 0001-x (T2): 1 to do, 0 done", "- baseline: none (a task is ticked; runs sort without one)" (T1 is ticked), "1. T2: runner tests/t_x.py test_b", "2. component DUR: runner -k REQ_DUR_", "3. full suite: runner tests" · exit 0 · no file is changed |
+| S3 | happy | the S1 change, active | run-plan next | the S2 lines, with the first line "plan for 0001-x (next): 1 to do, 0 done" · exit 0 |
+| B1 | boundary | the S1 change, active | run-plan T2-T2 | the S2 lines, with the first line "plan for 0001-x (T2-T2): 1 to do, 0 done" · exit 0 |
+| B2 | boundary | the S1 change, active | run-plan, with no form | the S3 lines (next is the default) · exit 0 |
+| B3 | boundary | the S1 change with T2 and T3 ticked too | run-plan all | exactly "plan for 0001-x (all): 0 to do, 3 done", "- baseline: none (a task is ticked; runs sort without one)", "- T1: done", "- T2: done", "- T3: done", "nothing to run: no task to do in the range" · no numbered line · exit 0 · no file is changed |
+| B4 | boundary | the B3 change | run-plan next | exactly "plan for 0001-x (next): 0 to do, 0 done", "- baseline: none (a task is ticked; runs sort without one)", "nothing to run: no task to do in the range" · exit 0 · no file is changed |
+| B5 | boundary | the S1 change with "- Test one: `runner {test}`" and T2's test line "tests/it's x.py" | run-plan T2 | the step "1. T2: runner 'tests/it'"'"'s x.py'" · exit 0 |
+| B6 | boundary | the S1 change with T2's test line "tests/t_x.py" | run-plan T2 | the step `1. T2: no command (the test line has no "::")`, then the component and full-suite lines of S2 · exit 0 |
+| B7 | boundary | the S1 change with T2's test line empty | run-plan T2 | the step "1. T2: runner {file} {name} (no test line yet)", then the component and full-suite lines of S2 · exit 0 |
+| B8 | boundary | a mini change 0001-x at implementing, active, whose Design notes have the S1 design lines, with the S1 tasks | run-plan T2 | the S2 lines · exit 0 · the status stays implementing · no file is changed |
+| B10 | boundary | the S1 change with all its tasks unticked and no "Test report:" line | run-plan T2 | the second line is `- baseline: none (the design has no "Test report:" line)` · "1. T2: runner tests/t_x.py test_b" · exit 0 |
+| B9 | boundary | the S1 change whose baseline.txt starts "# baseline 2026-11-16T09:00:00Z abc1234" | run-plan T2 | exactly "plan for 0001-x (T2): 1 to do, 0 done", "- baseline: recorded 2026-11-16T09:00:00Z", "1. T2: runner tests/t_x.py test_b", "2. component DUR: runner -k REQ_DUR_", "3. full suite: runner tests" · exit 0 · no file is changed |
+
+- N/A validation: covered by REQ-ORC-011, which refuses a bad form, task ID or design line
+- N/A state: covered by REQ-ORC-011, which refuses the other statuses and a missing change
+- N/A dependency: only the change's own files are read; no command is run
+- N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
+
+### REQ-ORC-010 Run-plan places a component checkpoint after each group
+When `sdd.py run-plan` prints a plan with an unticked task, sdd.py shall print a component checkpoint, `<k>. component <PREFIX>: <command>`, where the command is the design's `Test component:` command (REQ-EVD-004) with every `{prefix}` replaced by PREFIX, for each group of unticked tasks of the range that share a requirement prefix with no unticked task of another prefix between them, a task's prefix being the prefix of its first scenario reference; the checkpoint comes right before the next unticked task with another prefix, or after the range's last task; a ticked task, or a task with no scenario reference, is listed but neither joins nor ends a group; and when the design has no `Test component:` command, or an empty one, sdd.py shall print `component checkpoints skipped: the design has no "Test component:" line` right after the first line and no component step, the full suite staying the last step.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| S1 | happy | a change at planned with the REQ-ORC-009.S1 design and unticked tasks T1 (REQ-DUR-001.S1), T2 (REQ-DUR-001.N1), T3 (REQ-CLI-001.S1) and T4 (REQ-CLI-001.N1), each with a test line | run-plan T1-T3 | the numbered lines are, in order: "1. baseline: runner tests", 2 T1, 3 T2, "4. component DUR: runner -k REQ_DUR_", 5 T3, "6. component CLI: runner -k REQ_CLI_", "7. full suite: runner tests" (the range ends inside the CLI group) · exit 0 · no file is changed |
+| B2 | boundary | the S1 design and unticked tasks T1 (REQ-DUR-001.S1), T2 (REQ-CLI-001.S1) and T3 (REQ-DUR-001.N1) | run-plan all | 2 T1, "3. component DUR: …", 4 T2, "5. component CLI: …", 6 T3, "7. component DUR: …", "8. full suite: runner tests" · exit 0 |
+| B3 | boundary | the S1 design and unticked tasks T1 (REQ-DUR-001.S1), T2 (no scenario reference), T3 (REQ-DUR-001.N1), T4 (no scenario reference) and T5 (REQ-CLI-001.S1) | run-plan all | 2 T1, 3 T2, 4 T3, 5 T4, "6. component DUR: …", 7 T5, "8. component CLI: …", "9. full suite: runner tests" · no component line between T1 and T4 · exit 0 |
+| B4 | boundary | the S1 design and tasks T1 (REQ-DUR-001.S1, unticked), T2 (REQ-CLI-001.S1, ticked) and T3 (REQ-DUR-001.N1, unticked) | run-plan all | the first line ends "2 to do, 1 done" · "- baseline: none (a task is ticked; runs sort without one)" · 1 T1 · "- T2: done" · 2 T3 · "3. component DUR: …" · "4. full suite: runner tests" · no component CLI line · exit 0 |
+| B5 | boundary | the S1 change whose design has no "Test component:" line | run-plan all | the second line is `component checkpoints skipped: the design has no "Test component:" line` · the third line is "1. baseline: runner tests" · no component step · "6. full suite: runner tests" is the last line · exit 0 · no file is changed |
+
+- N/A validation: the component command is checked at the plan stage by REQ-EVD-004
+- N/A state: covered by REQ-ORC-011, which refuses the other statuses and a missing change
+- N/A dependency: only the change's own files are read; no command is run
+- N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
+
+### REQ-ORC-011 Run-plan refuses what it cannot plan
+If `sdd.py run-plan` is run in a repository without specs/, or with no active change and no `--change`, or a `--change` that names no change in `specs/changes/`, or for a change at a status other than planned or implementing, or is given a form other than `T<n>`, `T<a>-T<b>`, `next` or `all`, a task ID that isn't in the plan, a range whose T<a> comes after T<b> in the plan, or the design has no `Test one:` or no `Test command:` list line, or an empty one (the first list line of each counts, REQ-ORC-009), or one of these two commands has a quote that doesn't close, or the change's baseline.txt doesn't start with a `# baseline <time> <commit>` line, then sdd.py shall print an error that names the first problem in that order (specs/, the change, its status, the form, the task IDs, the range, the design lines, then baseline.txt) and exit 1, printing no plan line and changing no file.
+
+| ID | Category | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| N1 | validation | the REQ-ORC-009.S1 change, active | run-plan T1- | exit 1 · the error names "T1-" and lists T<n>, T<a>-T<b>, next and all · no plan line is printed · no file is changed |
+| N2 | validation | the REQ-ORC-009.S1 change, active | run-plan T3-T1 | exit 1 · the error says T3 comes after T1 in the plan · no plan line is printed · no file is changed |
+| N3 | validation | the REQ-ORC-009.S1 change, which has no task T9 | run-plan T2-T9 | exit 1 · the error names T9 · no plan line is printed · no file is changed |
+| N4 | state | the REQ-ORC-009.S1 change at draft | run-plan T2 | exit 1 · the error names the status draft and says run-plan needs planned or implementing · no plan line is printed · no file is changed |
+| N5 | state | no active change | run-plan T2 | exit 1 · the error says there is no active change · no plan line is printed · no file is changed |
+| N6 | validation | no change 9999-none | run-plan T2 --change 9999-none | exit 1 · the error names 9999-none · no plan line is printed · no file is changed |
+| N7 | validation | the REQ-ORC-009.S1 change without a "Test one:" design line | run-plan T2 | exit 1 · the error names "Test one:" · no plan line is printed · no file is changed |
+| N8 | validation | the REQ-ORC-009.S1 change with an empty "- Test command:" design line, whose proposal mentions "Test command:" in its prose | run-plan T2 | exit 1 · the error names "Test command:" · no plan line is printed · no file is changed |
+| N9 | validation | the REQ-ORC-009.S1 change with "- Test one: `runner '{name}`" | run-plan T2 | exit 1 · the error names "Test one:" and says a quote is not closed · no plan line is printed · no file is changed |
+| N10 | validation | the REQ-ORC-009.S1 change with "- Test command: `runner 'tests`" | run-plan T2 | exit 1 · the error names "Test command:" and says a quote is not closed · no plan line is printed · no file is changed |
+| N11 | state | a repository without specs/ | run-plan T2 | exit 1 · the error says SDD is not initialized · no plan line is printed · no file is created |
+| N12 | validation | the REQ-ORC-009.S1 change whose baseline.txt starts "<<<<<<< HEAD" | run-plan T2 | exit 1 · the error names baseline.txt and the "# baseline <time> <commit>" line it expects · no plan line is printed · no file is changed |

@@ -125,6 +125,7 @@ When `sdd.py test <step>` is run and `last-run.json` records a run of the same c
 | B5 | boundary | the S1 setup, then a test component DUR run, then nothing changed | test full | fake.py is run (the last run is another step; earlier runs are not reused) · no "reused" |
 | B6 | boundary | the S1 setup, then a tracked file t2.py deleted | test full | fake.py is run · no "reused" |
 | B7 | boundary | the S1 setup with the last run recorded for another change 0002-y | test full | fake.py is run · no "reused" |
+| B8 | boundary | the S1 setup, then the design's Test command changed to "`python3 fake2.py all`" | test full | fake2.py is run · fake.py is not run · no "reused" |
 | N1 | dependency | the S1 change in a folder that is not a git repository, with a last run | test full | fake.py is run · no "reused" · exit 0 |
 | N2 | dependency | the S1 change in a git repository with no commit yet, with a last run | test full | fake.py is run · no "reused" · exit 0 |
 
@@ -154,6 +155,7 @@ Where `sdd.py test T<n>` is run with `--red` or `--green` for an unticked task w
 | N9 | validation | the S1 change, the test skipped | test T1 --red | exit 1 · the error says the test was skipped · tasks.md is unchanged |
 | N10 | validation | the S1 change whose T1 has two red: lines | test T1 --red | exit 1 · the error names both lines · nothing is run · no file is changed |
 | B6 | boundary | the S1 change, the failure message "expected", a comment opener (`<!` then two hyphens), then " x" | test T1 --red | T1's line is "  - red: failed (sdd test <time>)" · exit 0 |
+| B7 | boundary | the S1 change with tasks.md at mode 0644 | test T1 --red | the S1 red line · tasks.md keeps mode 0644 · exit 0 |
 | B3 | boundary | the S1 change, the report also holding t.other_test_REQ_DUR_001_N1_x, which passes | test T1 --red | t.other_test_REQ_DUR_001_N1_x doesn't match (its name doesn't end with "." and the part) · the S1 red line · exit 0 |
 
 - N/A access: sdd.py runs locally with no users or roles; who may run it is governed by the agent rules
@@ -212,3 +214,6 @@ If `sdd.py test` is run in a repository without specs/, or with no active change
 - A test line holding `{name}` or `{file}`, or several `::`, is filled as replay fills it (REQ-EVD-001), for the defect change on the loose readers.
 - No platform is named: Windows paths in commands and a missing `python3` are not handled.
 - A test name with surrounding spaces or a newline doesn't survive baseline.txt, so it isn't matched to the baseline.
+- A range with nothing left to run still prints "component checkpoints skipped" when the design has no Test component line (verification F2).
+- No test catches the reused suffix on a result line with no report, a submodule in the digest, the skip of a tracked file deleted in the working tree, or write_evidence keeping CRLF line endings and ending its block at a heading (verification F4).
+- A file the runner creates gets the umask default mode; only an existing file's mode is kept (verification F3).

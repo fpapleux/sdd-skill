@@ -6879,7 +6879,10 @@ class RunOfFilesTests(RunnerBase):
         kept = "run-of-unreadable-2026-11-17T10-00-00Z"
         self.assertEqual(lines[0], f"warning: last-run.json could not be read; kept as {kept}.json")
         self.assertEqual(lines[1], f"test full: {PY} fake.py all")
-        self.assertEqual(lines[-1], "log: specs/.sdd/runs/last-run.log")
+        self.assertRegex(lines[2], RESULT)
+        self.assertEqual(RESULT.match(lines[2]).groups(), ("1", "1", "0", "1", "3"))
+        self.assertEqual(lines[3:], ["failed: t.test_REQ_DUR_001_N1_x", "  AssertionError: 1 != 2",
+                                     *S1_SORT, "log: specs/.sdd/runs/last-run.log"])
         self.assertEqual((self.runs / f"{kept}.json").read_text(), "<<<<<<< HEAD\n")
         self.assertEqual((self.runs / f"{kept}.log").read_text(), "earlier output\n")
         self.assertEqual(self.record()["time"], "2026-11-17T10:00:00Z")
@@ -7200,6 +7203,21 @@ class ReuseKeyTests(ReuseBase):
         self.assert_run(lines)
         self.assertEqual(self.record()["change"], "0001-x")
 
+    def test_REQ_EVD_009_B8_a_changed_test_command_runs_the_new_command(self):
+        counter2 = self.scratch / "runs2.txt"
+        plan = {"counter": str(counter2), "lines": ["running 3 tests", "FAILED (failures=1)"],
+                "report": S1_REPORT, "path": "out/junit.xml", "exit": 1}
+        self.repo.write("fake2.py", FAKE_RUNNER.format(plan=json.dumps(plan)))
+        self.first_run()
+        self.design(f"- Test command: `{PY} fake2.py all`\n- Test report: `out/junit.xml`\n")
+        code, lines = self.step_run("full")
+        self.assertEqual(counter2.read_text().splitlines() if counter2.exists() else [], ["all"])
+        self.assertEqual(self.fake_runs(), ["all"])
+        result = next(line for line in lines if line.startswith("result:"))
+        self.assertNotIn("reused", result)
+        self.assertEqual(self.record()["command"], f"{PY} fake2.py all")
+        self.assertEqual(code, 0)
+
     def test_REQ_EVD_009_N1_outside_a_git_repository_every_step_runs(self):
         self.step_run("full", now="2026-11-16T09:00:00Z")
         self.assertTrue((self.runs / "last-run.json").exists())
@@ -7353,6 +7371,14 @@ class EvidenceMatchTests(EvidenceBase):
                 before, "  - red:\n", "  - red: failed (sdd test 2026-11-17T10:00:00Z)\n"), message)
             self.assertEqual(code, 0)
 
+    def test_REQ_EVD_010_B7_an_existing_tasks_file_keeps_its_mode(self):
+        tasks_file = self.dir / "tasks.md"
+        os.chmod(tasks_file, 0o644)
+        before = self.tasks_text()
+        code, lines = self.evidence("--red")
+        self.assertEqual(self.tasks_text(), self.edited(before, "  - red:\n", RED_S1 + "\n"))
+        self.assertEqual(os.stat(tasks_file).st_mode & 0o777, 0o644)
+        self.assertEqual(code, 0)
 
 
 class EvidenceRefusalTests(EvidenceBase):

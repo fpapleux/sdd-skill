@@ -8,6 +8,34 @@ v1 increments 1–3 = 0.2–0.4).
 **Behavior** marks changes to what the skill or `sdd.py` does. Other entries
 are planning, specs and documentation.
 
+## 1.0.0 — 2026-11-25
+
+v1 is complete. This release adds change 0008, a `standard` change, verified
+and archived: a scripted test runner and run plan. `evidence` gains 5
+requirements (11 in all) and `orchestration` gains 3 (9). The change has 8
+requirements, 112 scenarios and 27 tasks. The suite is now 677 tests, and all
+153 planned mutations are caught. Impact-targeted testing (change 0010),
+retiring resolved known gaps (change 0009) and `harden` move to v2.
+
+- **Behavior:** `sdd.py run-plan [T<n>|T<a>-T<b>|next|all]` prints the test
+  steps of an implement run in order: the baseline, each task's test, the
+  component checkpoints and the full suite. It runs nothing and writes
+  nothing, so every run of the same tasks follows the same plan (change 0008).
+- **Behavior:** `sdd.py test T<n>|component <PREFIX>|full|baseline` runs one
+  step with the design's command, records it in `specs/.sdd/runs/`, and prints
+  a short report: the result, each failure with its message, and the sort into
+  regressions, expected failures and the rest. With a `Test report:` line in
+  the design it reads a JUnit XML report (change 0008).
+- **Behavior:** the last run is reused when the change, the step, the command,
+  the commit and the files are unchanged; `--rerun` runs it anyway. `baseline`
+  writes the tests that pass before the change to `baseline.txt` once, and
+  `--red` and `--green` write a task's red or green line from the run
+  (change 0008).
+- **Behavior:** files the runner rewrites keep their mode (change 0008,
+  amendment A4).
+- The implement phase and the Implementer role use `run-plan` and `test`; a
+  test line that names a group of tests is recorded by hand.
+
 ## 0.20.0 — 2026-11-03
 
 Two of the follow-ups 0.19.0 left open, each a `mini` change, verified and
