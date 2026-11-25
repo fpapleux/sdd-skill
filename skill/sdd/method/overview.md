@@ -51,7 +51,7 @@ Pick the size by asking from the top, and stop at the first "yes":
 | Failure categories required | none: keep a **Known gaps** list | validation, state, dependency | + boundary, access | + concurrency, combination, invariant |
 | A failure scenario's Then asserts | — | The error + nothing else happened | The error + no side effects + state unchanged | Same as production |
 | Coverage review | Flag open questions only | Self-audit; `SDD check` enforces coverage. A Critic round (`clarify`) is required for `standard` changes. | Critic round required at any size, by a strong subagent or in a fresh session | Same as production, every round |
-| Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v1)* | + mutation and property-based tests *(v1)* |
+| Verification | Tests pass | Tests pass, coverage reported if available | + blocking coverage on the diff, adversarial probe *(v2)* | + mutation and property-based tests *(v3)* |
 
 `SDD check` enforces the category requirements at **every** level. Independent
 review at `production` (a strong subagent or a fresh session) is recorded and
@@ -160,6 +160,8 @@ evidence) is in `method/format.md`. Read it before writing or editing a spec.
 | `SDD use <change-id>` | Switch the active change |
 | `SDD replay --base <rev>` | Rerun each ticked task's test at the base revision and now; report each as confirmed or a mismatch. Needs git and a `Test one:` line. |
 | `SDD mutate` | Run the planned `## Mutations`; report each as caught, survived or invalid. Needs git and a `Test one:` line. |
+| `SDD run-plan [T<n>\|T<a>-T<b>\|next\|all] [--change <id>]` | Print the test steps of an implement run, in order: the baseline, each task's test, the component checkpoints and the full suite. Runs nothing, writes nothing. |
+| `SDD test T<n>\|component <PREFIX>\|full\|baseline [--red\|--green] [--rerun] [--change <id>]` | Run one step with the design's command and print its report: the result, each failure with its message, and the sort. Records the run in `specs/.sdd/runs/` and reuses the last run on unchanged code (`--rerun` runs it anyway). `baseline` writes `baseline.txt` once; `--red` and `--green` write the task's red or green line. Exit 1 = a regression, a failed run with no report, a command that exits other than 0 while the report shows no failure, or a refusal. |
 | `SDD sort-failures <file> [--passed-before <list>] [--change <id>]` | Sort failing test names (one per line) into `regression` (a ticked task plans its scenario), `expected` (the change's scenario, task not done) and `outside`, then a `sorted:` line. With `--passed-before`, a failing test on that list of tests that passed before the run is a `regression`. Writes nothing. Exit 1 = a regression. |
 | `SDD defect add\|decide\|close` | The project's defect log, `specs/defects.md`. `add --test <name> --severity critical\|major\|minor [--capability <PREFIX>]` records an open, undecided defect for a failing test. `decide D<n> fix-now\|later\|wont-fix --evidence "<the operator's words>"` records the operator's decision. `close D<n> --evidence "…"` closes a decided defect with what fixed it, or why it is closed. |
 

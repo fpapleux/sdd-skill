@@ -15,7 +15,9 @@ Check the delivered work against the spec. Role: **Verifier**
    chat), which works because all state is in files; continue here only if
    they say so.
 3. If the status is `implementing`, run `SDD advance verifying`.
-4. Follow the Verifier checklist and write `## Verification`.
+4. Follow the Verifier checklist and write `## Verification`. Its first
+   step runs the full suite with `SDD test full --rerun` and records the
+   `result:` line.
 5. **Gaps found:**
    - The behavior is specified but untested, weakly tested, or failing:
      append a new task for each (next free `T` number, same scenario ref), run

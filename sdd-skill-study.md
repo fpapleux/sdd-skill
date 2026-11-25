@@ -770,6 +770,12 @@ capabilities, size caps).
 as increment 6 since the 2026-10-14 renumbering (first planned as increment 5). From increment 4 on, each increment is an SDD change in this
 repository's own `specs/`.
 
+**Scope update (operator, 2026-11-17):** increments 6 (releases and deploy,
+with delivery profiles and install options) and 7 (`production` assurance:
+blocking diff coverage, adversarial probe) move to v2. v1 adds instead the
+scripted test runner (change 0008) and impact-targeted testing (change 0010),
+then ends with `harden` (increment 8).
+
 **Progress:**
 - Increment 1 merged in fpapleux/sdd-skill#1.
 - Increment 2 merged in fpapleux/sdd-skill#2. It added the `standard` size:
@@ -876,15 +882,22 @@ for unapplied fixes).
   - verification round 2 cost 200k tokens and 17 minutes, most of it
     mechanical (old-code replay, 27 mutants), which supports scripting those
     parts.
-- **Visual design step (post-v1, unscheduled; operator, 2026-10-20):** a phase
-  that produces a style guide, style sheets and UI mock-ups, inserted into
-  the lifecycle at a later stage. Its place in the flow, role, artifacts and
-  assurance depth are open and need their own scope refinement.
+- **UX design and UI design capabilities (post-v1, unscheduled; operator,
+  2026-11-04):** two design capabilities, one for each discipline.
+  - **UX design:** how users reach their goals, for example user journeys,
+    flows, information architecture and wireframes.
+  - **UI design:** the visual design step recorded on 2026-10-20, which
+    produces a style guide, style sheets and UI mock-ups.
+
+  For each, its place in the lifecycle, role, artifacts, how its output is
+  traced to requirements and assurance depth are open and need their own
+  scope refinement.
 - **Contracts, revisit (post-v1; operator, 2026-10-20):** increment 5 starts
   with a `## Contracts` section in `design.md` that `check` only checks for
   presence per interface. Revisit its depth with the `full` size in v3.
-- **Subagent fan-out** (increment 4), **design depth** (5), **releases and
-  deploy** (6), **`production` assurance** (7), **`harden`** (8).
+- **Subagent fan-out** (increment 4), **design depth** (5), **`harden`** (8);
+  **releases and deploy** (6) and **`production` assurance** (7) moved to v2
+  (operator, 2026-11-17).
 
 ## Sources
 

@@ -16,6 +16,8 @@ same way from Claude Code, Codex, a git hook or a terminal.
     python3 sdd.py archive
     python3 sdd.py next-req DUR
     python3 sdd.py use 0002-other-change
+    python3 sdd.py run-plan T1-T4
+    python3 sdd.py test T3
     python3 sdd.py sort-failures failed.txt
     python3 sdd.py defect add --test test_REQ_DUR_001_S1_parses --severity major
     python3 sdd.py defect decide D1 fix-now --evidence "Operator in chat: 'fix it now'"
@@ -39,7 +41,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES = SKILL_DIR / "templates"
@@ -168,6 +172,11 @@ class SddError(Exception):
 
 # ---------------------------------------------------------------- text helpers
 
+def now_utc() -> str:
+    """The current time, UTC to the second, as 2026-11-16T09:00:00Z (tests patch it)."""
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def today() -> str:
     return dt.date.today().isoformat()
 
@@ -261,10 +270,15 @@ def design_text(path: Path) -> str:
     return sections(strip_comments(path.read_text())).get("Design notes", "")
 
 
+def design_line(design: str, key: str) -> str:
+    """The text of the design's first list line `- <key>: ...`, without backticks ("" when absent)."""
+    match = re.search(rf"^\s*[-*]\s*{re.escape(key)}\s*:[ \t]*(.*)$", design, re.M)
+    return match.group(1).strip().strip("`").strip() if match else ""
+
+
 def test_component(design: str) -> str:
     """The design's component test command template ("" when absent), for the method and later tools."""
-    match = re.search(r"^\s*[-*]\s*Test component\s*:[ \t]*(.*)$", design, re.M)
-    return match.group(1).strip().strip("`").strip() if match else ""
+    return design_line(design, "Test component")
 
 
 def drop_front_matter(text: str, key: str) -> str:
@@ -2590,6 +2604,589 @@ def cmd_use(project: Project, args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- run-plan
+
+def run_plan_selection(tasks: list, form: str) -> list:
+    """The tasks of the form, in plan order: T<n>, T<a>-T<b>, next (the first unticked) or all."""
+    span = re.match(r"^(T\d+)-(T\d+)$", form)
+    if form not in ("all", "next") and not span and not re.match(r"^T\d+$", form):
+        raise SddError(f'"{form}" is not a form run-plan takes: use T<n>, T<a>-T<b>, next or all')
+    if form == "all":
+        return tasks
+    if form == "next":
+        return [t for t in tasks if not t["done"]][:1]
+    first, last = span.groups() if span else (form, form)
+    ids = [t["id"] for t in tasks]
+    for task_id in (first, last):
+        if task_id not in ids:
+            raise SddError(f"{task_id} is not a task of the plan")
+    if ids.index(first) > ids.index(last):
+        raise SddError(f"{first} comes after {last} in the plan")
+    return tasks[ids.index(first):ids.index(last) + 1]
+
+
+def task_argv(one: str, task: dict) -> tuple:
+    """("none", None) without a test line, ("no-colons", None) when the command needs '::' and
+    the line has none, else ("ok", the words of the Test one command filled from the line)."""
+    line = task["test"]
+    if not evidence_present(line):
+        return "none", None
+    argv = expand(one, line)
+    return ("ok", argv) if argv is not None else ("no-colons", None)
+
+
+def task_command(one: str, task: dict) -> str:
+    """The task's step as printed: the Test one command filled from its test line, or why there is none."""
+    kind, argv = task_argv(one, task)
+    if kind == "none":
+        return f"{one} (no test line yet)"
+    return shlex.join(argv) if argv else 'no command (the test line has no "::")'
+
+
+def component_command(template: str, prefix: str) -> str:
+    return template.replace("{prefix}", prefix)
+
+
+def task_prefix(task: dict):
+    """The requirement prefix of the task's first scenario reference, None without one."""
+    return REQ_TOKEN.match(task["refs"][0]).group(1) if task["refs"] else None
+
+
+def read_baseline(folder: Path):
+    """The change's baseline.txt as (time, commit, names), None when there is none."""
+    path = folder / "baseline.txt"
+    if not path.is_file():
+        return None
+    lines = path.read_text().splitlines()
+    match = re.match(r"^# baseline (\S+) (\S+)\s*$", lines[0]) if lines else None
+    if not match:
+        raise SddError('baseline.txt does not start with a "# baseline <time> <commit>" line')
+    return match.group(1), match.group(2), [n.strip() for n in lines[1:] if n.strip()]
+
+
+def plan_lines(change_id: str, form: str, tasks: list, selection: list, design: str,
+               baseline=None) -> list:
+    one, full = design_line(design, "Test one"), design_line(design, "Test command")
+    component = design_line(design, "Test component")
+    todo = [t for t in selection if not t["done"]]
+    lines = [f"plan for {change_id} ({form}): {len(todo)} to do, {len(selection) - len(todo)} done"]
+    steps = []
+
+    def step(text):
+        steps.append(text)
+        lines.append(f"{len(steps)}. {text}")
+
+    if not component:
+        lines.append('component checkpoints skipped: the design has no "Test component:" line')
+    numbered = False
+    if baseline:
+        lines.append(f"- baseline: recorded {baseline[0]}")
+    elif not design_line(design, "Test report"):
+        lines.append('- baseline: none (the design has no "Test report:" line)')
+    elif any(t["done"] for t in tasks):
+        lines.append("- baseline: none (a task is ticked; runs sort without one)")
+    else:
+        numbered = True
+    group = None  # the prefix of the open group of unticked tasks
+    if not todo:
+        for task in selection:
+            lines.append(f"- {task['id']}: done")
+        lines.append("nothing to run: no task to do in the range")
+        return lines
+    if numbered:
+        step(f"baseline: {full}")
+    for task in selection:
+        if task["done"]:  # listed, but neither joins nor ends a group
+            lines.append(f"- {task['id']}: done")
+            continue
+        prefix = task_prefix(task)
+        if component and prefix and group and prefix != group:
+            step(f"component {group}: {component_command(component, group)}")
+        group = prefix or group
+        step(f"{task['id']}: {task_command(one, task)}")
+    if component and group:
+        step(f"component {group}: {component_command(component, group)}")
+    step(f"full suite: {full}")
+    return lines
+
+
+def cmd_run_plan(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    status = read_front_matter(path.read_text()).get("status", "?")
+    if status not in ("planned", "implementing"):
+        raise SddError(f"run-plan needs a change at planned or implementing: {path.parent.name} is at {status}")
+    _, tasks = change_plan(path)
+    selection = run_plan_selection(tasks, args.form)
+    design = design_text(path)
+    for key in ("Test one", "Test command"):
+        if not design_line(design, key):
+            raise SddError(f'no "{key}:" line in the design (or it is empty)')
+    for key in ("Test one", "Test command"):
+        try:
+            shlex.split(design_line(design, key))
+        except ValueError:
+            raise SddError(f'the "{key}:" command has a quote that is not closed: {design_line(design, key)}')
+    baseline = read_baseline(path.parent)
+    for line in plan_lines(path.parent.name, args.form, tasks, selection, design, baseline):
+        print(line)
+    return 0
+
+
+# ---------------------------------------------------------------- test
+
+NO_BASELINE_WARNING = ("warning: no baseline recorded; a test that passed before the change "
+                       "is sorted as outside")
+JUNIT_OUTCOMES = {"failure": "failed", "error": "error", "skipped": "skipped"}
+
+
+def write_atomic(path: Path, text: str):
+    """Write the whole file or nothing: a temporary file in the same folder, then os.replace."""
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+        try:
+            mode = os.stat(path).st_mode & 0o7777  # an existing file keeps its mode
+        except OSError:
+            umask = os.umask(0)  # a new file gets the umask default, not mkstemp's 0600
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def step_command(design: str, tasks: list, step: str) -> tuple:
+    """The step's command as run-plan prints it, and the words it runs as."""
+    if step in ("full", "baseline"):
+        command = design_line(design, "Test command")
+        return command, shlex.split(command)
+    component = re.match(r"^component (\S+)$", step)
+    if component:
+        command = component_command(design_line(design, "Test component"), component.group(1))
+        return command, shlex.split(command)
+    if re.match(r"^T\d+$", step):
+        _, argv = task_argv(design_line(design, "Test one"), {t["id"]: t for t in tasks}[step])
+        return shlex.join(argv), argv
+    raise SddError(f'"{step}" is not a step test takes: use T<n>, component <PREFIX>, full or baseline')
+
+
+def read_junit(path: Path):
+    """Each testcase of the JUnit report as {name, outcome, lines}, in document order; None
+    when there is no report to read."""
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    if root.tag not in ("testsuites", "testsuite"):
+        return None
+    tests = []
+    for case in root.iter("testcase"):
+        outcome, lines = "passed", []
+        for child in case:
+            if child.tag in JUNIT_OUTCOMES:
+                outcome = JUNIT_OUTCOMES[child.tag]
+                text = (child.get("message") or "") + "\n" + (child.text or "")
+                lines = [line.rstrip() for line in text.splitlines() if line.strip()][:5]
+                break
+        classname = case.get("classname")
+        tests.append({"name": f"{classname}.{case.get('name')}" if classname else case.get("name"),
+                      "outcome": outcome, "lines": lines})
+    return tests
+
+
+def run_digest(project: Project) -> tuple:
+    """(commit, digest) of the code a run sees; the commit is None outside git or before the
+    first commit. The digest is None: no run is reused."""
+    try:
+        head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"], cwd=project.root,
+                              capture_output=True, text=True)
+    except OSError:
+        return None, None
+    commit = (head.stdout.strip() or None) if head.returncode == 0 else None
+    if commit is None:
+        return None, None
+    try:
+        return commit, files_digest(project.root)
+    except (OSError, subprocess.CalledProcessError):
+        return commit, None
+
+
+def files_digest(root: Path) -> str:
+    """SHA-256 over the path and content of each file git tracks or doesn't ignore, outside
+    specs/, in path order; a submodule counts by its commit."""
+    listed = set()
+    for extra in ([], ["--others", "--exclude-standard"]):
+        out = subprocess.run(["git", "ls-files", "-z", *extra], cwd=root, capture_output=True, check=True).stdout
+        listed.update(os.fsdecode(rel) for rel in out.split(b"\0") if rel)
+    digest = hashlib.sha256()
+    for rel in sorted(rel for rel in listed if rel.split("/")[0] != "specs"):
+        path = root / rel
+        if path.is_dir():
+            content = subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True,
+                                     check=True).stdout
+        elif not path.exists():
+            continue  # a tracked file deleted in the working tree
+        else:
+            content = path.read_bytes()
+        digest.update(f"{rel}\0{hashlib.sha256(content).hexdigest()}\n".encode("utf-8", "surrogateescape"))
+    return digest.hexdigest()
+
+
+RUN_KEYS = ("time", "change", "step", "command", "commit", "digest", "exit", "seconds", "tests", "tail")
+
+
+class RunStore:
+    """specs/.sdd/runs/: the last run's record (last-run.json) and output (last-run.log)."""
+
+    def __init__(self, project: Project):
+        self.folder = project.specs / ".sdd" / "runs"
+
+    def load(self):
+        """The last run's record; None when there is none, "unreadable" when it can't be read."""
+        path = self.folder / "last-run.json"
+        if not path.exists():
+            return None
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "unreadable"
+        if not isinstance(record, dict) or not all(key in record for key in RUN_KEYS):
+            return "unreadable"
+        return record
+
+    def keep_previous(self, previous):
+        """Rename the previous run's files to run-of-<its time>, with -2, -3... while a name is taken."""
+        if previous is None:
+            return
+        if previous == "unreadable":
+            stem = "run-of-unreadable-" + now_utc().replace(":", "-")
+        else:
+            stem = "run-of-" + previous["time"].replace(":", "-")
+        name, number = stem, 1
+        while any((self.folder / f"{name}{ext}").exists() for ext in (".json", ".log")):
+            number += 1
+            name = f"{stem}-{number}"
+        if previous == "unreadable":
+            print(f"warning: last-run.json could not be read; kept as {name}.json")
+        for ext in (".json", ".log"):
+            if (self.folder / f"last-run{ext}").exists():
+                os.replace(self.folder / f"last-run{ext}", self.folder / f"{name}{ext}")
+
+    def save(self, previous, record: dict, log: str):
+        self.folder.mkdir(parents=True, exist_ok=True)
+        ignore = self.folder / ".gitignore"
+        if not ignore.exists():
+            write_atomic(ignore, "run-of-*\n")
+        self.keep_previous(previous)
+        write_atomic(self.folder / "last-run.json", json.dumps(record, indent=2) + "\n")
+        write_atomic(self.folder / "last-run.log", log)
+
+
+def project_path_hider(project: Project):
+    """A function that writes each occurrence of the project folder's path as `.`, only where a
+    path separator or the end of the text follows it."""
+    roots = sorted({str(project.root), str(project.root.resolve())}, key=len, reverse=True)
+    pattern = re.compile("(?:" + "|".join(re.escape(r) for r in roots) + r")(?=[/\\]|$)", re.M)
+    return lambda text: pattern.sub(".", text)
+
+
+def run_step(project: Project, change_id: str, step: str, command: str, argv: list, report: str,
+             keys: tuple) -> dict:
+    """Run the step's words with no shell from the project folder, then record the run; keys
+    is the (commit, digest) taken before."""
+    commit, digest = keys
+    if report:
+        with contextlib.suppress(FileNotFoundError):
+            (project.root / report).unlink()
+    started = time.monotonic()
+    try:
+        proc = subprocess.Popen(argv, cwd=project.root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except OSError as exc:
+        raise SddError(f'cannot start "{argv[0]}": {exc.strerror or exc}')
+    out, _ = proc.communicate()
+    seconds = time.monotonic() - started
+    hide = project_path_hider(project)
+    output = hide(out.decode("utf-8", errors="replace"))
+    tests = read_junit(project.root / report) if report else None
+    for test in tests or []:
+        test["lines"] = [hide(line) for line in test["lines"]]
+    record = {"time": now_utc(), "change": change_id, "step": step, "command": hide(command),
+              "commit": commit, "digest": digest, "exit": proc.returncode, "seconds": seconds,
+              "tests": tests,
+              "tail": output.splitlines()[-20:]}
+    store = RunStore(project)
+    store.save(store.load(), record, output)
+    return record
+
+
+def report_lines(record: dict, refs: list, tasks: list, baseline, reused=False) -> tuple:
+    """The report of a run record, and the exit code: 1 when a regression is sorted."""
+    again = f" (reused from {record['time']})" if reused else ""
+    if record["tests"] is None:
+        return [f"test {record['step']}: {record['command']}",
+                f"result: exit {record['exit']}, no test report: each test's outcome is unknown{again}",
+                *[f"  {line}" for line in record["tail"]],
+                "log: specs/.sdd/runs/last-run.log"], 1 if record["exit"] != 0 else 0
+    tests = record["tests"] or []
+    count = {kind: sum(t["outcome"] == kind for t in tests) for kind in ("passed", "failed", "error", "skipped")}
+    lines = [f"test {record['step']}: {record['command']}",
+             f"result: {count['passed']} passed, {count['failed']} failed, {count['error']} errors, "
+             f"{count['skipped']} skipped ({len(tests)} tests) in {record['seconds']:.1f}s{again}"]
+    bad = [t for t in tests if t["outcome"] in ("failed", "error")]
+    for test in bad:
+        lines.append(f"{test['outcome']}: {test['name']}")
+        lines += [f"  {line}" for line in test["lines"]] or ["  (no message)"]
+    names = list(dict.fromkeys(t["name"] for t in bad))
+    sort, counts = sort_lines(names, set(baseline[2]) if baseline else set(), refs, tasks)
+    lines += sort
+    if baseline is None and record["step"] != "baseline":
+        lines.append(NO_BASELINE_WARNING)
+    lines.append(sorted_line(counts))
+    silent = record["exit"] != 0 and not bad
+    if silent:
+        lines.append(f"warning: the command exited {record['exit']} but the report shows no failure")
+    lines.append("log: specs/.sdd/runs/last-run.log")
+    return lines, 1 if counts["regression"] or silent else 0
+
+
+def reusable(last: dict, change_id: str, step: str, command: str, keys: tuple) -> bool:
+    """Whether the last run can stand for this one: the same change, step and command, on the
+    same commit and files."""
+    commit, digest = keys
+    return (commit is not None and digest is not None and last["change"] == change_id
+            and last["step"] == step and last["command"] == command
+            and (last["commit"], last["digest"]) == keys)
+
+
+def cmd_test(project: Project, args) -> int:
+    project.require_init()
+    path = project.current(args.change)
+    folder = path.parent
+    refs, tasks = change_plan(path)
+    design = design_text(path)
+    step = " ".join(args.step)
+    refuse_status(path)
+    refuse_step_form(step)
+    if step == "baseline":
+        refuse_baseline(path, tasks, design)
+    refuse_step_kind(path, tasks, step, args)
+    refuse_step_lines(project, tasks, design, step)
+    command, argv = step_command(design, tasks, step)
+    baseline = read_baseline(folder)
+    kind = "red" if args.red else "green" if args.green else None
+    tasks_file = path.parent / "tasks.md" if path.name == "proposal.md" else path
+    if kind:
+        refuse_evidence(tasks_file, {t["id"]: t for t in tasks}[step], kind)
+    keys = run_digest(project)
+    last = None if args.rerun else RunStore(project).load()
+    reused = isinstance(last, dict) and reusable(last, path.parent.name, step,
+                                                project_path_hider(project)(command), keys)
+    record = last if reused else run_step(project, path.parent.name, step, command, argv,
+                                          design_line(design, "Test report"), keys)
+    lines, code = report_lines(record, refs, tasks, baseline, reused)
+    for line in lines:
+        print(line)
+    if step == "baseline":
+        write_baseline(path.parent, record)
+    if kind:
+        write_evidence(tasks_file, step, kind, evidence_text(record, {t["id"]: t for t in tasks}[step], kind))
+    return code
+
+
+def evidence_text(record: dict, task: dict, kind: str):
+    """The red or green text the run shows for the task's test, with the run's time; an
+    SddError says what the run showed instead."""
+    report = record["tests"]
+    if report is None:
+        raise SddError(f"the run has no test report, so no {kind} line is written")
+    part = task["test"].rsplit("::", 1)[-1]
+    matches = [t for t in report if t["name"] == part or t["name"].endswith("." + part)]
+    if not matches:
+        raise SddError(f"{part} is not in the report, so no {kind} line is written")
+    if len(matches) > 1:
+        raise SddError(f"two tests match {part}: {matches[0]['name']} and {matches[1]['name']}; "
+                       f"no {kind} line is written")
+    test = matches[0]
+    name, outcome = test["name"], test["outcome"]
+    if outcome == "error":
+        raise SddError(f"{name} errored: a red run must fail on an assertion, not on an error"
+                       if kind == "red" else f"{name} errored, so no green line is written")
+    if outcome == "skipped":
+        raise SddError(f"{name} was skipped, so no {kind} line is written")
+    if kind == "red" and outcome == "passed":
+        raise SddError(f"{name} passes, so there is no red run: a behavior that already existed "
+                       "is recorded by hand as \"red: pre-existing — <why>\"")
+    if kind == "green" and outcome == "failed":
+        raise SddError(f"{name} fails, so no green line is written")
+    if kind == "red":
+        first = test["lines"][0] if test["lines"] else ""
+        text = f"failed: {first}" if first and not re.search(r"<!--|-->|\(after T", first) else "failed"
+    else:
+        text = "passed"
+    return f"{text} (sdd test {record['time']})"
+
+
+def evidence_lines(path: Path, task_id: str) -> tuple:
+    """The file's lines (endings kept) and, per kind (test, red, green), the indexes of the
+    task's lines of that kind: its block runs from its task line to the next task line or
+    heading, outside HTML comments."""
+    with open(path, encoding="utf-8", newline="") as handle:
+        content = handle.read()
+    lines = content.splitlines(keepends=True)
+    comments = [m.span() for m in re.finditer(r"<!--.*?-->", content, re.S)]
+    block, offset = None, 0
+    for i, line in enumerate(lines):
+        start, offset = offset, offset + len(line)
+        if any(a <= start < b for a, b in comments):
+            continue
+        task = TASK_LINE.match(line)
+        if line.startswith("#") or task:
+            if block is not None:
+                break
+            ident = TASK_ID.match(task.group(2).strip()) if task else None
+            block = [] if ident and ident.group(1) == task_id else None
+        elif block is not None:
+            block.append(i)
+    found = {k: [i for i in block or [] if (m := EVIDENCE_LINE.match(lines[i])) and m.group(1).lower() == k]
+             for k in ("test", "red", "green")}
+    return lines, found
+
+
+def refuse_evidence(path: Path, task: dict, kind: str):
+    """--red and --green refusals before anything is run: a ticked task, two lines of the
+    kind, green with no red."""
+    if task["done"]:
+        raise SddError(f"{task['id']} is ticked: its red and green lines are not written again")
+    lines, found = evidence_lines(path, task["id"])
+    if len(found[kind]) > 1:
+        first, second = (lines[i].strip() for i in found[kind][:2])
+        raise SddError(f"{task['id']} has two {kind}: lines, '{first}' and '{second}': keep one")
+    if kind == "green" and not evidence_present(task["red"]):
+        raise SddError(f"record red first: {task['id']}'s red line is empty (sdd test {task['id']} --red, "
+                       "or \"red: pre-existing — <why>\" by hand)")
+
+
+def write_evidence(path: Path, task_id: str, kind: str, text: str):
+    """Rewrite the task's red or green line, or insert it right after its test line; the file
+    is read again here, after the run, and no other byte changes."""
+    lines, found = evidence_lines(path, task_id)
+    at = found[kind][0] if found[kind] else found["test"][0]
+    line = lines[at]
+    bullet = re.match(r"^\s+[-*]\s*", line).group(0)
+    new = bullet + f"{kind}: {text}" + line[len(line.rstrip("\r\n")):]
+    if found[kind]:
+        lines[at] = new
+    else:
+        lines.insert(at + 1, new)
+    write_atomic(path, "".join(lines))
+
+
+STEP_FORM = re.compile(r"^(T\d+|component \S+|full|baseline)$")
+
+
+def refuse_step_form(step: str):
+    if not STEP_FORM.match(step):
+        raise SddError(f'"{step}" is not a step test takes: use T<n>, component <PREFIX>, full or baseline')
+
+
+def refuse_step_kind(path: Path, tasks: list, step: str, args):
+    """An unknown task or prefix, and --red or --green misused: before anything is run."""
+    if re.match(r"^T\d+$", step) and step not in {t["id"] for t in tasks}:
+        raise SddError(f"{step} is not a task of the plan")
+    if step.startswith("component "):
+        declared = list(parse_capabilities(read_front_matter(path.read_text()).get("capabilities", "")))
+        if step[10:] not in declared:
+            raise SddError(f"{step[10:]} is not a prefix of this change: it declares {', '.join(declared) or 'none'}")
+    if (args.red or args.green) and not re.match(r"^T\d+$", step):
+        raise SddError(f"{'--red' if args.red else '--green'} needs a task step (T<n>)")
+    if args.red and args.green:
+        raise SddError("--red and --green can't be given together")
+
+
+def refuse_report_path(project: Project, rel: str):
+    """The Test report path must be inside the project, a file git does not track."""
+    if rel.replace("\\", "/").startswith("/") or re.match(r"^[A-Za-z]:", rel):
+        raise SddError(f'the "Test report:" path is absolute: {rel}')
+    root = project.root.resolve()
+    target = (root / rel).resolve()
+    if target != root and root not in target.parents:
+        raise SddError(f'the "Test report:" path leads outside the project: {rel}')
+    try:
+        tracked = subprocess.run(["git", "ls-files", "-z", "--", rel], cwd=project.root,
+                                 capture_output=True, text=True)
+    except OSError:
+        tracked = None
+    if tracked is not None and tracked.returncode == 0 and tracked.stdout.strip("\0"):
+        raise SddError(f'the "Test report:" path is a file git tracks ({rel}): git tracks {rel}, '
+                       "and a run deletes the report first")
+    if target.is_dir():
+        raise SddError(f'the "Test report:" path names a folder: {rel}')
+
+
+def refuse_step_lines(project: Project, tasks: list, design: str, step: str):
+    """The step's design line missing, empty or unclosed; the Test report path; then a task
+    step's test line: before anything is run."""
+    key = "Test one" if re.match(r"^T\d+$", step) else "Test component" if step.startswith("component ") \
+        else "Test command"
+    given = design_line(design, key)
+    if not given:
+        raise SddError(f'test needs a "{key}:" line in the design, and it is missing or empty')
+    try:
+        shlex.split(given)
+    except ValueError:
+        raise SddError(f'the "{key}:" command has a quote that is not closed: {given}')
+    if design_line(design, "Test report"):
+        refuse_report_path(project, design_line(design, "Test report"))
+    if key == "Test one":
+        kind, _ = task_argv(design_line(design, key), {t["id"]: t for t in tasks}[step])
+        if kind == "none":
+            raise SddError(f"{step} has no test line: write its test as path::name")
+        if kind == "no-colons":
+            raise SddError(f'{step}\'s test line has no "::", and Test one: uses {{file}} or {{name}}')
+
+
+BASELINE_STATUSES = ("planned", "implementing")
+TEST_STATUSES = ("planned", "implementing", "verifying")
+
+
+def refuse_status(path: Path):
+    """test runs a change at planned, implementing or verifying."""
+    status = read_front_matter(path.read_text()).get("status", "?")
+    if status not in TEST_STATUSES:
+        raise SddError(f"test needs a change at {', '.join(TEST_STATUSES)}: {path.parent.name} is at {status}")
+
+
+def refuse_baseline(path: Path, tasks: list, design: str):
+    """test baseline's own refusals, in the spec's order, before anything is run."""
+    recorded = read_baseline(path.parent)
+    if recorded:
+        raise SddError(f"the baseline was recorded at {recorded[0]} and is never rerun or changed")
+    if any(task["done"] for task in tasks):
+        raise SddError("a task is ticked, so the code has already changed: "
+                       "a baseline records the tests that pass before the change")
+    status = read_front_matter(path.read_text()).get("status", "?")
+    if status not in BASELINE_STATUSES:
+        raise SddError(f"a baseline needs a change at planned or implementing: {path.parent.name} is at {status}")
+    if not design_line(design, "Test report"):
+        raise SddError('a baseline needs a "Test report:" line in the design')
+
+
+def write_baseline(folder: Path, record: dict):
+    """baseline.txt from the baseline's run: its time and commit, then each test that passed."""
+    tests = record["tests"]
+    if tests is None:
+        raise SddError("a baseline needs a test report: the run left none to read, so no baseline is recorded")
+    passed = list(dict.fromkeys(t["name"] for t in tests if t["outcome"] == "passed"))
+    write_atomic(folder / "baseline.txt",
+                 f"# baseline {record['time']} {record['commit'] or 'none'}\n" + "".join(f"{n}\n" for n in passed))
+    print(f"baseline: {len(passed)} tests passed, recorded {record['time']}")
+
+
 # ---------------------------------------------------------------- sort-failures
 
 def change_plan(path: Path) -> tuple:
@@ -2616,7 +3213,19 @@ def cmd_sort_failures(project: Project, args) -> int:
     names = read_names(args.file)
     passed = set(read_names(args.passed_before)) if args.passed_before is not None else set()
     refs, tasks = change_plan(path)
+    lines, counts = sort_lines(names, passed, refs, tasks)
+    for line in lines:
+        print(line)
+    if args.passed_before is not None and not passed:
+        print(f"warning: {args.passed_before} names no test that passed before the run")
+    print(sorted_line(counts))
+    return 1 if counts["regression"] else 0
+
+
+def sort_lines(names: list, passed: set, refs: list, tasks: list) -> tuple:
+    """One `<kind>: <name> (<detail>)` line per name, and the count of each kind."""
     counts = {"regression": 0, "expected": 0, "outside": 0}
+    lines = []
     for name in names:
         found = sorted((m.start(), ref) for ref in refs for m in [scenario_pattern(ref).search(name)] if m)
         ids = [ref for _, ref in found]
@@ -2633,12 +3242,13 @@ def cmd_sort_failures(project: Project, args) -> int:
             kind = "regression"
             detail = detail + ", passed before the run" if detail else "passed before the run"
         counts[kind] += 1
-        print(f"{kind}: {name} ({detail})" if detail else f"{kind}: {name}")
-    if args.passed_before is not None and not passed:
-        print(f"warning: {args.passed_before} names no test that passed before the run")
-    print(f"sorted: {counts['regression']} regression, {counts['expected']} expected, "
-          f"{counts['outside']} outside the change")
-    return 1 if counts["regression"] else 0
+        lines.append(f"{kind}: {name} ({detail})" if detail else f"{kind}: {name}")
+    return lines, counts
+
+
+def sorted_line(counts: dict) -> str:
+    return (f"sorted: {counts['regression']} regression, {counts['expected']} expected, "
+            f"{counts['outside']} outside the change")
 
 
 # ---------------------------------------------------------------- defect log
@@ -2936,6 +3546,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("use", help="make another change active")
     p.add_argument("change_id")
     p.set_defaults(func=cmd_use)
+
+    p = sub.add_parser("run-plan", help="print the test steps of an implement run (runs nothing)")
+    p.add_argument("form", nargs="?", default="next", help="T<n>, T<a>-T<b>, next (default) or all")
+    p.add_argument("--change")
+    p.set_defaults(func=cmd_run_plan)
+
+    p = sub.add_parser("test", help="run a test step of the change and report its exceptions")
+    p.add_argument("step", nargs="*", help="T<n>, component <PREFIX>, full or baseline")
+    p.add_argument("--change")
+    p.add_argument("--red", action="store_true", help="write the task's red line from the run")
+    p.add_argument("--green", action="store_true", help="write the task's green line from the run")
+    p.add_argument("--rerun", action="store_true", help="run the step even when the last run could be reused")
+    p.set_defaults(func=cmd_test)
 
     p = sub.add_parser("sort-failures", help="sort failing tests into regressions, expected failures and the rest")
     p.add_argument("file", help="the failing test names, one per line")

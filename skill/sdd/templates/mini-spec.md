@@ -44,10 +44,13 @@ Required at `prototype` (write "- None" if there are none). Optional otherwise. 
 test strategy. Keep the test command line; "Test one" runs a single test
 for sdd replay and sdd mutate, e.g. `python3 -m unittest {name}`. "Test
 component" runs the tests of one capability at a checkpoint; `{prefix}` stands
-for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`. -->
+for its requirement prefix, e.g. `python3 -m unittest -k REQ_{prefix}_`. "Test
+report" is the JUnit XML file the runner writes, git-ignored, e.g.
+`build/junit.xml`. -->
 - Test command:
 - Test one:
 - Test component:
+- Test report:
 
 ## Tasks
 <!-- Planner: one task per scenario; schedule each negative next to its happy path.
